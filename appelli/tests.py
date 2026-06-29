@@ -13,10 +13,10 @@ class BaseSetup(TestCase):
         self.g_studente = Group.objects.get(name="studente")
         self.g_docente = Group.objects.get(name="docente")
 
-        self.studente = User.objects.create_user("studente1", password="pw")
+        self.studente = User.objects.create_user("studente_test", password="pw")
         self.studente.groups.add(self.g_studente)
 
-        self.docente = User.objects.create_user("docente1", password="pw")
+        self.docente = User.objects.create_user("docente_test", password="pw")
         self.docente.groups.add(self.g_docente)
 
         self.commissione = Commissione.objects.create(nome="Commissione A")
@@ -86,7 +86,7 @@ class DownloadTesiTest(BaseSetup):
         self.assertEqual(resp.status_code, 200)
 
     def test_docente_estraneo_non_scarica(self):
-        altro = User.objects.create_user("docente2", password="pw")
+        altro = User.objects.create_user("docente_estraneo", password="pw")
         altro.groups.add(self.g_docente)
         self.client.force_login(altro)
         resp = self.client.get(
