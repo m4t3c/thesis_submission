@@ -1,0 +1,40 @@
+{% extends "appelli/base.html" %}
+
+{% block title %}Accedi{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h1 class="h4 mb-3">Accedi</h1>
+
+                {% if form.errors %}
+                    <div class="alert alert-danger">
+                        Nome utente o password non corretti.
+                    </div>
+                {% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.username.id_for_label }}">
+                            Nome utente
+                        </label>
+                        <input type="text" name="username" id="{{ form.username.id_for_label }}"
+                               class="form-control" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.password.id_for_label }}">
+                            Password
+                        </label>
+                        <input type="password" name="password" id="{{ form.password.id_for_label }}"
+                               class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Accedi</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

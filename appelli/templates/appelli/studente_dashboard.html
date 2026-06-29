@@ -1,0 +1,87 @@
+{% extends "appelli/base.html" %}
+
+{% block title %}Area Studente{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Area Studente</h1>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header">Le mie iscrizioni</div>
+    <div class="card-body">
+        {% if iscrizioni %}
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Appello</th>
+                        <th>Data iscrizione</th>
+                        <th>Tesi</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for iscrizione in iscrizioni %}
+                        <tr>
+                            <td>{{ iscrizione.appello }}</td>
+                            <td>{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                {% if iscrizione.file_tesi %}
+                                    <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                                        Scarica
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">Nessun file</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="{% url 'appelli:carica_tesi' iscrizione.id %}">
+                                    {% if iscrizione.file_tesi %}Aggiorna tesi{% else %}Carica tesi{% endif %}
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted mb-0">Non sei ancora iscritto a nessun appello.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header">Appelli disponibili</div>
+    <div class="card-body">
+        {% if appelli_disponibili %}
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Corso di laurea</th>
+                        <th>Data</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for appello in appelli_disponibili %}
+                        <tr>
+                            <td>{{ appello.corso_di_laurea }}</td>
+                            <td>{{ appello.data|date:"d/m/Y" }}</td>
+                            <td class="text-end">
+                                <form method="post"
+                                      action="{% url 'appelli:iscriviti' appello.id %}"
+                                      class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        Iscriviti
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted mb-0">Nessun altro appello disponibile.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

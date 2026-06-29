@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Gestione Tesi di Laurea{% endblock %}</title>
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="{% url 'appelli:home' %}">Tesi di Laurea</a>
+        <div class="d-flex align-items-center">
+            {% if user.is_authenticated %}
+                <span class="text-light me-3">
+                    {{ user.get_username }}
+                    {% if user.groups.all %}
+                        <span class="badge bg-secondary">
+                            {{ user.groups.all.0.name }}
+                        </span>
+                    {% endif %}
+                </span>
+                <form method="post" action="{% url 'logout' %}" class="m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-light btn-sm">Esci</button>
+                </form>
+            {% else %}
+                <a class="btn btn-outline-light btn-sm" href="{% url 'login' %}">Accedi</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<main class="container py-4">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>
