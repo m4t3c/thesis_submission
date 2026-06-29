@@ -1,0 +1,5 @@
+asgiref==3.11.1
+Django==6.0.5
+django-debug-toolbar==6.3.0
+django-polls @ file:///home/matec/uni/tesi/Tutorial-Django/django-polls/dist/django_polls-0.1-py3-none-any.whl#sha256=7230608fcbd41aa3267a55525884f1ff1c8c6b6718c5a36af25e76ac251b23cb
+sqlparse==0.5.5
