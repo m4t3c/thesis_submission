@@ -6,6 +6,8 @@ app_name = "appelli"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    # Pagina di test Shibboleth (da rimuovere/proteggere in produzione)
+    path("shibboleth/test/", views.shibboleth_test, name="shibboleth_test"),
     # Area studente
     path("studente/", views.studente_dashboard, name="studente_dashboard"),
     path("appelli/<int:appello_id>/iscriviti/", views.iscriviti, name="iscriviti"),

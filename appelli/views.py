@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import TesiUploadForm
@@ -21,6 +21,23 @@ def is_docente(user):
 def docente_in_commissione(user, appello):
     """True se il docente fa parte della commissione dell'appello."""
     return appello.commissione.docenti.filter(pk=user.pk).exists()
+
+
+# --- Pagina di test Shibboleth --------------------------------------------
+
+def shibboleth_test(request):
+    """Stampa tutti gli attributi che il server passa a Django (request.META).
+
+    Serve a verificare i nomi reali degli attributi Shibboleth (uid, ou, sn,
+    givenName, ...) sul dominio di produzione, prima di configurare
+    shibboleth.py. ATTENZIONE: espone dati sensibili (cookie di sessione,
+    header) -> da RIMUOVERE o proteggere una volta finiti i test.
+    """
+    righe = [
+        f"{chiave}: {valore!r}, type: {type(valore)}"
+        for chiave, valore in sorted(request.META.items())
+    ]
+    return HttpResponse("\n".join(righe), content_type="text/plain; charset=utf-8")
 
 
 # --- Home con smistamento per ruolo ---------------------------------------

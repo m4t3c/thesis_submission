@@ -1,0 +1,42 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: appelli_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: appelli
+      MYSQL_USER: appelli
+      MYSQL_PASSWORD: appelli_pw
+      MYSQL_ROOT_PASSWORD: root_pw
+    volumes:
+      - db_data:/var/lib/mysql # i dati sopravvivono ai riavvii
+    healthcheck:
+      # web aspetterà che il DB sia pronto
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: . # costruisce dal Dockerfile qui sopra
+    container_name: appelli_web
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000"
+    environment:
+      DB_HOST: db # 'db' = il nome del servizio: Docker lo risolve
+      DB_NAME: appelli
+      DB_USER: appelli
+      DB_PASSWORD: appelli_pw
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DJANGO_DEBUG: "1"
+      SHIB_ENABLED: "0" # in locale NON c'è Shibboleth
+    volumes:
+      - ./media:/app/media # le tesi caricate persistono nella cartella locale
+    ports:
+      - "8000:8000" # SOLO in locale! In prod si toglie
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:

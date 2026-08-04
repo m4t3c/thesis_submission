@@ -1,0 +1,69 @@
+# Configurazione di PRODUZIONE per la macchina dell'università.
+#
+# Uso:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differenze rispetto al file di sviluppo:
+#  - il servizio 'web' NON espone porte sull'host: è raggiungibile solo
+#    tramite Traefik, che gestisce HTTPS e l'autenticazione Shibboleth;
+#  - Shibboleth attivo (SHIB_ENABLED=1) e DEBUG disattivato;
+#  - 'web' è collegato alla rete condivisa 'proxy-net' su cui gira Traefik;
+#  - le tesi caricate sono su un volume dedicato (persistono ai riavvii).
+
+# Rete condivisa creata da Traefik: deve già esistere sulla macchina.
+networks:
+  proxy-net:
+    external: true
+
+services:
+  db:
+    image: mysql:8.4
+    container_name: appelli_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: appelli
+      MYSQL_USER: appelli
+      MYSQL_PASSWORD: appelli_pw       # cambiare con password diversa
+      MYSQL_ROOT_PASSWORD: root_pw     # cambiare con password diversa
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Il db resta sulla rete di default: lo raggiunge solo 'web', non Traefik.
+
+  web:
+    build: .
+    container_name: appelli_web
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000"
+    environment:
+      DB_HOST: db
+      DB_NAME: appelli
+      DB_USER: appelli
+      DB_PASSWORD: appelli_pw          # deve essere uguale a MYSQL_PASSWORD
+      DJANGO_ALLOWED_HOSTS: "tesi.ing.unimore.it"
+      DJANGO_DEBUG: "0"                # produzione: niente stack trace/debug
+      SHIB_ENABLED: "1"               # attiva il middleware Shibboleth
+    volumes:
+      - media_data:/app/media          # le tesi caricate persistono
+    networks:
+      - default                        # per raggiungere il container 'db'
+      - proxy-net                      # per farsi raggiungere da Traefik
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.appelli.rule=Host(`tesi.ing.unimore.it`)"
+      - "traefik.http.routers.appelli.entrypoints=websecure"
+      - "traefik.http.routers.appelli.tls.certresolver=letsencrypt"
+      - "traefik.http.services.appelli.loadbalancer.server.port=8000"
+      - "traefik.http.routers.appelli.middlewares=shib-auth@file"
+      # Con 'web' su più reti, indica a Traefik quale usare per raggiungerlo:
+      - "traefik.docker.network=proxy-net"
+
+volumes:
+  db_data:
+  media_data:

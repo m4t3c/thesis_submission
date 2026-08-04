@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,9 +24,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-it$+&lqha5r_ic+=+pc3%#e5lpr2a$ywdf)fyg5_kfg!phem6b'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
 
 
 # Application definition
@@ -42,6 +43,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise serve i file statici; va subito dopo SecurityMiddleware.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -49,6 +52,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if os.environ.get("SHIB_ENABLED", "0") == "1":
+    _i = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware")
+    MIDDLEWARE.insert(_i + 1, "thesis_submission.assign_user.AssignUserMiddleware")
 
 ROOT_URLCONF = 'thesis_submission.urls'
 
@@ -74,11 +81,17 @@ WSGI_APPLICATION = 'thesis_submission.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.environ.get("DB_NAME", "appelli"),
+        "USER": os.environ.get("DB_USER", "appelli"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("DB_PORT", "3306"),
+        "OPTIONS": {"charset": "utf8mb4"},
     }
 }
+
 
 
 # Password validation
@@ -117,6 +130,20 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Cartella in cui 'collectstatic' raccoglie i file statici e da cui WhiteNoise
+# li serve (admin, app, ecc.). Va popolata con: python manage.py collectstatic
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise: comprime i file e aggiunge un hash al nome per il caching.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 # Media files (file caricati dagli utenti, es. tesi di laurea)
 # https://docs.djangoproject.com/en/6.0/topics/files/
 
@@ -132,3 +159,8 @@ LOGOUT_REDIRECT_URL = 'login'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+AUTHENTICATION_BACKENDS = [
+    "thesis_submission.assign_user.AssignUserBackend",
+    "django.contrib.auth.backends.ModelBackend",  # login classico per l'admin in locale
+]
