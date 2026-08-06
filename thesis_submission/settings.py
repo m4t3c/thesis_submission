@@ -28,6 +28,22 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
 
+# --- Reverse proxy HTTPS (Traefik -> Gunicorn) -------------------------------
+# In produzione il browser parla HTTPS con il proxy, ma verso Gunicorn la
+# richiesta arriva in HTTP: senza questo Django vede request.scheme="http" e il
+# controllo CSRF sull'header Origin fallisce su ogni POST (errore 403 "Verifica
+# CSRF fallita"), logout compreso. X-Forwarded-Proto dice a Django lo schema
+# reale. NB: il proxy deve impostare/sovrascrivere lui questo header.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+# Origini di cui Django si fida per il CSRF (schema incluso, separate da virgola).
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.environ.get(
+        "DJANGO_CSRF_TRUSTED_ORIGINS", "https://tesi.ing.unimore.it"
+    ).split(",") if o
+]
+
 
 # Application definition
 
@@ -153,7 +169,17 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Autenticazione
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'appelli:home'
-LOGOUT_REDIRECT_URL = 'login'
+
+# Dopo il logout di Django, in produzione rimandiamo al logout del SP
+# Shibboleth: cosi' viene chiusa anche la sessione Shibboleth e l'utente torna
+# all'autenticazione. Il solo logout di Django non basta, perche' il cookie
+# _shibsession_ resterebbe valido e il middleware ri-autenticherebbe subito
+# l'utente. In locale (senza Shibboleth) si torna al form di login di Django.
+if os.environ.get("SHIB_ENABLED", "0") == "1":
+    _default_logout = "/Shibboleth.sso/Logout?return=https://tesi.ing.unimore.it/"
+else:
+    _default_logout = "login"
+LOGOUT_REDIRECT_URL = os.environ.get("DJANGO_LOGOUT_REDIRECT_URL", _default_logout)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
