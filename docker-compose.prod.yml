@@ -46,6 +46,10 @@ services:
       DJANGO_ALLOWED_HOSTS: "tesi.ing.unimore.it"
       DJANGO_DEBUG: "0"                # produzione: niente stack trace/debug
       SHIB_ENABLED: "1"               # attiva il middleware Shibboleth
+      # Logout del SP Shibboleth (sta su services-host, non su tesi): chiude la
+      # sessione Shibboleth e riporta all'autenticazione. Se cambia l'host del
+      # SP o del sito, aggiorna qui.
+      DJANGO_LOGOUT_REDIRECT_URL: "https://services-host.ing.unimore.it/Shibboleth.sso/Logout?return=https://tesi.ing.unimore.it/"
     volumes:
       - media_data:/app/media          # le tesi caricate persistono
     networks:

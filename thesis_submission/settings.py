@@ -170,13 +170,16 @@ MEDIA_ROOT = BASE_DIR / 'media'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'appelli:home'
 
-# Dopo il logout di Django, in produzione rimandiamo al logout del SP
-# Shibboleth: cosi' viene chiusa anche la sessione Shibboleth e l'utente torna
-# all'autenticazione. Il solo logout di Django non basta, perche' il cookie
-# _shibsession_ resterebbe valido e il middleware ri-autenticherebbe subito
-# l'utente. In locale (senza Shibboleth) si torna al form di login di Django.
+# Dove mandare l'utente dopo il logout di Django. Per chiudere DAVVERO anche la
+# sessione Shibboleth (altrimenti il cookie _shibsession_ resta valido e il
+# middleware ri-autentica subito) bisogna rimandare al logout del SP, che nel
+# nostro deploy sta su un altro host (services-host, non tesi): l'URL preciso
+# va quindi impostato via DJANGO_LOGOUT_REDIRECT_URL nel docker-compose.prod.
+# Default sicuri (nessun 404) se la variabile non e' impostata:
+#   - con Shibboleth: torna alla home ("/"), che riparte dall'autenticazione;
+#   - in locale (senza Shibboleth): torna al form di login di Django.
 if os.environ.get("SHIB_ENABLED", "0") == "1":
-    _default_logout = "/Shibboleth.sso/Logout?return=https://tesi.ing.unimore.it/"
+    _default_logout = "/"
 else:
     _default_logout = "login"
 LOGOUT_REDIRECT_URL = os.environ.get("DJANGO_LOGOUT_REDIRECT_URL", _default_logout)
