@@ -28,7 +28,7 @@
                     <button type="submit" class="btn btn-outline-light btn-sm">Esci</button>
                 </form>
             {% else %}
-                <a class="btn btn-outline-light btn-sm" href="{% url 'login' %}">Accedi</a>
+                <a class="btn btn-outline-light btn-sm" href="{{ login_url }}">Accedi</a>
             {% endif %}
         </div>
     </div>

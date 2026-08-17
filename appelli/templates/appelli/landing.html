@@ -1,0 +1,44 @@
+{% extends "appelli/base.html" %}
+
+{% block title %}Consegna Tesi di Laurea{% endblock %}
+
+{% block content %}
+<div class="p-5 mb-4 bg-white rounded-3 shadow-sm text-center">
+    <h1 class="display-6 fw-bold">Consegna della Tesi di Laurea</h1>
+    <p class="lead col-md-8 mx-auto text-muted">
+        Il servizio per caricare la tua tesi e renderla disponibile alla
+        commissione del tuo appello di laurea.
+    </p>
+    <a class="btn btn-primary btn-lg mt-2" href="{{ login_url }}">
+        Accedi con le credenziali UNIMORE
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 card-title">Sei uno studente?</h2>
+                <ol class="mb-0 text-muted">
+                    <li>Accedi con le tue credenziali UNIMORE.</li>
+                    <li>Iscriviti all'appello di laurea a cui partecipi.</li>
+                    <li>Carica il file della tua tesi (puoi aggiornarlo finché serve).</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 card-title">Sei un docente?</h2>
+                <ol class="mb-0 text-muted">
+                    <li>Accedi con le tue credenziali UNIMORE.</li>
+                    <li>Consulta gli appelli delle commissioni di cui fai parte.</li>
+                    <li>Visualizza e scarica le tesi degli studenti iscritti.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

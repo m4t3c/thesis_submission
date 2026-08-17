@@ -85,6 +85,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'appelli.context_processors.login_url',
             ],
         },
     },
@@ -167,8 +168,20 @@ MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Autenticazione
-LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'appelli:home'
+
+# URL del pulsante "Accedi" (e a cui reindirizzare chi non e' autenticato).
+# In produzione avvia l'autenticazione Shibboleth tramite l'handler Login del
+# SP (su services-host); 'target' riporta al sito dopo il login. In locale
+# (senza Shibboleth) si usa il form di login di Django.
+if os.environ.get("SHIB_ENABLED", "0") == "1":
+    LOGIN_URL = os.environ.get(
+        "DJANGO_SHIB_LOGIN_URL",
+        "https://services-host.ing.unimore.it/Shibboleth.sso/Login"
+        "?target=https://tesi.ing.unimore.it/",
+    )
+else:
+    LOGIN_URL = 'login'
 
 # Dove mandare l'utente dopo il logout di Django. Per chiudere DAVVERO anche la
 # sessione Shibboleth (altrimenti il cookie _shibsession_ resta valido e il

@@ -42,9 +42,14 @@ def shibboleth_test(request):
 
 # --- Home con smistamento per ruolo ---------------------------------------
 
-@login_required
 def home(request):
-    """Mostra una pagina diversa a seconda del ruolo dell'utente."""
+    """Pagina iniziale.
+
+    - Utente anonimo: pagina pubblica di presentazione del servizio.
+    - Utente loggato: smistamento alla dashboard in base al ruolo.
+    """
+    if not request.user.is_authenticated:
+        return render(request, "appelli/landing.html")
     if is_studente(request.user):
         return redirect("appelli:studente_dashboard")
     if is_docente(request.user):
