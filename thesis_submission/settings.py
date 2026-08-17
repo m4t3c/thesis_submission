@@ -168,17 +168,19 @@ MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Autenticazione
-LOGIN_REDIRECT_URL = 'appelli:home'
+# Dopo il login si passa da /dashboard/ (percorso protetto) che smista per ruolo.
+LOGIN_REDIRECT_URL = 'appelli:dashboard'
 
 # URL del pulsante "Accedi" (e a cui reindirizzare chi non e' autenticato).
 # In produzione avvia l'autenticazione Shibboleth tramite l'handler Login del
-# SP (su services-host); 'target' riporta al sito dopo il login. In locale
-# (senza Shibboleth) si usa il form di login di Django.
+# SP (su services-host); 'target' riporta a /dashboard/ (protetto) dopo il
+# login, non alla home pubblica '/'. In locale (senza Shibboleth) si usa il
+# form di login di Django.
 if os.environ.get("SHIB_ENABLED", "0") == "1":
     LOGIN_URL = os.environ.get(
         "DJANGO_SHIB_LOGIN_URL",
         "https://services-host.ing.unimore.it/Shibboleth.sso/Login"
-        "?target=https://tesi.ing.unimore.it/",
+        "?target=https://tesi.ing.unimore.it/dashboard/",
     )
 else:
     LOGIN_URL = 'login'
