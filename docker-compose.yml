@@ -4,10 +4,12 @@ services:
     container_name: appelli_db
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: appelli
-      MYSQL_USER: appelli
-      MYSQL_PASSWORD: appelli_pw
-      MYSQL_ROOT_PASSWORD: root_pw
+      # Valori presi dal file .env (o dall'ambiente) al momento di 'up'/'build',
+      # così le credenziali non stanno in chiaro nel file versionato.
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql # i dati sopravvivono ai riavvii
     healthcheck:
@@ -24,9 +26,10 @@ services:
     command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000"
     environment:
       DB_HOST: db # 'db' = il nome del servizio: Docker lo risolve
-      DB_NAME: appelli
-      DB_USER: appelli
-      DB_PASSWORD: appelli_pw
+      # Stesse variabili del servizio 'db': restano allineate automaticamente.
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
       DJANGO_DEBUG: "1"
       SHIB_ENABLED: "0" # in locale NON c'è Shibboleth
