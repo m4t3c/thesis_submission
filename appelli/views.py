@@ -112,6 +112,25 @@ def iscriviti(request, appello_id):
 
 
 @login_required
+def disiscriviti(request, iscrizione_id):
+    if not is_studente(request.user):
+        raise PermissionDenied("Solo gli studenti possono disiscriversi.")
+    if request.method != "POST":
+        return redirect("appelli:studente_dashboard")
+
+    iscrizione = get_object_or_404(
+        StudenteAppelloDiLaurea, pk=iscrizione_id, studente=request.user
+    )
+    appello = iscrizione.appello
+    # Rimuove anche il file della tesi eventualmente caricato.
+    if iscrizione.file_tesi:
+        iscrizione.file_tesi.delete(save=False)
+    iscrizione.delete()
+    messages.success(request, f"Disiscrizione da «{appello}» effettuata.")
+    return redirect("appelli:studente_dashboard")
+
+
+@login_required
 def carica_tesi(request, iscrizione_id):
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono caricare la tesi.")

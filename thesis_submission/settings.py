@@ -147,6 +147,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Cartelle di progetto (non legate a una app) in cui Django cerca i file
+# statici: qui c'e' l'immagine del footer (thesis_submission/static/).
+STATICFILES_DIRS = [BASE_DIR / 'thesis_submission' / 'static']
+
 # Cartella in cui 'collectstatic' raccoglie i file statici e da cui WhiteNoise
 # li serve (admin, app, ecc.). Va popolata con: python manage.py collectstatic
 STATIC_ROOT = BASE_DIR / 'staticfiles'

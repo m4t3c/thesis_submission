@@ -7,11 +7,14 @@
     <div class="col-md-6">
         <div class="card shadow-sm">
             <div class="card-body">
-                <h1 class="h4 mb-1">Carica la tua tesi</h1>
-                <p class="text-muted">{{ iscrizione.appello }}</p>
+                <h1 class="h4 section-title mb-1">Carica la tua tesi</h1>
+                <p class="text-muted">
+                    {{ iscrizione.appello.corso_di_laurea }} — appello del
+                    {{ iscrizione.appello.data|date:"d/m/Y" }}
+                </p>
 
                 {% if iscrizione.file_tesi %}
-                    <p>
+                    <p class="mb-3">
                         File attuale:
                         <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
                             {{ iscrizione.file_tesi.name }}
@@ -28,7 +31,7 @@
                         {% endif %}
                     </div>
                     <button type="submit" class="btn btn-primary">Salva</button>
-                    <a class="btn btn-secondary"
+                    <a class="btn btn-outline-secondary"
                        href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
                 </form>
             </div>

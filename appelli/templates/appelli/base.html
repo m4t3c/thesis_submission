@@ -4,46 +4,167 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Gestione Tesi di Laurea{% endblock %}</title>
+    <title>{% block title %}Consegna Tesi di Laurea{% endblock %}</title>
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
         rel="stylesheet">
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        rel="stylesheet">
+    <style>
+        :root {
+            --brand: #9b1b30;
+            --ink: #1f2933;
+            --muted: #6b7280;
+            --bg: #f5f6f8;
+            --line: #e6e8ec;
+            --surface: #ececec;
+        }
+        body {
+            background: var(--bg);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* padding-bottom: lascia spazio al footer fixed-bottom */
+        main { flex: 1 0 auto; padding-bottom: 5rem; }
+        .navbar-app {
+            background: var(--surface);
+            border-bottom: 1px solid #6c757d;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .05);
+        }
+        .brand-title { font-weight: 700; color: var(--ink); font-size: 1.05rem; }
+        .section-title { font-weight: 700; }
+        .card { border: 1px solid var(--line); border-radius: .6rem; }
+        .card-header { background: #fff; border-bottom: 1px solid var(--line); font-weight: 600; }
+        .hero {
+            background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+            border: 1px solid var(--line);
+            border-radius: 1rem;
+        }
+        /* Bottone "soft primary": sfumato di default, primary pieno all'hover */
+        .btn-soft-primary {
+            background: var(--bs-primary-bg-subtle);
+            border-color: var(--bs-primary-border-subtle);
+            color: var(--bs-primary-text-emphasis);
+        }
+        .btn-soft-primary:hover, .btn-soft-primary:focus {
+            background: var(--bs-primary);
+            border-color: var(--bs-primary);
+            color: #fff;
+        }
+        #footer { background-color: var(--surface); border-top: 1px solid #dcdcdc; }
+    </style>
 </head>
-<body class="bg-light">
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+<body>
+<nav class="navbar navbar-expand-lg navbar-app sticky-top">
     <div class="container">
-        <a class="navbar-brand" href="{% if user.is_authenticated %}{% url 'appelli:dashboard' %}{% else %}{% url 'appelli:home' %}{% endif %}">Tesi di Laurea</a>
-        <div class="d-flex align-items-center">
-            {% if user.is_authenticated %}
-                <span class="text-light me-3">
-                    {{ user.get_username }}
+        <a class="navbar-brand d-flex align-items-center gap-2"
+           href="{% if user.is_authenticated %}{% url 'appelli:dashboard' %}{% else %}{% url 'appelli:home' %}{% endif %}">
+            <img src="{% static 'unimore.png' %}" alt="UNIMORE" height="40">
+            <span class="brand-title">Consegna Tesi di Laurea</span>
+        </a>
+        {% if user.is_authenticated %}
+            <div class="d-flex align-items-center gap-3">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="fa fa-user" aria-hidden="true"></i>
+                    <span class="small">
+                        {{ user.get_full_name|default:user.get_username }}
+                        <span class="text-muted">({{ user.username }})</span>
+                    </span>
                     {% if user.groups.all %}
-                        <span class="badge bg-secondary">
-                            {{ user.groups.all.0.name }}
-                        </span>
+                        <span class="badge bg-primary">{{ user.groups.all.0.name }}</span>
                     {% endif %}
                 </span>
                 <form method="post" action="{% url 'logout' %}" class="m-0">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-outline-light btn-sm">Esci</button>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">Logout</button>
                 </form>
-            {% else %}
-                <a class="btn btn-outline-light btn-sm" href="{{ login_url }}">Accedi</a>
-            {% endif %}
-        </div>
+            </div>
+        {% else %}
+            <a class="btn btn-primary btn-sm" href="{{ login_url }}">Accedi</a>
+        {% endif %}
     </div>
 </nav>
 
 <main class="container py-4">
     {% if messages %}
         {% for message in messages %}
-            <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show"
+                 role="alert">
                 {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Chiudi"></button>
             </div>
         {% endfor %}
     {% endif %}
 
     {% block content %}{% endblock %}
 </main>
+
+<nav id="footer" class="navbar navbar-expand-lg navbar-light fixed-bottom">
+    <div class="container">
+        <div class="" style="horiz-align: left;">Powered by <a target="_blank" href="http://imagelab.ing.unimore.it">
+            <img src="{% static 'aimagelab.png' %}" height="25" alt="AImageLab"></a>
+        </div>
+        <div class="" style="float: right !important;">
+            Designed <a href="http://federicobolelli.it/" target="_blank">F. Bolelli</a>, M. Coppa and F. Pini, Managed by and F. Bolelli
+        </div>
+    </div>
+</nav>
+
+<!-- Modale di conferma condivisa (iscrizione / disiscrizione) -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalTitle">Conferma</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" id="confirmModalBody">Confermi l'operazione?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="confirmModalOk">Conferma</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Ogni form con class "js-confirm" apre prima la modale di conferma.
+    // I testi/varianti si passano via attributi data-confirm-*.
+    document.addEventListener('DOMContentLoaded', function () {
+        var modalEl = document.getElementById('confirmModal');
+        if (!modalEl || !window.bootstrap) return;
+        var modal = new bootstrap.Modal(modalEl);
+        var okBtn = document.getElementById('confirmModalOk');
+        var pending = null;
+
+        document.querySelectorAll('form.js-confirm').forEach(function (form) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                pending = form;
+                document.getElementById('confirmModalTitle').textContent =
+                    form.dataset.confirmTitle || 'Conferma';
+                document.getElementById('confirmModalBody').textContent =
+                    form.dataset.confirmBody || "Confermi l'operazione?";
+                okBtn.className = 'btn ' + (form.dataset.confirmVariant || 'btn-primary');
+                okBtn.textContent = form.dataset.confirmOk || 'Conferma';
+                modal.show();
+            });
+        });
+
+        okBtn.addEventListener('click', function () {
+            if (pending) {
+                var f = pending;
+                pending = null;
+                f.submit();  // submit nativo: non ritriggera l'evento (niente loop)
+            }
+        });
+    });
+</script>
 </body>
 </html>
