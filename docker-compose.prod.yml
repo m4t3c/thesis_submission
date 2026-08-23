@@ -20,10 +20,12 @@ services:
     container_name: appelli_db
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: appelli
-      MYSQL_USER: appelli
-      MYSQL_PASSWORD: appelli_pw       # cambiare con password diversa
-      MYSQL_ROOT_PASSWORD: root_pw     # cambiare con password diversa
+      # Valori presi dal file .env (o dall'ambiente) al momento di 'up'/'build',
+      # così le credenziali non stanno in chiaro nel file versionato.
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -40,9 +42,10 @@ services:
     command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000"
     environment:
       DB_HOST: db
-      DB_NAME: appelli
-      DB_USER: appelli
-      DB_PASSWORD: appelli_pw          # deve essere uguale a MYSQL_PASSWORD
+      # Stesse variabili del servizio 'db': restano allineate automaticamente.
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
       DJANGO_ALLOWED_HOSTS: "tesi.ing.unimore.it"
       DJANGO_DEBUG: "0"                # produzione: niente stack trace/debug
       SHIB_ENABLED: "1"               # attiva il middleware Shibboleth
