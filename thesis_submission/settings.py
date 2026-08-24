@@ -55,6 +55,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'appelli',
+    # Cancella automaticamente i file (media) quando l'oggetto viene eliminato
+    # o quando il FileField cambia/viene svuotato. Deve stare per ultima.
+    'django_cleanup.apps.CleanupConfig',
 ]
 
 MIDDLEWARE = [

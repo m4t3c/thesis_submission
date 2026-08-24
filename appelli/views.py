@@ -122,9 +122,8 @@ def disiscriviti(request, iscrizione_id):
         StudenteAppelloDiLaurea, pk=iscrizione_id, studente=request.user
     )
     appello = iscrizione.appello
-    # Rimuove anche il file della tesi eventualmente caricato.
-    if iscrizione.file_tesi:
-        iscrizione.file_tesi.delete(save=False)
+    # Il file della tesi eventualmente caricato viene rimosso dal disco in
+    # automatico da django-cleanup (signal post_delete).
     iscrizione.delete()
     messages.success(request, f"Disiscrizione da «{appello}» effettuata.")
     return redirect("appelli:studente_dashboard")
