@@ -29,6 +29,10 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Stesse variabili del servizio 'db': restano allineate automaticamente.
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
       DJANGO_DEBUG: "1"
       SHIB_ENABLED: "0" # in locale NON c'è Shibboleth

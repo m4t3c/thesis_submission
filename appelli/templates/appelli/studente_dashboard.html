@@ -3,84 +3,102 @@
 {% block title %}Area Studente{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Area Studente</h1>
+<h1 class="h3 section-title mb-4">Area Studente</h1>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header">Le mie iscrizioni</div>
-    <div class="card-body">
+    <div class="card-body p-0">
         {% if iscrizioni %}
-            <table class="table align-middle">
-                <thead>
-                    <tr>
-                        <th>Appello</th>
-                        <th>Data iscrizione</th>
-                        <th>Tesi</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for iscrizione in iscrizioni %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <td>{{ iscrizione.appello }}</td>
-                            <td>{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
-                            <td>
-                                {% if iscrizione.file_tesi %}
-                                    <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                        Scarica
-                                    </a>
-                                {% else %}
-                                    <span class="text-muted">Nessun file</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <a class="btn btn-sm btn-outline-primary"
-                                   href="{% url 'appelli:carica_tesi' iscrizione.id %}">
-                                    {% if iscrizione.file_tesi %}Aggiorna tesi{% else %}Carica tesi{% endif %}
-                                </a>
-                            </td>
+                            <th>Corso di laurea</th>
+                            <th>Data appello</th>
+                            <th>Iscritto il</th>
+                            <th>Tesi</th>
+                            <th class="text-end">Azioni</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for iscrizione in iscrizioni %}
+                            <tr>
+                                <td class="fw-semibold">{{ iscrizione.appello.corso_di_laurea }}</td>
+                                <td>{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
+                                <td class="text-muted">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
+                                <td>
+                                    {% if iscrizione.file_tesi %}
+                                        <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">Scarica</a>
+                                    {% else %}
+                                        <span class="text-muted small">nessun file</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-2">
+                                        <a class="btn btn-sm btn-outline-secondary"
+                                           href="{% url 'appelli:carica_tesi' iscrizione.id %}">
+                                            {% if iscrizione.file_tesi %}Aggiorna tesi{% else %}Carica tesi{% endif %}
+                                        </a>
+                                        <form method="post"
+                                              action="{% url 'appelli:disiscriviti' iscrizione.id %}"
+                                              class="js-confirm m-0"
+                                              data-confirm-title="Conferma disiscrizione"
+                                              data-confirm-body="Vuoi davvero disiscriverti dall'appello di {{ iscrizione.appello.corso_di_laurea }} del {{ iscrizione.appello.data|date:'d/m/Y' }}? L'eventuale tesi caricata verrà eliminata."
+                                              data-confirm-ok="Disiscriviti"
+                                              data-confirm-variant="btn-danger">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-danger">Disiscriviti</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
-            <p class="text-muted mb-0">Non sei ancora iscritto a nessun appello.</p>
+            <p class="text-muted mb-0 p-3">Non sei ancora iscritto a nessun appello.</p>
         {% endif %}
     </div>
 </div>
 
 <div class="card shadow-sm">
     <div class="card-header">Appelli disponibili</div>
-    <div class="card-body">
+    <div class="card-body p-0">
         {% if appelli_disponibili %}
-            <table class="table align-middle">
-                <thead>
-                    <tr>
-                        <th>Corso di laurea</th>
-                        <th>Data</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for appello in appelli_disponibili %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <td>{{ appello.corso_di_laurea }}</td>
-                            <td>{{ appello.data|date:"d/m/Y" }}</td>
-                            <td class="text-end">
-                                <form method="post"
-                                      action="{% url 'appelli:iscriviti' appello.id %}"
-                                      class="m-0">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm btn-primary">
-                                        Iscriviti
-                                    </button>
-                                </form>
-                            </td>
+                            <th>Corso di laurea</th>
+                            <th>Data</th>
+                            <th class="text-end">Azioni</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for appello in appelli_disponibili %}
+                            <tr>
+                                <td class="fw-semibold">{{ appello.corso_di_laurea }}</td>
+                                <td>{{ appello.data|date:"d/m/Y" }}</td>
+                                <td class="text-end">
+                                    <form method="post"
+                                          action="{% url 'appelli:iscriviti' appello.id %}"
+                                          class="js-confirm m-0"
+                                          data-confirm-title="Conferma iscrizione"
+                                          data-confirm-body="Vuoi iscriverti all'appello di {{ appello.corso_di_laurea }} del {{ appello.data|date:'d/m/Y' }}?"
+                                          data-confirm-ok="Iscriviti"
+                                          data-confirm-variant="btn-primary">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-primary">Iscriviti</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
-            <p class="text-muted mb-0">Nessun altro appello disponibile.</p>
+            <p class="text-muted mb-0 p-3">Nessun altro appello disponibile.</p>
         {% endif %}
     </div>
 </div>

@@ -43,18 +43,31 @@ def shibboleth_test(request):
 # --- Home con smistamento per ruolo ---------------------------------------
 
 def home(request):
-    """Pagina iniziale.
+    """Pagina iniziale PUBBLICA (percorso '/').
 
-    - Utente anonimo: pagina pubblica di presentazione del servizio.
-    - Utente loggato: smistamento alla dashboard in base al ruolo.
+    In produzione questo percorso non passa da Shibboleth (vedi le due router
+    rule in docker-compose.prod.yml), quindi qui l'utente risulta sempre
+    anonimo e vede la landing. In locale, un utente gia' autenticato viene
+    comunque smistato alla sua dashboard.
     """
-    if not request.user.is_authenticated:
-        return render(request, "appelli/landing.html")
+    if request.user.is_authenticated:
+        return redirect("appelli:dashboard")
+    return render(request, "appelli/landing.html")
+
+
+@login_required
+def dashboard(request):
+    """Smistamento per ruolo dopo il login (percorso '/dashboard/', protetto).
+
+    E' il bersaglio del login Shibboleth: essendo dietro autenticazione, quando
+    lo si raggiunge l'utente e' gia' riconosciuto e lo si manda alla pagina
+    giusta in base al gruppo.
+    """
     if is_studente(request.user):
         return redirect("appelli:studente_dashboard")
     if is_docente(request.user):
         return redirect("appelli:docente_dashboard")
-    # Admin o utenti senza gruppo: rimando all'area amministrativa.
+    # Admin o utenti senza gruppo noto.
     return render(request, "appelli/home.html")
 
 
@@ -95,6 +108,24 @@ def iscriviti(request, appello_id):
         messages.success(request, f"Iscrizione a «{appello}» effettuata.")
     else:
         messages.info(request, f"Sei gia' iscritto a «{appello}».")
+    return redirect("appelli:studente_dashboard")
+
+
+@login_required
+def disiscriviti(request, iscrizione_id):
+    if not is_studente(request.user):
+        raise PermissionDenied("Solo gli studenti possono disiscriversi.")
+    if request.method != "POST":
+        return redirect("appelli:studente_dashboard")
+
+    iscrizione = get_object_or_404(
+        StudenteAppelloDiLaurea, pk=iscrizione_id, studente=request.user
+    )
+    appello = iscrizione.appello
+    # Il file della tesi eventualmente caricato viene rimosso dal disco in
+    # automatico da django-cleanup (signal post_delete).
+    iscrizione.delete()
+    messages.success(request, f"Disiscrizione da «{appello}» effettuata.")
     return redirect("appelli:studente_dashboard")
 
 

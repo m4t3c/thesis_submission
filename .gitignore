@@ -65,6 +65,9 @@ db.sqlite3-journal
 # File caricati dagli utenti (tesi)
 /media/
 
+# Output di collectstatic (rigenerato nel container)
+/staticfiles/
+
 # Flask stuff:
 instance/
 .webassets-cache

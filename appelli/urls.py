@@ -6,11 +6,18 @@ app_name = "appelli"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    # Smistamento per ruolo dopo il login (percorso protetto da Shibboleth)
+    path("dashboard/", views.dashboard, name="dashboard"),
     # Pagina di test Shibboleth (da rimuovere/proteggere in produzione)
     path("shibboleth/test/", views.shibboleth_test, name="shibboleth_test"),
     # Area studente
     path("studente/", views.studente_dashboard, name="studente_dashboard"),
     path("appelli/<int:appello_id>/iscriviti/", views.iscriviti, name="iscriviti"),
+    path(
+        "iscrizioni/<int:iscrizione_id>/disiscriviti/",
+        views.disiscriviti,
+        name="disiscriviti",
+    ),
     path(
         "iscrizioni/<int:iscrizione_id>/carica-tesi/",
         views.carica_tesi,

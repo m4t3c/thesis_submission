@@ -63,11 +63,21 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
+      # --- Router PROTETTO (catch-all): tutto passa da Shibboleth ---
       - "traefik.http.routers.appelli.rule=Host(`tesi.ing.unimore.it`)"
       - "traefik.http.routers.appelli.entrypoints=websecure"
       - "traefik.http.routers.appelli.tls.certresolver=letsencrypt"
-      - "traefik.http.services.appelli.loadbalancer.server.port=8000"
+      - "traefik.http.routers.appelli.priority=1"
       - "traefik.http.routers.appelli.middlewares=shib-auth@file"
+      - "traefik.http.services.appelli.loadbalancer.server.port=8000"
+      # --- Router PUBBLICO: la home "/" e i file statici NON passano da
+      #     Shibboleth, così la landing è visibile senza login. Priorità più
+      #     alta del router protetto, così vince su questi percorsi. ---
+      - "traefik.http.routers.appelli-pub.rule=Host(`tesi.ing.unimore.it`) && (Path(`/`) || PathPrefix(`/static/`))"
+      - "traefik.http.routers.appelli-pub.entrypoints=websecure"
+      - "traefik.http.routers.appelli-pub.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appelli-pub.priority=100"
+      - "traefik.http.routers.appelli-pub.service=appelli"
       # Con 'web' su più reti, indica a Traefik quale usare per raggiungerlo:
       - "traefik.docker.network=proxy-net"
 

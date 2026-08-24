@@ -1,50 +1,55 @@
 {% extends "appelli/base.html" %}
 
-{% block title %}{{ appello }}{% endblock %}
+{% block title %}{{ appello.corso_di_laurea }} — {{ appello.data|date:"d/m/Y" }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">{{ appello }}</h1>
-    <a class="btn btn-secondary btn-sm" href="{% url 'appelli:docente_dashboard' %}">
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 section-title mb-1">{{ appello.corso_di_laurea }}</h1>
+        <div class="text-muted">Appello del {{ appello.data|date:"d/m/Y" }}</div>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'appelli:docente_dashboard' %}">
         &larr; Torna indietro
     </a>
 </div>
 
 <div class="card shadow-sm">
     <div class="card-header">Studenti iscritti</div>
-    <div class="card-body">
+    <div class="card-body p-0">
         {% if iscrizioni %}
-            <table class="table align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Studente</th>
-                        <th>Data iscrizione</th>
-                        <th>Tesi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for iscrizione in iscrizioni %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <td>
-                                {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
-                            </td>
-                            <td>{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
-                            <td>
-                                {% if iscrizione.file_tesi %}
-                                    <a class="btn btn-sm btn-outline-primary"
-                                       href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                        Scarica tesi
-                                    </a>
-                                {% else %}
-                                    <span class="text-muted">Non ancora caricata</span>
-                                {% endif %}
-                            </td>
+                            <th>Studente</th>
+                            <th>Iscritto il</th>
+                            <th class="text-end">Tesi</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for iscrizione in iscrizioni %}
+                            <tr>
+                                <td class="fw-semibold">
+                                    {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+                                </td>
+                                <td class="text-muted">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
+                                <td class="text-end">
+                                    {% if iscrizione.file_tesi %}
+                                        <a class="btn btn-sm btn-primary"
+                                           href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                                            Scarica tesi
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted small">Non ancora caricata</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
-            <p class="text-muted mb-0">Nessuno studente iscritto a questo appello.</p>
+            <p class="text-muted mb-0 p-3">Nessuno studente iscritto a questo appello.</p>
         {% endif %}
     </div>
 </div>
