@@ -10,7 +10,7 @@
     <div class="card-body p-0">
         {% if iscrizioni %}
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-stack table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
                             <th>Corso di laurea</th>
@@ -23,17 +23,17 @@
                     <tbody>
                         {% for iscrizione in iscrizioni %}
                             <tr>
-                                <td class="fw-semibold">{{ iscrizione.appello.corso_di_laurea }}</td>
-                                <td>{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
-                                <td class="text-muted">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
-                                <td>
+                                <td class="fw-semibold" data-label="Corso di laurea">{{ iscrizione.appello.corso_di_laurea }}</td>
+                                <td data-label="Data appello">{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
+                                <td class="text-muted" data-label="Iscritto il">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
+                                <td data-label="Tesi">
                                     {% if iscrizione.file_tesi %}
                                         <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">Scarica</a>
                                     {% else %}
                                         <span class="text-muted small">nessun file</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-end">
+                                <td class="text-end cell-actions" data-label="Azioni">
                                     <div class="d-inline-flex gap-2">
                                         <a class="btn btn-sm btn-outline-secondary"
                                            href="{% url 'appelli:carica_tesi' iscrizione.id %}">
@@ -67,7 +67,7 @@
     <div class="card-body p-0">
         {% if appelli_disponibili %}
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-stack table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
                             <th>Corso di laurea</th>
@@ -78,9 +78,9 @@
                     <tbody>
                         {% for appello in appelli_disponibili %}
                             <tr>
-                                <td class="fw-semibold">{{ appello.corso_di_laurea }}</td>
-                                <td>{{ appello.data|date:"d/m/Y" }}</td>
-                                <td class="text-end">
+                                <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
+                                <td data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                <td class="text-end cell-actions" data-label="Azioni">
                                     <form method="post"
                                           action="{% url 'appelli:iscriviti' appello.id %}"
                                           class="js-confirm m-0"

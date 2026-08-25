@@ -18,7 +18,7 @@
     <div class="card-body p-0">
         {% if iscrizioni %}
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-stack table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
                             <th>Studente</th>
@@ -29,11 +29,11 @@
                     <tbody>
                         {% for iscrizione in iscrizioni %}
                             <tr>
-                                <td class="fw-semibold">
+                                <td class="fw-semibold" data-label="Studente">
                                     {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
                                 </td>
-                                <td class="text-muted">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
-                                <td class="text-end">
+                                <td class="text-muted" data-label="Iscritto il">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
+                                <td class="text-end" data-label="Tesi">
                                     {% if iscrizione.file_tesi %}
                                         <a class="btn btn-sm btn-primary"
                                            href="{% url 'appelli:scarica_tesi' iscrizione.id %}">

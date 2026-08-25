@@ -29,8 +29,8 @@
             display: flex;
             flex-direction: column;
         }
-        /* padding-bottom: lascia spazio al footer fixed-bottom */
-        main { flex: 1 0 auto; padding-bottom: 5rem; }
+        /* main occupa lo spazio disponibile e spinge il footer in fondo */
+        main { flex: 1 0 auto; }
         .navbar-app {
             background: var(--surface);
             border-bottom: 1px solid #6c757d;
@@ -40,6 +40,8 @@
         .section-title { font-weight: 700; }
         .card { border: 1px solid var(--line); border-radius: .6rem; }
         .card-header { background: #fff; border-bottom: 1px solid var(--line); font-weight: 600; }
+        /* Spazio tra il bordo della card e la tabella contenuta */
+        .card-body > .table-responsive { padding: .5rem 1rem; }
         .hero {
             background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
             border: 1px solid var(--line);
@@ -57,23 +59,88 @@
             color: #fff;
         }
         #footer { background-color: var(--surface); border-top: 1px solid #dcdcdc; }
+
+        /* ---------- Adattamenti per schermi piccoli (telefoni) ---------- */
+        @media (max-width: 575.98px) {
+            /* Navbar: oggetti distribuiti con spazio attorno, logo/titolo compatti */
+            .navbar-app .container { justify-content: space-around; }
+            .navbar-brand { margin-right: 0; }
+            .navbar-brand img { height: 32px; }
+            .brand-title { font-size: .95rem; }
+            main.container { padding-top: 1rem; }
+
+            /* Hero della landing: meno padding e titolo piu' piccolo */
+            .hero { padding: 1.75rem 1rem !important; }
+            .hero .display-6 { font-size: 1.5rem; }
+
+            /* Tabelle "a schede": ogni riga diventa un riquadro leggibile,
+               niente scorrimento orizzontale. Serve la classe .table-stack
+               e l'attributo data-label su ogni <td>. */
+            .table-stack thead { display: none; }
+            .table-stack, .table-stack tbody, .table-stack tr, .table-stack td {
+                display: block;
+                width: 100%;
+            }
+            .table-stack tr {
+                background: #fff;
+                border: 1px solid var(--line);
+                border-radius: .6rem;
+                margin: .75rem 0;   /* solo verticale: evita lo scroll orizzontale */
+                padding: .25rem .9rem;
+            }
+            .table-stack td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 1rem;
+                text-align: right;
+                border: 0;
+                border-bottom: 1px solid var(--line);
+                padding: .5rem 0;
+                overflow-wrap: anywhere;   /* i valori lunghi vanno a capo */
+            }
+            .table-stack tr td:last-child { border-bottom: 0; }
+            .table-stack td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--muted);
+                text-align: left;
+                white-space: nowrap;
+            }
+            /* Cella azioni: etichetta sopra, bottoni a piena larghezza sotto */
+            .table-stack td.cell-actions {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: left;
+            }
+            /* Nella cella azioni non serve l'etichetta: si mostrano solo i bottoni */
+            .table-stack td.cell-actions::before { display: none; }
+            .table-stack td.cell-actions .d-inline-flex,
+            .table-stack td.cell-actions form { width: 100%; }
+            .table-stack td.cell-actions .d-inline-flex {
+                flex-direction: column;
+                gap: .5rem;
+            }
+            .table-stack td.cell-actions .btn { width: 100%; }
+        }
     </style>
 </head>
 <body>
 <nav class="navbar navbar-expand-lg navbar-app sticky-top">
     <div class="container">
-        <a class="navbar-brand d-flex align-items-center gap-2"
+        <a class="navbar-brand d-flex align-items-center gap-2 text-truncate me-2"
+           style="min-width: 0;"
            href="{% if user.is_authenticated %}{% url 'appelli:dashboard' %}{% else %}{% url 'appelli:home' %}{% endif %}">
             <img src="{% static 'unimore.png' %}" alt="UNIMORE" height="40">
-            <span class="brand-title">Consegna Tesi di Laurea</span>
+            <span class="brand-title text-truncate">Consegna Tesi di Laurea</span>
         </a>
         {% if user.is_authenticated %}
-            <div class="d-flex align-items-center gap-3">
-                <span class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 gap-lg-3">
+                <span class="d-flex align-items-center gap-2 text-truncate" style="min-width: 0;">
                     <i class="bi bi-person-fill" aria-hidden="true"></i>
-                    <span class="small">
+                    <span class="small text-truncate">
                         {{ user.get_full_name|default:user.get_username }}
-                        <span class="text-muted">({{ user.username }})</span>
+                        <span class="text-muted d-none d-sm-inline">({{ user.username }})</span>
                     </span>
                 </span>
                 <form method="post" action="{% url 'logout' %}" class="m-0">
@@ -101,16 +168,16 @@
     {% block content %}{% endblock %}
 </main>
 
-<nav id="footer" class="navbar navbar-expand-lg navbar-light fixed-bottom">
-    <div class="container">
-        <div class="" style="horiz-align: left;">Powered by <a target="_blank" href="http://imagelab.ing.unimore.it">
+<footer id="footer" class="py-3 mt-auto">
+    <div class="container d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2 text-center text-sm-start">
+        <div>Powered by <a target="_blank" href="http://imagelab.ing.unimore.it">
             <img src="{% static 'aimagelab.png' %}" height="25" alt="AImageLab"></a>
         </div>
-        <div class="" style="float: right !important;">
+        <div>
             Designed by M. Coppa and F. Pini, managed by <a href="http://federicobolelli.it/" target="_blank">F. Bolelli</a>
         </div>
     </div>
-</nav>
+</footer>
 
 <!-- Modale di conferma condivisa (iscrizione / disiscrizione) -->
 <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
