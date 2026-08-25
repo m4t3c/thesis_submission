@@ -1,3 +1,5 @@
+import os
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -147,10 +149,11 @@ def carica_tesi(request, iscrizione_id):
     else:
         form = TesiUploadForm(instance=iscrizione)
 
+    nome_file = os.path.basename(iscrizione.file_tesi.name) if iscrizione.file_tesi else ""
     return render(
         request,
         "appelli/carica_tesi.html",
-        {"form": form, "iscrizione": iscrizione},
+        {"form": form, "iscrizione": iscrizione, "nome_file": nome_file},
     )
 
 

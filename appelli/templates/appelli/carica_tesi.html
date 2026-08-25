@@ -3,39 +3,128 @@
 {% block title %}Carica tesi{% endblock %}
 
 {% block content %}
+<style>
+    .upload-input::file-selector-button {
+        margin-right: .75rem;
+        border: 0;
+        background: var(--bs-primary-bg-subtle);
+        color: var(--bs-primary-text-emphasis);
+        padding: .5rem .9rem;
+        border-radius: .4rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .upload-input::file-selector-button:hover { background: var(--bs-primary); color: #fff; }
+    .current-file { background: #fbfbfc; transition: background .15s ease, border-color .15s ease; }
+    .remove-badge { display: none; }
+    .current-file.to-remove { background: #fff5f5; border-color: var(--bs-danger-border-subtle) !important; }
+    .current-file.to-remove .filename { text-decoration: line-through; color: var(--muted); }
+    .current-file.to-remove .file-icon { color: var(--muted) !important; }
+    .current-file.to-remove .remove-badge { display: inline-block; }
+</style>
+
 <div class="row justify-content-center">
-    <div class="col-md-6">
+    <div class="col-lg-6 col-md-8">
         <div class="card shadow-sm">
             <div class="card-body">
-                <h1 class="h4 section-title mb-1">Carica la tua tesi</h1>
+                <h1 class="h4 section-title mb-1">
+                    <i class="bi bi-cloud-arrow-up text-primary me-1"></i>Carica la tua tesi
+                </h1>
                 <p class="text-muted">
                     {{ iscrizione.appello.corso_di_laurea }} — appello del
                     {{ iscrizione.appello.data|date:"d/m/Y" }}
                 </p>
 
-                {% if iscrizione.file_tesi %}
-                    <p class="mb-3">
-                        File attuale:
-                        <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                            {{ iscrizione.file_tesi.name }}
-                        </a>
-                    </p>
-                {% endif %}
-
                 <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}
-                    <div class="mb-3">
-                        {{ form.file_tesi }}
+
+                    {% if iscrizione.file_tesi %}
+                        <label class="form-label">File attuale</label>
+                        <div id="current-file"
+                             class="current-file d-flex align-items-center justify-content-between gap-3 border rounded p-3 mb-3">
+                            <div class="d-flex align-items-center gap-3 text-truncate">
+                                <i class="bi bi-file-earmark-text fs-3 text-primary file-icon flex-shrink-0"></i>
+                                <div class="text-truncate">
+                                    <div class="fw-semibold text-truncate filename" title="{{ nome_file }}">{{ nome_file }}</div>
+                                    <a class="small text-decoration-none"
+                                       href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                                        <i class="bi bi-download"></i> Scarica
+                                    </a>
+                                    <span class="badge text-bg-danger ms-1 remove-badge">verrà rimosso al salvataggio</span>
+                                </div>
+                            </div>
+                            <button type="button" id="btn-elimina"
+                                    class="btn btn-sm btn-outline-danger flex-shrink-0">
+                                <i class="bi bi-trash"></i> Elimina
+                            </button>
+                        </div>
+                        {# checkbox di "clear" gestita da Django, nascosta e pilotata dal pulsante #}
+                        <input type="checkbox" name="file_tesi-clear" id="id_file_tesi-clear" class="d-none">
+                    {% endif %}
+
+                    <div class="mb-2">
+                        <label for="id_file_tesi" class="form-label">
+                            {% if iscrizione.file_tesi %}Sostituisci con un nuovo file{% else %}Seleziona il file{% endif %}
+                            <span class="text-muted fw-normal">(opzionale)</span>
+                        </label>
+                        <input type="file" name="file_tesi" id="id_file_tesi"
+                               class="form-control upload-input">
                         {% if form.file_tesi.errors %}
-                            <div class="text-danger small">{{ form.file_tesi.errors }}</div>
+                            <div class="text-danger small mt-1">{{ form.file_tesi.errors }}</div>
                         {% endif %}
+                        <div class="form-text">Caricando un nuovo file, quello precedente verrà sostituito.</div>
                     </div>
-                    <button type="submit" class="btn btn-primary">Salva</button>
-                    <a class="btn btn-outline-secondary"
-                       href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
+
+                    <div class="d-flex flex-column flex-sm-row gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check2"></i> Salva
+                        </button>
+                        <a class="btn btn-outline-secondary"
+                           href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    (function () {
+        var btn = document.getElementById('btn-elimina');
+        var chk = document.getElementById('id_file_tesi-clear');
+        var card = document.getElementById('current-file');
+        var fileInput = document.getElementById('id_file_tesi');
+        if (!btn || !chk || !card) return;
+
+        function render() {
+            if (chk.checked) {
+                card.classList.add('to-remove');
+                btn.className = 'btn btn-sm btn-outline-secondary flex-shrink-0';
+                btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Annulla';
+            } else {
+                card.classList.remove('to-remove');
+                btn.className = 'btn btn-sm btn-outline-danger flex-shrink-0';
+                btn.innerHTML = '<i class="bi bi-trash"></i> Elimina';
+            }
+        }
+
+        btn.addEventListener('click', function () {
+            chk.checked = !chk.checked;
+            render();
+        });
+
+        // Se l'utente sceglie un nuovo file, annulla l'eventuale "svuota":
+        // il nuovo file sostituisce comunque il precedente.
+        if (fileInput) {
+            fileInput.addEventListener('change', function () {
+                if (fileInput.files.length && chk.checked) {
+                    chk.checked = false;
+                    render();
+                }
+            });
+        }
+
+        render();
+    })();
+</script>
 {% endblock %}
