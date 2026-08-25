@@ -169,7 +169,7 @@
     {% block content %}{% endblock %}
 </main>
 
-<footer id="footer" class="py-3 mt-auto">
+<footer id="footer" class="py-3 fixed-bottom">
     <div class="container d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2 text-center text-sm-start">
         <div>Powered by <a target="_blank" href="http://imagelab.ing.unimore.it">
             <img src="{% static 'aimagelab.png' %}" height="25" alt="AImageLab"></a>
@@ -230,6 +230,24 @@
             }
         });
     });
+
+    // Il footer e' fisso in fondo: riserva sul body uno spazio pari alla sua
+    // altezza reale, cosi' nessun contenuto viene coperto quando si scorre in
+    // fondo. Ricalcolato al resize e quando il footer cambia altezza (es. su
+    // mobile, dove va a capo).
+    (function () {
+        var footer = document.getElementById('footer');
+        if (!footer) return;
+        function adegua() {
+            document.body.style.paddingBottom = footer.offsetHeight + 'px';
+        }
+        adegua();
+        window.addEventListener('load', adegua);
+        window.addEventListener('resize', adegua);
+        if (window.ResizeObserver) {
+            new ResizeObserver(adegua).observe(footer);
+        }
+    })();
 </script>
 </body>
 </html>

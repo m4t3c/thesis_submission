@@ -20,7 +20,7 @@
     .current-file.to-remove { background: #fff5f5; border-color: var(--bs-danger-border-subtle) !important; }
     .current-file.to-remove .filename { text-decoration: line-through; color: var(--muted); }
     .current-file.to-remove .file-icon { color: var(--muted) !important; }
-    .current-file.to-remove .remove-badge { display: inline-block; }
+    .current-file.to-remove .remove-badge { display: block; }
 </style>
 
 <div class="row justify-content-center">
@@ -35,28 +35,32 @@
                     {{ iscrizione.appello.data|date:"d/m/Y" }}
                 </p>
 
-                <form method="post" enctype="multipart/form-data">
+                <form method="post" enctype="multipart/form-data" id="tesi-form">
                     {% csrf_token %}
 
                     {% if iscrizione.file_tesi %}
                         <label class="form-label">File attuale</label>
-                        <div id="current-file"
-                             class="current-file d-flex align-items-center justify-content-between gap-3 border rounded p-3 mb-3">
-                            <div class="d-flex align-items-center gap-3 text-truncate">
-                                <i class="bi bi-file-earmark-text fs-3 text-primary file-icon flex-shrink-0"></i>
-                                <div class="text-truncate">
-                                    <div class="fw-semibold text-truncate filename" title="{{ nome_file }}">{{ nome_file }}</div>
-                                    <a class="small text-decoration-none"
-                                       href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                        <i class="bi bi-download"></i> Scarica
-                                    </a>
-                                    <span class="badge text-bg-danger ms-1 remove-badge">verrà rimosso al salvataggio</span>
+                        <div id="current-file" class="current-file border rounded p-3 mb-3">
+                            <div class="d-flex align-items-center justify-content-between gap-3">
+                                <div class="d-flex align-items-center gap-3" style="min-width: 0;">
+                                    <i class="bi bi-file-earmark-text fs-3 text-primary file-icon flex-shrink-0"></i>
+                                    <div style="min-width: 0;">
+                                        <div class="fw-semibold text-truncate filename" title="{{ nome_file }}">{{ nome_file }}</div>
+                                        <a class="small text-decoration-none"
+                                           href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                                            <i class="bi bi-download"></i> Scarica
+                                        </a>
+                                    </div>
                                 </div>
+                                <button type="button" id="btn-elimina"
+                                        class="btn btn-sm btn-outline-danger flex-shrink-0">
+                                    <i class="bi bi-trash"></i> Elimina
+                                </button>
                             </div>
-                            <button type="button" id="btn-elimina"
-                                    class="btn btn-sm btn-outline-danger flex-shrink-0">
-                                <i class="bi bi-trash"></i> Elimina
-                            </button>
+                            {# Badge sempre su riga propria: non viene mai troncato #}
+                            <div class="remove-badge mt-2">
+                                <span class="badge text-bg-danger">verrà rimosso al salvataggio</span>
+                            </div>
                         </div>
                         {# checkbox di "clear" gestita da Django, nascosta e pilotata dal pulsante #}
                         <input type="checkbox" name="file_tesi-clear" id="id_file_tesi-clear" class="d-none">
@@ -79,7 +83,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check2"></i> Salva
                         </button>
-                        <a class="btn btn-outline-secondary"
+                        <a class="btn btn-outline-secondary" id="btn-annulla"
                            href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
                     </div>
                 </form>
@@ -88,15 +92,39 @@
     </div>
 </div>
 
+<!-- Popup: modifiche non salvate (chiesto premendo Annulla con modifiche in corso) -->
+<div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifiche non salvate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Hai delle modifiche non salvate. Vuoi salvarle prima di uscire?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
+                <a href="{% url 'appelli:studente_dashboard' %}" class="btn btn-outline-danger">Esci senza salvare</a>
+                <button type="button" class="btn btn-primary" id="btn-salva-esci">Salva ed esci</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     (function () {
-        var btn = document.getElementById('btn-elimina');
-        var chk = document.getElementById('id_file_tesi-clear');
-        var card = document.getElementById('current-file');
+        var form = document.getElementById('tesi-form');
         var fileInput = document.getElementById('id_file_tesi');
-        if (!btn || !chk || !card) return;
+        var chk = document.getElementById('id_file_tesi-clear');
+        var annulla = document.getElementById('btn-annulla');
+        var salvaEsci = document.getElementById('btn-salva-esci');
 
-        function render() {
+        // --- Toggle "Elimina / Annulla" sul file attuale (se presente) ---
+        var btn = document.getElementById('btn-elimina');
+        var card = document.getElementById('current-file');
+        function renderRemove() {
+            if (!btn || !card || !chk) return;
             if (chk.checked) {
                 card.classList.add('to-remove');
                 btn.className = 'btn btn-sm btn-outline-secondary flex-shrink-0';
@@ -107,24 +135,46 @@
                 btn.innerHTML = '<i class="bi bi-trash"></i> Elimina';
             }
         }
-
-        btn.addEventListener('click', function () {
-            chk.checked = !chk.checked;
-            render();
-        });
-
-        // Se l'utente sceglie un nuovo file, annulla l'eventuale "svuota":
+        if (btn && chk) {
+            btn.addEventListener('click', function () {
+                chk.checked = !chk.checked;
+                renderRemove();
+            });
+        }
+        // Se l'utente sceglie un nuovo file, annulla l'eventuale "elimina":
         // il nuovo file sostituisce comunque il precedente.
-        if (fileInput) {
+        if (fileInput && chk) {
             fileInput.addEventListener('change', function () {
                 if (fileInput.files.length && chk.checked) {
                     chk.checked = false;
-                    render();
+                    renderRemove();
                 }
             });
         }
+        renderRemove();
 
-        render();
+        // --- Conferma all'uscita se ci sono modifiche non salvate ---
+        function haModifiche() {
+            var fileScelto = fileInput && fileInput.files && fileInput.files.length > 0;
+            var inRimozione = chk && chk.checked;
+            return fileScelto || inRimozione;
+        }
+        if (annulla) {
+            annulla.addEventListener('click', function (e) {
+                if (haModifiche() && window.bootstrap) {
+                    e.preventDefault();  // non uscire subito: chiedi conferma
+                    bootstrap.Modal.getOrCreateInstance(
+                        document.getElementById('unsavedModal')
+                    ).show();
+                }
+                // se non ci sono modifiche, il link esce normalmente
+            });
+        }
+        if (salvaEsci && form) {
+            salvaEsci.addEventListener('click', function () {
+                form.submit();  // salva: la view reindirizza alla dashboard
+            });
+        }
     })();
 </script>
 {% endblock %}
