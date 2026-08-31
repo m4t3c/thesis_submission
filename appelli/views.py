@@ -144,7 +144,13 @@ def carica_tesi(request, iscrizione_id):
         form = TesiUploadForm(request.POST, request.FILES, instance=iscrizione)
         if form.is_valid():
             form.save()
-            messages.success(request, "File della tesi caricato correttamente.")
+            # Il form accetta l'invio senza un nuovo file solo quando una tesi
+            # e' gia' presente (in quel caso resta quella): distinguiamo i due
+            # casi per non dire "caricato" quando non e' cambiato nulla.
+            if "file_tesi" in form.changed_data:
+                messages.success(request, "File della tesi caricato correttamente.")
+            else:
+                messages.info(request, "Nessun nuovo file scelto: la tesi resta invariata.")
             return redirect("appelli:studente_dashboard")
     else:
         form = TesiUploadForm(instance=iscrizione)

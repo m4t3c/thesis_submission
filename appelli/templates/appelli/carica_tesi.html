@@ -15,12 +15,11 @@
         cursor: pointer;
     }
     .upload-input::file-selector-button:hover { background: var(--bs-primary); color: #fff; }
-    .current-file { background: #fbfbfc; transition: background .15s ease, border-color .15s ease; }
-    .remove-badge { display: none; }
-    .current-file.to-remove { background: #fff5f5; border-color: var(--bs-danger-border-subtle) !important; }
-    .current-file.to-remove .filename { text-decoration: line-through; color: var(--muted); }
-    .current-file.to-remove .file-icon { color: var(--muted) !important; }
-    .current-file.to-remove .remove-badge { display: block; }
+    .current-file { background: #fbfbfc; }
+    /* Django rende gli errori di campo come <ul class="errorlist">: qui la si
+       riporta all'aspetto di un normale messaggio di errore Bootstrap. */
+    .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
+    .errorlist li { color: var(--bs-danger-text-emphasis); font-size: .875rem; }
 </style>
 
 <div class="row justify-content-center">
@@ -41,42 +40,35 @@
                     {% if iscrizione.file_tesi %}
                         <label class="form-label">File attuale</label>
                         <div id="current-file" class="current-file border rounded p-3 mb-3">
-                            <div class="d-flex align-items-center justify-content-between gap-3">
-                                <div class="d-flex align-items-center gap-3" style="min-width: 0;">
-                                    <i class="bi bi-file-earmark-text fs-3 text-primary file-icon flex-shrink-0"></i>
-                                    <div style="min-width: 0;">
-                                        <div class="fw-semibold text-truncate filename" title="{{ nome_file }}">{{ nome_file }}</div>
-                                        <a class="small text-decoration-none"
-                                           href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                            <i class="bi bi-download"></i> Scarica
-                                        </a>
-                                    </div>
+                            <div class="d-flex align-items-center gap-3" style="min-width: 0;">
+                                <i class="bi bi-file-earmark-pdf fs-3 text-primary file-icon flex-shrink-0"></i>
+                                <div style="min-width: 0;">
+                                    <div class="fw-semibold text-truncate filename" title="{{ nome_file }}">{{ nome_file }}</div>
+                                    <a class="small text-decoration-none"
+                                       href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                                        <i class="bi bi-download"></i> Scarica
+                                    </a>
                                 </div>
-                                <button type="button" id="btn-elimina"
-                                        class="btn btn-sm btn-outline-danger flex-shrink-0">
-                                    <i class="bi bi-trash"></i> Elimina
-                                </button>
-                            </div>
-                            {# Badge sempre su riga propria: non viene mai troncato #}
-                            <div class="remove-badge mt-2">
-                                <span class="badge text-bg-danger">verrà rimosso al salvataggio</span>
                             </div>
                         </div>
-                        {# checkbox di "clear" gestita da Django, nascosta e pilotata dal pulsante #}
-                        <input type="checkbox" name="file_tesi-clear" id="id_file_tesi-clear" class="d-none">
                     {% endif %}
 
                     <div class="mb-2">
-                        <label for="id_file_tesi" class="form-label">
+                        <label for="{{ form.file_tesi.id_for_label }}" class="form-label">
                             {% if iscrizione.file_tesi %}Sostituisci con un nuovo file{% else %}Seleziona il file{% endif %}
-                            <span class="text-muted fw-normal">(opzionale)</span>
                         </label>
-                        <input type="file" name="file_tesi" id="id_file_tesi"
-                               class="form-control upload-input">
-                        {% if form.file_tesi.errors %}
-                            <div class="text-danger small mt-1">{{ form.file_tesi.errors }}</div>
-                        {% endif %}
-                        <div class="form-text">Caricando un nuovo file, quello precedente verrà sostituito.</div>
+                        {{ form.file_tesi }}
+                        {{ form.file_tesi.errors }}
+                        {# l'id e' quello a cui punta l'aria-describedby generato da Django #}
+                        <div class="form-text" id="{{ form.file_tesi.auto_id }}_helptext">
+                            {% if iscrizione.file_tesi %}
+                                Sono ammessi solo file PDF. Il nuovo file sostituirà quello
+                                attuale: una tesi già caricata può essere sostituita, ma non
+                                rimossa.
+                            {% else %}
+                                Sono ammessi solo file PDF.
+                            {% endif %}
+                        </div>
                     </div>
 
                     <div class="d-flex flex-column flex-sm-row gap-2 mt-4">
@@ -92,7 +84,7 @@
     </div>
 </div>
 
-<!-- Popup: modifiche non salvate (chiesto premendo Annulla con modifiche in corso) -->
+<!-- Popup: modifiche non salvate (chiesto premendo Annulla con un file scelto) -->
 <div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -101,7 +93,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
             </div>
             <div class="modal-body">
-                Hai delle modifiche non salvate. Vuoi salvarle prima di uscire?
+                Hai selezionato un file che non è ancora stato caricato. Vuoi salvarlo
+                prima di uscire?
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
@@ -115,49 +108,13 @@
 <script>
     (function () {
         var form = document.getElementById('tesi-form');
-        var fileInput = document.getElementById('id_file_tesi');
-        var chk = document.getElementById('id_file_tesi-clear');
+        var fileInput = document.getElementById('{{ form.file_tesi.id_for_label }}');
         var annulla = document.getElementById('btn-annulla');
         var salvaEsci = document.getElementById('btn-salva-esci');
 
-        // --- Toggle "Elimina / Annulla" sul file attuale (se presente) ---
-        var btn = document.getElementById('btn-elimina');
-        var card = document.getElementById('current-file');
-        function renderRemove() {
-            if (!btn || !card || !chk) return;
-            if (chk.checked) {
-                card.classList.add('to-remove');
-                btn.className = 'btn btn-sm btn-outline-secondary flex-shrink-0';
-                btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Annulla';
-            } else {
-                card.classList.remove('to-remove');
-                btn.className = 'btn btn-sm btn-outline-danger flex-shrink-0';
-                btn.innerHTML = '<i class="bi bi-trash"></i> Elimina';
-            }
-        }
-        if (btn && chk) {
-            btn.addEventListener('click', function () {
-                chk.checked = !chk.checked;
-                renderRemove();
-            });
-        }
-        // Se l'utente sceglie un nuovo file, annulla l'eventuale "elimina":
-        // il nuovo file sostituisce comunque il precedente.
-        if (fileInput && chk) {
-            fileInput.addEventListener('change', function () {
-                if (fileInput.files.length && chk.checked) {
-                    chk.checked = false;
-                    renderRemove();
-                }
-            });
-        }
-        renderRemove();
-
-        // --- Conferma all'uscita se ci sono modifiche non salvate ---
+        // --- Conferma all'uscita se e' stato scelto un file non ancora salvato ---
         function haModifiche() {
-            var fileScelto = fileInput && fileInput.files && fileInput.files.length > 0;
-            var inRimozione = chk && chk.checked;
-            return fileScelto || inRimozione;
+            return !!(fileInput && fileInput.files && fileInput.files.length > 0);
         }
         if (annulla) {
             annulla.addEventListener('click', function (e) {

@@ -1,5 +1,8 @@
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
 from django.db import models
+
+from .storage import SovrascriviStorage
 
 
 class Commissione(models.Model):
@@ -90,9 +93,16 @@ class StudenteAppelloDiLaurea(models.Model):
     data_iscrizione = models.DateTimeField(auto_now_add=True)
     file_tesi = models.FileField(
         upload_to=percorso_file_tesi,
+        # Senza questo storage, ricaricare la tesi con lo stesso nome del file
+        # gia' presente produce un nome alterato (es. "tesi_a8Fk2Pq.pdf").
+        storage=SovrascriviStorage(),
         blank=True,
         null=True,
-        help_text="File della tesi di laurea.",
+        # L'unico formato ammesso e' il PDF. Il validatore controlla
+        # l'estensione ed e' applicato ovunque si usi un ModelForm, quindi
+        # vale anche per i caricamenti fatti dall'area amministrativa.
+        validators=[FileExtensionValidator(allowed_extensions=["pdf"])],
+        help_text="File della tesi di laurea, in formato PDF.",
     )
 
     class Meta:

@@ -22,7 +22,17 @@ services:
     build: . # costruisce dal Dockerfile qui sopra
     container_name: appelli_web
     restart: unless-stopped
-    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000"
+    # In locale il browser parla DIRETTAMENTE con gunicorn: in produzione c'e'
+    # Traefik in mezzo, che accetta lui le connessioni dei browser e ne apre
+    # una verso gunicorn solo quando ha una richiesta HTTP completa.
+    # Con i default (1 worker "sync", 1 thread) basta UNA connessione TCP
+    # aperta dal browser senza dati (i browser ne aprono di speculative) per
+    # bloccare l'intero server fino al timeout: il sito sembra lentissimo e gli
+    # upload si interrompono con "Internal Server Error".
+    # --threads attiva il worker "gthread", che mette in attesa le connessioni
+    # silenziose senza occupare nessun thread. Il timeout piu' alto lascia
+    # respiro al caricamento di tesi di grandi dimensioni.
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 120"
     environment:
       DB_HOST: db # 'db' = il nome del servizio: Docker lo risolve
       # Stesse variabili del servizio 'db': restano allineate automaticamente.
