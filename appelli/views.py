@@ -69,8 +69,10 @@ def dashboard(request):
         return redirect("appelli:studente_dashboard")
     if is_docente(request.user):
         return redirect("appelli:docente_dashboard")
-    # Admin o utenti senza gruppo noto.
-    return render(request, "appelli/home.html")
+    # Nessun gruppo noto: l'affiliation Shibboleth non corrisponde ne' al
+    # profilo studente ne' a quello docente. 403 e non 200 perche' e' a tutti
+    # gli effetti un rifiuto (e non va indicizzato ne' messo in cache).
+    return render(request, "appelli/accesso_negato.html", status=403)
 
 
 # --- Area studente ---------------------------------------------------------
@@ -82,7 +84,9 @@ def studente_dashboard(request):
 
     iscrizioni = request.user.iscrizioni.select_related("appello")
     appelli_iscritti = iscrizioni.values_list("appello_id", flat=True)
-    appelli_disponibili = AppelloDiLaurea.objects.exclude(pk__in=list(appelli_iscritti))
+    appelli_disponibili = AppelloDiLaurea.objects.exclude(
+        pk__in=list(appelli_iscritti)
+    )
 
     return render(
         request,
@@ -107,9 +111,11 @@ def iscriviti(request, appello_id):
         studente=request.user, appello=appello
     )
     if created:
-        messages.success(request, f"Iscrizione a «{appello}» effettuata.")
+        messages.success(
+            request, f"Iscrizione a «{appello.etichetta_pubblica}» effettuata."
+        )
     else:
-        messages.info(request, f"Sei gia' iscritto a «{appello}».")
+        messages.info(request, f"Sei gia' iscritto a «{appello.etichetta_pubblica}».")
     return redirect("appelli:studente_dashboard")
 
 
@@ -121,13 +127,17 @@ def disiscriviti(request, iscrizione_id):
         return redirect("appelli:studente_dashboard")
 
     iscrizione = get_object_or_404(
-        StudenteAppelloDiLaurea, pk=iscrizione_id, studente=request.user
+        StudenteAppelloDiLaurea.objects.select_related("appello"),
+        pk=iscrizione_id,
+        studente=request.user,
     )
     appello = iscrizione.appello
     # Il file della tesi eventualmente caricato viene rimosso dal disco in
     # automatico da django-cleanup (signal post_delete).
     iscrizione.delete()
-    messages.success(request, f"Disiscrizione da «{appello}» effettuata.")
+    messages.success(
+        request, f"Disiscrizione da «{appello.etichetta_pubblica}» effettuata."
+    )
     return redirect("appelli:studente_dashboard")
 
 
@@ -183,7 +193,9 @@ def appello_detail(request, appello_id):
     if not is_docente(request.user):
         raise PermissionDenied("Solo i docenti possono accedere a questa pagina.")
 
-    appello = get_object_or_404(AppelloDiLaurea, pk=appello_id)
+    appello = get_object_or_404(
+        AppelloDiLaurea.objects.select_related("commissione"), pk=appello_id
+    )
     if not docente_in_commissione(request.user, appello):
         raise PermissionDenied("Non fai parte della commissione di questo appello.")
 

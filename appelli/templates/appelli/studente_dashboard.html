@@ -15,7 +15,7 @@
                         <tr>
                             <th>Corso di laurea</th>
                             <th>Data appello</th>
-                            <th>Iscritto il</th>
+                            <th>Orario</th>
                             <th>Tesi</th>
                             <th class="text-end">Azioni</th>
                         </tr>
@@ -25,7 +25,11 @@
                             <tr>
                                 <td class="fw-semibold" data-label="Corso di laurea">{{ iscrizione.appello.corso_di_laurea }}</td>
                                 <td data-label="Data appello">{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
-                                <td class="text-muted" data-label="Iscritto il">{{ iscrizione.data_iscrizione|date:"d/m/Y H:i" }}</td>
+                                <td data-label="Orario">
+                                    {% if iscrizione.appello.ora %}{{ iscrizione.appello.ora|time:"H:i" }}{% else %}
+                                        <span class="text-muted small">da definire</span>
+                                    {% endif %}
+                                </td>
                                 <td data-label="Tesi">
                                     {% if iscrizione.file_tesi %}
                                         <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">Scarica</a>
@@ -43,7 +47,7 @@
                                               action="{% url 'appelli:disiscriviti' iscrizione.id %}"
                                               class="js-confirm m-0"
                                               data-confirm-title="Conferma disiscrizione"
-                                              data-confirm-body="Vuoi davvero disiscriverti dall'appello di {{ iscrizione.appello.corso_di_laurea }} del {{ iscrizione.appello.data|date:'d/m/Y' }}? L'eventuale tesi caricata verrà eliminata."
+                                              data-confirm-body="Vuoi davvero disiscriverti dall'appello «{{ iscrizione.appello.etichetta_pubblica }}»? L'eventuale tesi caricata verrà eliminata."
                                               data-confirm-ok="Disiscriviti"
                                               data-confirm-variant="btn-danger">
                                             {% csrf_token %}
@@ -72,6 +76,7 @@
                         <tr>
                             <th>Corso di laurea</th>
                             <th>Data</th>
+                            <th>Orario</th>
                             <th class="text-end">Azioni</th>
                         </tr>
                     </thead>
@@ -80,12 +85,17 @@
                             <tr>
                                 <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
                                 <td data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                <td data-label="Orario">
+                                    {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
+                                        <span class="text-muted small">da definire</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end cell-actions" data-label="Azioni">
                                     <form method="post"
                                           action="{% url 'appelli:iscriviti' appello.id %}"
                                           class="js-confirm m-0"
                                           data-confirm-title="Conferma iscrizione"
-                                          data-confirm-body="Vuoi iscriverti all'appello di {{ appello.corso_di_laurea }} del {{ appello.data|date:'d/m/Y' }}?"
+                                          data-confirm-body="Vuoi iscriverti all'appello «{{ appello.etichetta_pubblica }}»?"
                                           data-confirm-ok="Iscriviti"
                                           data-confirm-variant="btn-primary">
                                         {% csrf_token %}

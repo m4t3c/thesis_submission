@@ -1,0 +1,27 @@
+{% extends "appelli/base.html" %}
+
+{% block title %}Accesso non consentito{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-12 col-md-12">
+        <div class="alert alert-danger shadow-sm" role="alert">
+            <h1 class="h5 alert-heading d-flex align-items-center gap-2">
+                <i class="bi bi-shield-exclamation" aria-hidden="true"></i>
+                Accesso non consentito
+            </h1>
+            <p class="mb-0">
+                Stai cercando di accedere ad un servizio senza averne i diritti.
+                Se ritieni si tratti di un errore, contatta la
+                segreteria del tuo corso di laurea.
+            </p>
+        </div>
+
+        {% if user.is_staff %}
+            <a class="btn btn-outline-secondary" href="{% url 'admin:index' %}">
+                Vai all'area amministrativa
+            </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

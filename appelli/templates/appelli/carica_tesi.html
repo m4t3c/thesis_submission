@@ -31,7 +31,8 @@
                 </h1>
                 <p class="text-muted">
                     {{ iscrizione.appello.corso_di_laurea }} — appello del
-                    {{ iscrizione.appello.data|date:"d/m/Y" }}
+                    {{ iscrizione.appello.data|date:"d/m/Y" }}{% if iscrizione.appello.ora %}
+                        alle {{ iscrizione.appello.ora|time:"H:i" }}{% endif %}
                 </p>
 
                 <form method="post" enctype="multipart/form-data" id="tesi-form">

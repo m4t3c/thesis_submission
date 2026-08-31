@@ -39,6 +39,17 @@ class AppelloDiLaurea(models.Model):
     """
 
     data = models.DateField()
+    # Orario di inizio della seduta. E' un TimeField e non un DateTimeField
+    # perche' con USE_TZ attivo un datetime verrebbe convertito in UTC e
+    # riletto come ora locale: qui serve semplicemente "l'appello e' alle 9:00",
+    # senza fusi di mezzo. Facoltativo: gli appelli gia' inseriti non ce
+    # l'hanno e puo' non essere ancora stato deciso.
+    ora = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name="Orario",
+        help_text="Orario di inizio della seduta (facoltativo).",
+    )
     corso_di_laurea = models.CharField(max_length=255)
     commissione = models.ForeignKey(
         Commissione,
@@ -49,17 +60,41 @@ class AppelloDiLaurea(models.Model):
     class Meta:
         verbose_name = "Appello di laurea"
         verbose_name_plural = "Appelli di laurea"
-        ordering = ["-data"]
-        # data + corso_di_laurea identificano logicamente l'appello
+        ordering = ["-data", "-ora"]
+        # Nello stesso giorno e per lo stesso corso possono esserci piu'
+        # appelli, purche' affidati a commissioni diverse: cio' che identifica
+        # logicamente l'appello e' quindi la tripletta data + corso +
+        # commissione. L'orario NON entra nel vincolo: la stessa commissione
+        # che esamina lo stesso corso nello stesso giorno e' un unico appello,
+        # anche se le sedute si svolgono in due fasce orarie.
         constraints = [
             models.UniqueConstraint(
-                fields=["data", "corso_di_laurea"],
-                name="unique_appello_data_corso",
+                fields=["data", "corso_di_laurea", "commissione"],
+                name="unique_appello_data_corso_commissione",
             )
         ]
 
+    @property
+    def etichetta_pubblica(self):
+        """Descrizione dell'appello SENZA la commissione.
+
+        Va usata ovunque il testo possa essere letto da uno studente (tabelle,
+        messaggi, popup di conferma): la composizione della commissione non
+        deve essere visibile ai candidati. Tenerla in un unico punto evita che
+        la commissione ricompaia per distrazione in una pagina nuova.
+        """
+        quando = f"{self.data:%d/%m/%Y}"
+        if self.ora:
+            quando += f" alle {self.ora:%H:%M}"
+        return f"{self.corso_di_laurea} - {quando}"
+
     def __str__(self):
-        return f"{self.corso_di_laurea} - {self.data:%d/%m/%Y}"
+        # Rappresentazione COMPLETA, per admin e area docente: la commissione
+        # fa parte dell'identita' dell'appello e senza di essa due appelli
+        # dello stesso giorno e corso sarebbero indistinguibili nei menu a
+        # tendina. Non usare nulla di tutto cio' verso gli studenti: per loro
+        # c'e' etichetta_pubblica.
+        return f"{self.etichetta_pubblica} ({self.commissione})"
 
 
 def percorso_file_tesi(instance, filename):

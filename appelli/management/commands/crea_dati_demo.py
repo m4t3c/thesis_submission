@@ -40,10 +40,12 @@ class Command(BaseCommand):
         commissione, _ = Commissione.objects.get_or_create(nome="Commissione A")
         commissione.docenti.set(docenti)
 
+        # La commissione fa parte della chiave logica dell'appello, quindi va
+        # nella ricerca e non nei soli defaults.
         appello, _ = AppelloDiLaurea.objects.get_or_create(
             data=datetime.date.today() + datetime.timedelta(days=30),
             corso_di_laurea="Informatica",
-            defaults={"commissione": commissione},
+            commissione=commissione,
         )
 
         self.stdout.write(self.style.SUCCESS("Dati demo creati."))

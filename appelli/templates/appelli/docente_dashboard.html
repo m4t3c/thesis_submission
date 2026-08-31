@@ -17,6 +17,7 @@
                                 <tr>
                                     <th>Corso di laurea</th>
                                     <th>Data</th>
+                                    <th>Orario</th>
                                     <th class="text-end">Azioni</th>
                                 </tr>
                             </thead>
@@ -25,6 +26,11 @@
                                     <tr>
                                         <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
                                         <td data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                        <td data-label="Orario">
+                                            {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
+                                                <span class="text-muted small">da definire</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end cell-actions" data-label="Azioni">
                                             <a class="btn btn-sm btn-soft-primary"
                                                href="{% url 'appelli:appello_detail' appello.id %}">

@@ -23,7 +23,7 @@ class CommissioneAdmin(admin.ModelAdmin):
 
 @admin.register(AppelloDiLaurea)
 class AppelloDiLaureaAdmin(admin.ModelAdmin):
-    list_display = ("corso_di_laurea", "data", "commissione")
+    list_display = ("corso_di_laurea", "data", "ora", "commissione")
     list_filter = ("corso_di_laurea", "data")
     date_hierarchy = "data"
     search_fields = ("corso_di_laurea",)
@@ -34,6 +34,9 @@ class AppelloDiLaureaAdmin(admin.ModelAdmin):
 class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
     list_display = ("studente", "appello", "data_iscrizione", "ha_tesi")
     list_filter = ("appello__corso_di_laurea",)
+    # __str__ dell'appello include la commissione: senza questo si farebbe una
+    # query in piu' per ogni riga dell'elenco.
+    list_select_related = ("studente", "appello", "appello__commissione")
     readonly_fields = ("data_iscrizione",)
     autocomplete_fields = ("studente", "appello")
     search_fields = ("studente__username", "studente__email")
