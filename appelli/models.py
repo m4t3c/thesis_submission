@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.db.models import F
 
 from .storage import SovrascriviStorage
 
@@ -60,7 +61,13 @@ class AppelloDiLaurea(models.Model):
     class Meta:
         verbose_name = "Appello di laurea"
         verbose_name_plural = "Appelli di laurea"
-        ordering = ["-data", "-ora"]
+        # Ordine CRESCENTE: in ogni elenco (studenti, docenti, admin) il
+        # primo appello e' il piu' vecchio. Stando nel Meta la regola vale
+        # ovunque, anche nelle liste generate dai template come
+        # "commissione.appelli.all", che non passano da nessuna view.
+        # A parita' di giorno, chi ha gia' un orario precede chi non ce l'ha:
+        # senza nulls_last i NULL finirebbero per primi.
+        ordering = ["data", F("ora").asc(nulls_last=True)]
         # Nello stesso giorno e per lo stesso corso possono esserci piu'
         # appelli, purche' affidati a commissioni diverse: cio' che identifica
         # logicamente l'appello e' quindi la tripletta data + corso +
@@ -97,9 +104,27 @@ class AppelloDiLaurea(models.Model):
         return f"{self.etichetta_pubblica} ({self.commissione})"
 
 
+# Estensioni video accettate per il caricamento diretto.
+FORMATI_VIDEO = ["mp4", "mov", "m4v", "webm", "mkv", "avi"]
+
+
+def _cartella_iscrizione(instance):
+    return f"tesi/appello_{instance.appello_id}/studente_{instance.studente_id}"
+
+
 def percorso_file_tesi(instance, filename):
     """Organizza i file caricati per appello e studente."""
-    return f"tesi/appello_{instance.appello_id}/studente_{instance.studente_id}/{filename}"
+    return f"{_cartella_iscrizione(instance)}/{filename}"
+
+
+def percorso_file_video(instance, filename):
+    """Il video va in una sottocartella propria.
+
+    Serve a non mescolarlo con la tesi: SovrascriviStorage cancella un file
+    omonimo prima di scrivere, e tenerli separati mantiene vera l'assunzione
+    "una cartella, un solo file" su cui quel comportamento si regge.
+    """
+    return f"{_cartella_iscrizione(instance)}/video/{filename}"
 
 
 class StudenteAppelloDiLaurea(models.Model):
@@ -108,10 +133,11 @@ class StudenteAppelloDiLaurea(models.Model):
     Si usa una tabella esplicita invece della semplice ManyToMany di Django
     per poter memorizzare dati aggiuntivi, ad esempio la data di iscrizione.
 
-    Il file della tesi e' per ora contenuto qui. In futuro, per scalabilita'
-    (es. aggiunta di un video), il file potra' essere spostato in una tabella
-    dedicata "Allegato" collegata a questa iscrizione, senza modificare le
-    altre entita'.
+    Gli allegati (tesi e video) sono per ora campi di questa tabella: sono
+    pochi e con regole diverse fra loro, quindi una tabella "Allegato"
+    dedicata aggiungerebbe join e complessita' senza vantaggi. Resta la
+    strada da prendere se in futuro gli allegati diventeranno molti o di tipo
+    variabile, e non richiederebbe di toccare le altre entita'.
     """
 
     studente = models.ForeignKey(
@@ -139,6 +165,30 @@ class StudenteAppelloDiLaurea(models.Model):
         validators=[FileExtensionValidator(allowed_extensions=["pdf"])],
         help_text="File della tesi di laurea, in formato PDF.",
     )
+    # blank=True perche' le iscrizioni gia' esistenti non hanno un titolo e
+    # perche' l'import automatico dall'Excel creera' righe senza. Nel form
+    # dello studente e' invece obbligatorio: cosi' si puo' sempre cambiare ma
+    # mai svuotare.
+    titolo = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name="Titolo della tesi",
+        help_text="Titolo della tesi di laurea.",
+    )
+    file_video = models.FileField(
+        upload_to=percorso_file_video,
+        storage=SovrascriviStorage(),
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=FORMATI_VIDEO)],
+        verbose_name="File video",
+        help_text="Video di presentazione (facoltativo).",
+    )
+    link_video = models.URLField(
+        max_length=500,
+        blank=True,
+        verbose_name="Link al video",
+        help_text="Indirizzo di un video gia' pubblicato online (facoltativo).",
+    )
 
     class Meta:
         verbose_name = "Iscrizione"
@@ -149,8 +199,18 @@ class StudenteAppelloDiLaurea(models.Model):
             models.UniqueConstraint(
                 fields=["studente", "appello"],
                 name="unique_iscrizione_studente_appello",
-            )
+            ),
+            # Il video si fornisce O caricando un file O indicando un link,
+            # mai entrambi. Consentito che manchino tutti e due: e' facoltativo.
+            models.CheckConstraint(
+                condition=models.Q(file_video="") | models.Q(link_video=""),
+                name="video_file_o_link_non_entrambi",
+            ),
         ]
+
+    @property
+    def ha_video(self):
+        return bool(self.file_video or self.link_video)
 
     def __str__(self):
         return f"{self.studente} -> {self.appello}"

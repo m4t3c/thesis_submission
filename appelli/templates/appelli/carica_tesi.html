@@ -1,6 +1,6 @@
 {% extends "appelli/base.html" %}
 
-{% block title %}Carica tesi{% endblock %}
+{% block title %}La mia tesi{% endblock %}
 
 {% block content %}
 <style>
@@ -20,14 +20,15 @@
        riporta all'aspetto di un normale messaggio di errore Bootstrap. */
     .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
     .errorlist li { color: var(--bs-danger-text-emphasis); font-size: .875rem; }
+    .video-box { border: 1px solid var(--line); border-radius: .6rem; padding: 1rem; }
 </style>
 
 <div class="row justify-content-center">
-    <div class="col-lg-6 col-md-8">
+    <div class="col-lg-7 col-md-9">
         <div class="card shadow-sm">
             <div class="card-body">
                 <h1 class="h4 section-title mb-1">
-                    <i class="bi bi-cloud-arrow-up text-primary me-1"></i>Carica la tua tesi
+                    <i class="bi bi-mortarboard text-primary me-1"></i>La mia tesi
                 </h1>
                 <p class="text-muted">
                     {{ iscrizione.appello.corso_di_laurea }} — appello del
@@ -38,13 +39,29 @@
                 <form method="post" enctype="multipart/form-data" id="tesi-form">
                     {% csrf_token %}
 
+                    {# ---------------- Titolo ---------------- #}
+                    <div class="mb-4">
+                        <h2 class="h6 section-title">
+                            <label for="{{ form.titolo.id_for_label }}" class="form-label">
+                                Titolo della tesi
+                            </label>
+                        </h2>
+                        {{ form.titolo }}
+                        {{ form.titolo.errors }}
+                        <div class="form-text" id="{{ form.titolo.auto_id }}_helptext">
+                            Puoi modificarlo quando vuoi, ma non può restare vuoto.
+                        </div>
+                    </div>
+
+                    {# ---------------- File della tesi ---------------- #}
+                    <h2 class="h6 section-title">File della tesi</h2>
+
                     {% if iscrizione.file_tesi %}
-                        <label class="form-label">File attuale</label>
                         <div id="current-file" class="current-file border rounded p-3 mb-3">
                             <div class="d-flex align-items-center gap-3" style="min-width: 0;">
-                                <i class="bi bi-file-earmark-pdf fs-3 text-primary file-icon flex-shrink-0"></i>
+                                <i class="bi bi-file-earmark-pdf fs-3 text-primary flex-shrink-0"></i>
                                 <div style="min-width: 0;">
-                                    <div class="fw-semibold text-truncate filename" title="{{ nome_file }}">{{ nome_file }}</div>
+                                    <div class="fw-semibold text-truncate" title="{{ nome_file }}">{{ nome_file }}</div>
                                     <a class="small text-decoration-none"
                                        href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
                                         <i class="bi bi-download"></i> Scarica
@@ -54,13 +71,12 @@
                         </div>
                     {% endif %}
 
-                    <div class="mb-2">
+                    <div class="mb-4">
                         <label for="{{ form.file_tesi.id_for_label }}" class="form-label">
                             {% if iscrizione.file_tesi %}Sostituisci con un nuovo file{% else %}Seleziona il file{% endif %}
                         </label>
                         {{ form.file_tesi }}
                         {{ form.file_tesi.errors }}
-                        {# l'id e' quello a cui punta l'aria-describedby generato da Django #}
                         <div class="form-text" id="{{ form.file_tesi.auto_id }}_helptext">
                             {% if iscrizione.file_tesi %}
                                 Sono ammessi solo file PDF. Il nuovo file sostituirà quello
@@ -72,7 +88,53 @@
                         </div>
                     </div>
 
-                    <div class="d-flex flex-column flex-sm-row gap-2 mt-4">
+                    {# ---------------- Video (facoltativo) ---------------- #}
+                    <h2 class="h6 section-title">Video di presentazione <span class="fw-normal text-muted">(facoltativo)</span></h2>
+
+                    <div class="video-box mb-4">
+                        {% for scelta in form.modalita_video %}
+                            <div class="form-check{% if not forloop.last %} mb-2{% endif %}">
+                                {{ scelta.tag }}
+                                <label class="form-check-label" for="{{ scelta.id_for_label }}">
+                                    {{ scelta.choice_label }}
+                                </label>
+                            </div>
+
+                            {% if scelta.data.value == "file" %}
+                                <div class="js-video-pannello ms-4 mt-2 mb-2" data-modalita="file">
+                                    {% if iscrizione.file_video %}
+                                        <div class="current-file border rounded p-2 mb-2 d-flex align-items-center gap-2">
+                                            <i class="bi bi-camera-video text-primary"></i>
+                                            <span class="small text-truncate">{{ nome_video }}</span>
+                                            <a class="small ms-auto text-decoration-none"
+                                               href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                                                <i class="bi bi-download"></i> Scarica
+                                            </a>
+                                        </div>
+                                    {% endif %}
+                                    {{ form.file_video }}
+                                    {{ form.file_video.errors }}
+                                    <div class="form-text">
+                                        Formati ammessi: {{ formati_video }}. Dimensione massima {{ max_video }}.
+                                    </div>
+                                </div>
+                            {% elif scelta.data.value == "link" %}
+                                <div class="js-video-pannello ms-4 mt-2 mb-2" data-modalita="link">
+                                    {{ form.link_video }}
+                                    {{ form.link_video.errors }}
+                                    <div class="form-text">
+                                        Indirizzo di un video.
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                        {{ form.modalita_video.errors }}
+                        {% if form.non_field_errors %}
+                            <div class="text-danger small mt-2">{{ form.non_field_errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex flex-column flex-sm-row gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check2"></i> Salva
                         </button>
@@ -85,7 +147,7 @@
     </div>
 </div>
 
-<!-- Popup: modifiche non salvate (chiesto premendo Annulla con un file scelto) -->
+<!-- Popup: modifiche non salvate -->
 <div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -94,8 +156,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
             </div>
             <div class="modal-body">
-                Hai selezionato un file che non è ancora stato caricato. Vuoi salvarlo
-                prima di uscire?
+                Hai delle modifiche non ancora salvate. Vuoi salvarle prima di uscire?
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
@@ -109,29 +170,58 @@
 <script>
     (function () {
         var form = document.getElementById('tesi-form');
-        var fileInput = document.getElementById('{{ form.file_tesi.id_for_label }}');
-        var annulla = document.getElementById('btn-annulla');
-        var salvaEsci = document.getElementById('btn-salva-esci');
+        if (!form) return;
 
-        // --- Conferma all'uscita se e' stato scelto un file non ancora salvato ---
-        function haModifiche() {
-            return !!(fileInput && fileInput.files && fileInput.files.length > 0);
+        // --- Mostra solo il pannello della modalita' video selezionata ---
+        var radios = form.querySelectorAll('input[name="modalita_video"]');
+        var pannelli = form.querySelectorAll('.js-video-pannello');
+
+        function modalitaScelta() {
+            for (var i = 0; i < radios.length; i++) {
+                if (radios[i].checked) return radios[i].value;
+            }
+            return 'nessuno';
         }
+        function aggiornaPannelli() {
+            var scelta = modalitaScelta();
+            pannelli.forEach(function (p) {
+                p.hidden = (p.dataset.modalita !== scelta);
+            });
+        }
+        radios.forEach(function (r) {
+            r.addEventListener('change', aggiornaPannelli);
+        });
+        aggiornaPannelli();
+
+        // --- Conferma all'uscita se ci sono modifiche non salvate ---
+        // Si confronta lo stato iniziale del form con quello attuale, cosi'
+        // vale per titolo, file e link senza doverli elencare a mano.
+        function istantanea() {
+            var parti = [modalitaScelta()];
+            form.querySelectorAll('input[type="text"], input[type="url"]').forEach(function (i) {
+                parti.push(i.name + '=' + i.value);
+            });
+            form.querySelectorAll('input[type="file"]').forEach(function (i) {
+                parti.push(i.name + '=' + (i.files.length ? i.files[0].name : ''));
+            });
+            return parti.join('|');
+        }
+        var iniziale = istantanea();
+
+        var annulla = document.getElementById('btn-annulla');
         if (annulla) {
             annulla.addEventListener('click', function (e) {
-                if (haModifiche() && window.bootstrap) {
-                    e.preventDefault();  // non uscire subito: chiedi conferma
+                if (istantanea() !== iniziale && window.bootstrap) {
+                    e.preventDefault();
                     bootstrap.Modal.getOrCreateInstance(
                         document.getElementById('unsavedModal')
                     ).show();
                 }
-                // se non ci sono modifiche, il link esce normalmente
             });
         }
-        if (salvaEsci && form) {
-            salvaEsci.addEventListener('click', function () {
-                form.submit();  // salva: la view reindirizza alla dashboard
-            });
+        var salvaEsci = document.getElementById('btn-salva-esci');
+        if (salvaEsci) {
+            salvaEsci.addEventListener('click', function () { form.submit(); });
         }
     })();
 </script>

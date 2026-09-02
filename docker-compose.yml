@@ -39,7 +39,11 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
-      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      # "*" accetta qualsiasi Host, cosi' il sito e' raggiungibile anche
+      # dall'IP di rete del computer (es. http://192.168.1.29:8000) per
+      # provarlo da telefono o tablet sulla stessa Wi-Fi. Va bene SOLO in
+      # sviluppo: in produzione ALLOWED_HOSTS elenca il dominio reale.
+      DJANGO_ALLOWED_HOSTS: "*"
       DJANGO_DEBUG: "1"
       SHIB_ENABLED: "0" # in locale NON c'è Shibboleth
     volumes:

@@ -3,11 +3,14 @@ import os
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db.models import F
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import TesiUploadForm
-from .models import AppelloDiLaurea, StudenteAppelloDiLaurea
+from django.template.defaultfilters import filesizeformat
+
+from .forms import MAX_BYTE_VIDEO, TesiUploadForm
+from .models import FORMATI_VIDEO, AppelloDiLaurea, StudenteAppelloDiLaurea
 
 
 # --- Helper per i ruoli (basati sui gruppi di Django) ---------------------
@@ -82,8 +85,11 @@ def studente_dashboard(request):
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono accedere a questa pagina.")
 
-    iscrizioni = request.user.iscrizioni.select_related("appello")
+    iscrizioni = request.user.iscrizioni.select_related("appello").order_by(
+        "appello__data", F("appello__ora").asc(nulls_last=True)
+    )
     appelli_iscritti = iscrizioni.values_list("appello_id", flat=True)
+    # L'ordine (dal piu' vecchio) arriva dal Meta di AppelloDiLaurea.
     appelli_disponibili = AppelloDiLaurea.objects.exclude(
         pk__in=list(appelli_iscritti)
     )
@@ -112,32 +118,12 @@ def iscriviti(request, appello_id):
     )
     if created:
         messages.success(
-            request, f"Iscrizione a «{appello.etichetta_pubblica}» effettuata."
+            request,
+            f"Iscrizione a «{appello.etichetta_pubblica}» effettuata. "
+            "Per annullarla rivolgiti alla segreteria.",
         )
     else:
         messages.info(request, f"Sei gia' iscritto a «{appello.etichetta_pubblica}».")
-    return redirect("appelli:studente_dashboard")
-
-
-@login_required
-def disiscriviti(request, iscrizione_id):
-    if not is_studente(request.user):
-        raise PermissionDenied("Solo gli studenti possono disiscriversi.")
-    if request.method != "POST":
-        return redirect("appelli:studente_dashboard")
-
-    iscrizione = get_object_or_404(
-        StudenteAppelloDiLaurea.objects.select_related("appello"),
-        pk=iscrizione_id,
-        studente=request.user,
-    )
-    appello = iscrizione.appello
-    # Il file della tesi eventualmente caricato viene rimosso dal disco in
-    # automatico da django-cleanup (signal post_delete).
-    iscrizione.delete()
-    messages.success(
-        request, f"Disiscrizione da «{appello.etichetta_pubblica}» effettuata."
-    )
     return redirect("appelli:studente_dashboard")
 
 
@@ -154,22 +140,27 @@ def carica_tesi(request, iscrizione_id):
         form = TesiUploadForm(request.POST, request.FILES, instance=iscrizione)
         if form.is_valid():
             form.save()
-            # Il form accetta l'invio senza un nuovo file solo quando una tesi
-            # e' gia' presente (in quel caso resta quella): distinguiamo i due
-            # casi per non dire "caricato" quando non e' cambiato nulla.
-            if "file_tesi" in form.changed_data:
-                messages.success(request, "File della tesi caricato correttamente.")
+            if form.changed_data:
+                messages.success(request, "Dati della tesi salvati correttamente.")
             else:
-                messages.info(request, "Nessun nuovo file scelto: la tesi resta invariata.")
+                messages.info(request, "Nessuna modifica da salvare.")
             return redirect("appelli:studente_dashboard")
     else:
         form = TesiUploadForm(instance=iscrizione)
 
     nome_file = os.path.basename(iscrizione.file_tesi.name) if iscrizione.file_tesi else ""
+    nome_video = os.path.basename(iscrizione.file_video.name) if iscrizione.file_video else ""
     return render(
         request,
         "appelli/carica_tesi.html",
-        {"form": form, "iscrizione": iscrizione, "nome_file": nome_file},
+        {
+            "form": form,
+            "iscrizione": iscrizione,
+            "nome_file": nome_file,
+            "nome_video": nome_video,
+            "formati_video": ", ".join(FORMATI_VIDEO),
+            "max_video": filesizeformat(MAX_BYTE_VIDEO),
+        },
     )
 
 
@@ -209,11 +200,16 @@ def appello_detail(request, appello_id):
 
 # --- Download protetto del file della tesi ---------------------------------
 
-@login_required
-def scarica_tesi(request, iscrizione_id):
-    """Serve il file della tesi solo allo studente proprietario o ai docenti
-    della commissione dell'appello relativo."""
-    iscrizione = get_object_or_404(StudenteAppelloDiLaurea, pk=iscrizione_id)
+def _iscrizione_scaricabile(request, iscrizione_id):
+    """Iscrizione richiesta, se l'utente ha diritto di vederne gli allegati.
+
+    Il permesso e' lo stesso per tesi e video: lo studente proprietario o un
+    docente della commissione di quell'appello. Tenerlo in un'unica funzione
+    evita che i due percorsi di download divergano.
+    """
+    iscrizione = get_object_or_404(
+        StudenteAppelloDiLaurea.objects.select_related("appello"), pk=iscrizione_id
+    )
 
     e_proprietario = iscrizione.studente_id == request.user.pk
     e_commissario = is_docente(request.user) and docente_in_commissione(
@@ -222,7 +218,26 @@ def scarica_tesi(request, iscrizione_id):
     if not (e_proprietario or e_commissario):
         raise PermissionDenied("Non hai i permessi per scaricare questo file.")
 
+    return iscrizione
+
+
+@login_required
+def scarica_tesi(request, iscrizione_id):
+    """Serve il file della tesi solo a chi ne ha diritto."""
+    iscrizione = _iscrizione_scaricabile(request, iscrizione_id)
+
     if not iscrizione.file_tesi:
         raise Http404("Nessun file caricato per questa iscrizione.")
 
     return FileResponse(iscrizione.file_tesi.open("rb"), as_attachment=True)
+
+
+@login_required
+def scarica_video(request, iscrizione_id):
+    """Serve il video di presentazione, con gli stessi permessi della tesi."""
+    iscrizione = _iscrizione_scaricabile(request, iscrizione_id)
+
+    if not iscrizione.file_video:
+        raise Http404("Nessun video caricato per questa iscrizione.")
+
+    return FileResponse(iscrizione.file_video.open("rb"), as_attachment=True)

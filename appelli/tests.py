@@ -7,8 +7,9 @@ from django.db import IntegrityError, transaction
 from django.test import override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
+from .forms import MAX_BYTE_VIDEO
 from .models import AppelloDiLaurea, Commissione, StudenteAppelloDiLaurea
 
 
@@ -73,6 +74,42 @@ class IscrizioneTest(BaseSetup):
         self.assertFalse(StudenteAppelloDiLaurea.objects.exists())
 
 
+class DisiscrizioneRimossaTest(BaseSetup):
+    """Lo studente non puo' piu' disiscriversi, in nessun modo."""
+
+    def setUp(self):
+        super().setUp()
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        self.client.force_login(self.studente)
+
+    def test_rotta_inesistente(self):
+        """Non basta togliere il pulsante: l'endpoint non deve esistere."""
+        with self.assertRaises(NoReverseMatch):
+            reverse("appelli:disiscriviti", args=[self.iscrizione.id])
+
+    def test_nessun_endpoint_di_disiscrizione_risponde(self):
+        for percorso in (
+            f"/iscrizioni/{self.iscrizione.id}/disiscriviti/",
+            f"/iscrizioni/{self.iscrizione.id}/disiscriviti",
+        ):
+            with self.subTest(percorso=percorso):
+                resp = self.client.post(percorso)
+                self.assertEqual(resp.status_code, 404)
+        self.assertTrue(
+            StudenteAppelloDiLaurea.objects.filter(pk=self.iscrizione.pk).exists()
+        )
+
+    def test_dashboard_senza_pulsante(self):
+        testo = self.client.get(reverse("appelli:studente_dashboard")).content.decode()
+        self.assertNotIn("Disiscriviti", testo)
+        # Resta la sola azione disponibile: aprire la pagina della tesi.
+        self.assertIn(
+            reverse("appelli:carica_tesi", args=[self.iscrizione.id]), testo
+        )
+
+
 class DownloadTesiTest(BaseSetup):
     def setUp(self):
         super().setUp()
@@ -116,21 +153,30 @@ class CaricamentoTesiTest(BaseSetup):
 
     def tearDown(self):
         self.iscrizione.refresh_from_db()
-        if self.iscrizione.file_tesi:
-            self.iscrizione.file_tesi.delete(save=False)
+        for campo in (self.iscrizione.file_tesi, self.iscrizione.file_video):
+            if campo:
+                campo.delete(save=False)
+
+    TITOLO = "Un titolo di tesi"
 
     def _pdf(self, nome="tesi.pdf"):
         return SimpleUploadedFile(nome, b"%PDF-1.7 contenuto", content_type="application/pdf")
 
+    def _dati(self, **extra):
+        """POST completo: il titolo e' obbligatorio in ogni salvataggio."""
+        dati = {"titolo": self.TITOLO, "modalita_video": "nessuno"}
+        dati.update(extra)
+        return dati
+
     def test_pdf_accettato(self):
-        resp = self.client.post(self.url, {"file_tesi": self._pdf()})
+        resp = self.client.post(self.url, self._dati(file_tesi=self._pdf()))
         self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
         self.iscrizione.refresh_from_db()
         self.assertTrue(self.iscrizione.file_tesi)
 
     def test_estensione_non_pdf_rifiutata(self):
         file = SimpleUploadedFile("tesi.docx", b"contenuto", content_type="application/msword")
-        resp = self.client.post(self.url, {"file_tesi": file})
+        resp = self.client.post(self.url, self._dati(file_tesi=file))
         self.assertEqual(resp.status_code, 200)  # resta sul form con l'errore
         self.iscrizione.refresh_from_db()
         self.assertFalse(self.iscrizione.file_tesi)
@@ -138,41 +184,43 @@ class CaricamentoTesiTest(BaseSetup):
     def test_finto_pdf_rifiutato(self):
         # Estensione e content-type giusti, ma il contenuto non e' un PDF.
         file = SimpleUploadedFile("tesi.pdf", b"PK\x03\x04 zip", content_type="application/pdf")
-        resp = self.client.post(self.url, {"file_tesi": file})
+        resp = self.client.post(self.url, self._dati(file_tesi=file))
         self.assertEqual(resp.status_code, 200)
         self.iscrizione.refresh_from_db()
         self.assertFalse(self.iscrizione.file_tesi)
 
     def test_file_non_rimovibile(self):
-        self.client.post(self.url, {"file_tesi": self._pdf()})
+        self.client.post(self.url, self._dati(file_tesi=self._pdf()))
         self.iscrizione.refresh_from_db()
         nome_iniziale = self.iscrizione.file_tesi.name
 
-        # Tentativo di svuotamento: checkbox "clear" di Django e invio a vuoto.
-        self.client.post(self.url, {"file_tesi-clear": "on"})
-        self.client.post(self.url, {})
+        # Tentativo di svuotamento: checkbox "clear" di Django e invio senza
+        # file. Entrambi i POST sono per il resto validi, cosi' il test misura
+        # davvero il meccanismo di rimozione e non un errore di validazione.
+        self.client.post(self.url, self._dati(**{"file_tesi-clear": "on"}))
+        self.client.post(self.url, self._dati())
 
         self.iscrizione.refresh_from_db()
         self.assertEqual(self.iscrizione.file_tesi.name, nome_iniziale)
 
     def test_sostituzione_consentita(self):
-        self.client.post(self.url, {"file_tesi": self._pdf("prima.pdf")})
+        self.client.post(self.url, self._dati(file_tesi=self._pdf("prima.pdf")))
         self.iscrizione.refresh_from_db()
         primo = self.iscrizione.file_tesi.name
 
-        self.client.post(self.url, {"file_tesi": self._pdf("seconda.pdf")})
+        self.client.post(self.url, self._dati(file_tesi=self._pdf("seconda.pdf")))
         self.iscrizione.refresh_from_db()
         self.assertNotEqual(self.iscrizione.file_tesi.name, primo)
         self.assertIn("seconda", self.iscrizione.file_tesi.name)
 
     def test_invio_a_vuoto_senza_tesi_da_errore(self):
-        resp = self.client.post(self.url, {})
+        resp = self.client.post(self.url, self._dati())
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "obbligatorio")
 
     def test_stesso_nome_non_viene_rinominato(self):
         """Ricaricare un file con lo stesso nome non aggiunge suffissi casuali."""
-        self.client.post(self.url, {"file_tesi": self._pdf("tesi.pdf")})
+        self.client.post(self.url, self._dati(file_tesi=self._pdf("tesi.pdf")))
         self.iscrizione.refresh_from_db()
         primo = self.iscrizione.file_tesi.name
         self.assertTrue(primo.endswith("/tesi.pdf"), primo)
@@ -180,7 +228,7 @@ class CaricamentoTesiTest(BaseSetup):
         nuovo = SimpleUploadedFile(
             "tesi.pdf", b"%PDF-1.7 versione aggiornata", content_type="application/pdf"
         )
-        self.client.post(self.url, {"file_tesi": nuovo})
+        self.client.post(self.url, self._dati(file_tesi=nuovo))
         self.iscrizione.refresh_from_db()
 
         # Stesso percorso di prima e contenuto aggiornato: e' stato sovrascritto.
@@ -272,15 +320,8 @@ class UnicitaAppelloTest(BaseSetup):
         self.assertIn("Iscrizione a", testo)
         self.assertNotIn("Commissione A", testo)
 
-        iscrizione = StudenteAppelloDiLaurea.objects.get(
-            studente=self.studente, appello=self.appello
-        )
-        resp = self.client.post(
-            reverse("appelli:disiscriviti", args=[iscrizione.id]), follow=True
-        )
-        testo = resp.content.decode()
-        self.assertIn("Disiscrizione da", testo)
-        self.assertNotIn("Commissione A", testo)
+        resp = self.client.get(reverse("appelli:studente_dashboard"))
+        self.assertNotIn("Commissione A", resp.content.decode())
 
     def test_etichetta_pubblica_e_str(self):
         altra = Commissione.objects.create(nome="Commissione B")
@@ -454,3 +495,279 @@ class AffiliationTest(TestCase):
         u = User.objects.get(username="s123456")
         self.assertEqual(u.get_full_name(), "Mario Rossi")
         self.assertEqual(u.email, "mario.rossi@studenti.unimore.it")
+
+
+class TitoloEVideoTest(BaseSetup):
+    """Titolo obbligatorio e non rimovibile; video facoltativo, file O link."""
+
+    def setUp(self):
+        super().setUp()
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        self.url = reverse("appelli:carica_tesi", args=[self.iscrizione.id])
+        self.client.force_login(self.studente)
+
+    def tearDown(self):
+        self.iscrizione.refresh_from_db()
+        for campo in (self.iscrizione.file_tesi, self.iscrizione.file_video):
+            if campo:
+                campo.delete(save=False)
+
+    def _pdf(self):
+        return SimpleUploadedFile(
+            "tesi.pdf", b"%PDF-1.7 contenuto", content_type="application/pdf"
+        )
+
+    def _video(self, nome="presentazione.mp4", byte=b"contenuto video"):
+        return SimpleUploadedFile(nome, byte, content_type="video/mp4")
+
+    def _dati(self, **extra):
+        dati = {"titolo": "Titolo iniziale", "modalita_video": "nessuno"}
+        dati.update(extra)
+        return dati
+
+    # --- Titolo ---------------------------------------------------------
+
+    def test_titolo_salvato(self):
+        self.client.post(self.url, self._dati(file_tesi=self._pdf()))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Titolo iniziale")
+
+    def test_titolo_modificabile(self):
+        self.client.post(self.url, self._dati(file_tesi=self._pdf()))
+        self.client.post(self.url, self._dati(titolo="Titolo corretto"))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Titolo corretto")
+
+    def test_titolo_non_rimovibile(self):
+        self.client.post(self.url, self._dati(file_tesi=self._pdf()))
+
+        for tentativo in ("", "   "):
+            with self.subTest(titolo=repr(tentativo)):
+                resp = self.client.post(self.url, self._dati(titolo=tentativo))
+                self.assertEqual(resp.status_code, 200)  # resta sul form
+                self.iscrizione.refresh_from_db()
+                self.assertEqual(self.iscrizione.titolo, "Titolo iniziale")
+
+    # --- Video ----------------------------------------------------------
+
+    def test_video_facoltativo(self):
+        resp = self.client.post(self.url, self._dati(file_tesi=self._pdf()))
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.ha_video)
+
+    def test_video_come_file(self):
+        self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="file",
+                       file_video=self._video()),
+        )
+        self.iscrizione.refresh_from_db()
+        self.assertTrue(self.iscrizione.file_video)
+        self.assertEqual(self.iscrizione.link_video, "")
+        # Il video sta in una sottocartella sua, separata dalla tesi.
+        self.assertIn("/video/", self.iscrizione.file_video.name)
+
+    def test_video_come_link(self):
+        self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="link",
+                       link_video="https://example.com/v"),
+        )
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.link_video, "https://example.com/v")
+        self.assertFalse(self.iscrizione.file_video)
+
+    def test_link_sostituisce_il_file(self):
+        """Passare da file a link deve azzerare il file, non affiancarlo."""
+        self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="file",
+                       file_video=self._video()),
+        )
+        self.client.post(
+            self.url,
+            self._dati(modalita_video="link", link_video="https://example.com/v"),
+        )
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.file_video)
+        self.assertEqual(self.iscrizione.link_video, "https://example.com/v")
+
+    def test_video_rimovibile(self):
+        """Essendo facoltativo, il video si puo' togliere (a differenza della tesi)."""
+        self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="link",
+                       link_video="https://example.com/v"),
+        )
+        self.client.post(self.url, self._dati(modalita_video="nessuno"))
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.ha_video)
+
+    def test_file_e_link_insieme_impossibili_nel_db(self):
+        """Il CheckConstraint difende anche se si scavalca il form."""
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StudenteAppelloDiLaurea.objects.filter(pk=self.iscrizione.pk).update(
+                    file_video="tesi/x/video/v.mp4",
+                    link_video="https://example.com/v",
+                )
+
+    def test_formato_video_non_ammesso(self):
+        resp = self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="file",
+                       file_video=SimpleUploadedFile("v.exe", b"x")),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.file_video)
+
+    def test_video_troppo_grande(self):
+        grande = self._video(byte=b"x" * (MAX_BYTE_VIDEO + 1))
+        resp = self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="file", file_video=grande),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.file_video)
+
+    def test_modalita_file_senza_file_da_errore(self):
+        resp = self.client.post(
+            self.url, self._dati(file_tesi=self._pdf(), modalita_video="file")
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Scegli il file video")
+
+    # --- Download del video ---------------------------------------------
+
+    def test_download_video_permessi(self):
+        self.client.post(
+            self.url,
+            self._dati(file_tesi=self._pdf(), modalita_video="file",
+                       file_video=self._video()),
+        )
+        url = reverse("appelli:scarica_video", args=[self.iscrizione.id])
+
+        # Il proprietario scarica.
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+        # Il docente della commissione scarica.
+        self.client.force_login(self.docente)
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+        # Un docente estraneo no.
+        altro = User.objects.create_user("docente_estraneo2", password="pw")
+        altro.groups.add(self.g_docente)
+        self.client.force_login(altro)
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_download_video_assente_da_404(self):
+        url = reverse("appelli:scarica_video", args=[self.iscrizione.id])
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+
+class PuliziaOrfaneTest(BaseSetup):
+    """Il comando di pulizia non deve considerare orfano il video."""
+
+    def test_video_referenziato_non_e_orfano(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente,
+            appello=self.appello,
+            file_tesi=SimpleUploadedFile("t.pdf", b"%PDF-1.7 x"),
+            file_video=SimpleUploadedFile("v.mp4", b"video"),
+        )
+        try:
+            out = StringIO()
+            call_command("pulisci_tesi_orfane", stdout=out)
+            testo = out.getvalue()
+            self.assertNotIn(iscrizione.file_video.name, testo)
+            self.assertNotIn(iscrizione.file_tesi.name, testo)
+        finally:
+            iscrizione.file_tesi.delete(save=False)
+            iscrizione.file_video.delete(save=False)
+
+
+class OrdinamentoAppelliTest(BaseSetup):
+    """Ogni elenco di appelli parte dal piu' vecchio, per chiunque lo guardi."""
+
+    def _appello(self, giorno, ora=None, corso="Informatica"):
+        return AppelloDiLaurea.objects.create(
+            data=datetime.date(2030, 1, giorno),
+            ora=ora,
+            corso_di_laurea=corso,
+            commissione=self.commissione,
+        )
+
+    def test_ordine_crescente_per_data(self):
+        tardi = self._appello(20)
+        presto = self._appello(5)
+        mezzo = self._appello(12)
+
+        self.client.force_login(self.studente)
+        elenco = list(
+            self.client.get(reverse("appelli:studente_dashboard")).context[
+                "appelli_disponibili"
+            ]
+        )
+        # BaseSetup crea un appello al 01/01/2030 e la migrazione dei dati demo
+        # un altro: si guardano solo i tre creati qui, nel loro ordine relativo.
+        nostri = [a for a in elenco if a in (tardi, presto, mezzo)]
+        self.assertEqual(nostri, [presto, mezzo, tardi])
+
+    def test_a_parita_di_giorno_prima_chi_ha_orario(self):
+        senza = self._appello(8)
+        con = self._appello(8, ora=datetime.time(9, 0), corso="Matematica")
+
+        self.client.force_login(self.studente)
+        elenco = list(
+            self.client.get(reverse("appelli:studente_dashboard")).context[
+                "appelli_disponibili"
+            ]
+        )
+        nostri = [a for a in elenco if a in (senza, con)]
+        self.assertEqual(nostri, [con, senza])
+
+    def test_ordine_di_default_del_modello(self):
+        """La regola sta nel Meta, quindi vale anche senza order_by esplicito."""
+        tardi = self._appello(20)
+        presto = self._appello(5)
+        nostri = [
+            a
+            for a in AppelloDiLaurea.objects.all()
+            if a in (tardi, presto)
+        ]
+        self.assertEqual(nostri, [presto, tardi])
+
+    def test_ordine_nella_dashboard_docente(self):
+        """La lista del docente e' costruita nel template, non in una view."""
+        tardi = self._appello(20)
+        presto = self._appello(5)
+
+        self.client.force_login(self.docente)
+        resp = self.client.get(reverse("appelli:docente_dashboard"))
+        commissioni = list(resp.context["commissioni"])
+        appelli = list(commissioni[0].appelli.all())
+        nostri = [a for a in appelli if a in (tardi, presto)]
+        self.assertEqual(nostri, [presto, tardi])
+
+    def test_ordine_delle_mie_iscrizioni(self):
+        """Anche "Le mie iscrizioni" e' una lista di appelli: stessa regola."""
+        tardi = self._appello(20)
+        presto = self._appello(5)
+        for appello in (tardi, presto):
+            StudenteAppelloDiLaurea.objects.create(
+                studente=self.studente, appello=appello
+            )
+
+        self.client.force_login(self.studente)
+        resp = self.client.get(reverse("appelli:studente_dashboard"))
+        appelli = [i.appello for i in resp.context["iscrizioni"]]
+        self.assertEqual(appelli, [presto, tardi])

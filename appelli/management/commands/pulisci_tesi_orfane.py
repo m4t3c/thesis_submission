@@ -1,7 +1,7 @@
 """Elimina i file orfani nella cartella dei media delle tesi.
 
 Un file e' "orfano" se si trova sotto MEDIA_ROOT/tesi/ ma non e' piu'
-referenziato da nessuna iscrizione (StudenteAppelloDiLaurea.file_tesi).
+referenziato da nessuna iscrizione (ne' da file_tesi ne' da file_video).
 Questi file si accumulano per i caricamenti fatti PRIMA dell'introduzione di
 django-cleanup (sostituzioni e svuotamenti del file non cancellavano il
 vecchio file dal disco).
@@ -43,13 +43,19 @@ class Command(BaseCommand):
             return
 
         # Percorsi (assoluti) dei file ancora referenziati nel database.
+        # ATTENZIONE: vanno inclusi TUTTI i campi file dell'iscrizione, non
+        # solo la tesi. Ogni campo dimenticato qui diventa un file che questo
+        # comando cancella pur essendo ancora in uso.
         referenziati = set()
-        for nome in (
-            StudenteAppelloDiLaurea.objects.exclude(file_tesi="")
-            .exclude(file_tesi__isnull=True)
-            .values_list("file_tesi", flat=True)
+        for tesi, video in StudenteAppelloDiLaurea.objects.values_list(
+            "file_tesi", "file_video"
         ):
-            referenziati.add(os.path.normpath(os.path.join(settings.MEDIA_ROOT, nome)))
+            for nome in (tesi, video):
+                if not nome:
+                    continue
+                referenziati.add(
+                    os.path.normpath(os.path.join(settings.MEDIA_ROOT, nome))
+                )
 
         orfani = []
         for radice, _cartelle, files in os.walk(base_tesi):

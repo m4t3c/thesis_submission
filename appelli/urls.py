@@ -14,11 +14,6 @@ urlpatterns = [
     path("studente/", views.studente_dashboard, name="studente_dashboard"),
     path("appelli/<int:appello_id>/iscriviti/", views.iscriviti, name="iscriviti"),
     path(
-        "iscrizioni/<int:iscrizione_id>/disiscriviti/",
-        views.disiscriviti,
-        name="disiscriviti",
-    ),
-    path(
         "iscrizioni/<int:iscrizione_id>/carica-tesi/",
         views.carica_tesi,
         name="carica_tesi",
@@ -31,5 +26,10 @@ urlpatterns = [
         "iscrizioni/<int:iscrizione_id>/scarica-tesi/",
         views.scarica_tesi,
         name="scarica_tesi",
+    ),
+    path(
+        "iscrizioni/<int:iscrizione_id>/scarica-video/",
+        views.scarica_video,
+        name="scarica_video",
     ),
 ]

@@ -16,7 +16,9 @@
                             <th>Corso di laurea</th>
                             <th>Data appello</th>
                             <th>Orario</th>
+                            <th>Titolo</th>
                             <th>Tesi</th>
+                            <th>Video</th>
                             <th class="text-end">Azioni</th>
                         </tr>
                     </thead>
@@ -24,36 +26,42 @@
                         {% for iscrizione in iscrizioni %}
                             <tr>
                                 <td class="fw-semibold" data-label="Corso di laurea">{{ iscrizione.appello.corso_di_laurea }}</td>
-                                <td data-label="Data appello">{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
-                                <td data-label="Orario">
+                                <td class="nowrap" data-label="Data appello">{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
+                                <td class="nowrap" data-label="Orario">
                                     {% if iscrizione.appello.ora %}{{ iscrizione.appello.ora|time:"H:i" }}{% else %}
                                         <span class="text-muted small">da definire</span>
                                     {% endif %}
                                 </td>
+                                <td class="cell-titolo" data-label="Titolo">
+                                    {% if iscrizione.titolo %}{{ iscrizione.titolo }}{% else %}
+                                        <span class="text-muted small">non indicato</span>
+                                    {% endif %}
+                                </td>
                                 <td data-label="Tesi">
                                     {% if iscrizione.file_tesi %}
-                                        <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}">Scarica</a>
+                                        <a class="nowrap" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                                            <i class="bi bi-file-earmark-pdf text-primary me-1"></i>Scarica</a>
                                     {% else %}
                                         <span class="text-muted small">nessun file</span>
                                     {% endif %}
                                 </td>
+                                <td data-label="Video">
+                                    {% if iscrizione.file_video %}
+                                        <a class="nowrap" href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                                            <i class="bi bi-camera-video text-primary me-1"></i>Scarica</a>
+                                    {% elif iscrizione.link_video %}
+                                        <a class="nowrap" href="{{ iscrizione.link_video }}"
+                                           target="_blank" rel="noopener noreferrer">
+                                            <i class="bi bi-link me-1"></i>Apri link</a>
+                                    {% else %}
+                                        <span class="text-muted small">nessuno</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end cell-actions" data-label="Azioni">
-                                    <div class="d-inline-flex gap-2">
-                                        <a class="btn btn-sm btn-outline-secondary"
-                                           href="{% url 'appelli:carica_tesi' iscrizione.id %}">
-                                            {% if iscrizione.file_tesi %}Aggiorna tesi{% else %}Carica tesi{% endif %}
-                                        </a>
-                                        <form method="post"
-                                              action="{% url 'appelli:disiscriviti' iscrizione.id %}"
-                                              class="js-confirm m-0"
-                                              data-confirm-title="Conferma disiscrizione"
-                                              data-confirm-body="Vuoi davvero disiscriverti dall'appello «{{ iscrizione.appello.etichetta_pubblica }}»? L'eventuale tesi caricata verrà eliminata."
-                                              data-confirm-ok="Disiscriviti"
-                                              data-confirm-variant="btn-danger">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-danger">Disiscriviti</button>
-                                        </form>
-                                    </div>
+                                    <a class="btn btn-sm btn-outline-primary text-nowrap"
+                                       href="{% url 'appelli:carica_tesi' iscrizione.id %}">
+                                        {% if iscrizione.file_tesi %}Modifica{% else %}Completa{% endif %}
+                                    </a>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -84,8 +92,8 @@
                         {% for appello in appelli_disponibili %}
                             <tr>
                                 <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
-                                <td data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
-                                <td data-label="Orario">
+                                <td class="nowrap" data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                <td class="nowrap" data-label="Orario">
                                     {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
                                         <span class="text-muted small">da definire</span>
                                     {% endif %}
@@ -95,7 +103,7 @@
                                           action="{% url 'appelli:iscriviti' appello.id %}"
                                           class="js-confirm m-0"
                                           data-confirm-title="Conferma iscrizione"
-                                          data-confirm-body="Vuoi iscriverti all'appello «{{ appello.etichetta_pubblica }}»?"
+                                          data-confirm-body="Vuoi iscriverti all'appello «{{ appello.etichetta_pubblica }}»? L'iscrizione non è annullabile in autonomia."
                                           data-confirm-ok="Iscriviti"
                                           data-confirm-variant="btn-primary">
                                         {% csrf_token %}

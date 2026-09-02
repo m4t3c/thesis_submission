@@ -25,8 +25,8 @@
                                 {% for appello in commissione.appelli.all %}
                                     <tr>
                                         <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
-                                        <td data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
-                                        <td data-label="Orario">
+                                        <td class="nowrap" data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                        <td class="nowrap" data-label="Orario">
                                             {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
                                                 <span class="text-muted small">da definire</span>
                                             {% endif %}

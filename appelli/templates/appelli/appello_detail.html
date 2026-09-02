@@ -3,18 +3,18 @@
 {% block title %}{{ appello.corso_di_laurea }} — {{ appello.data|date:"d/m/Y" }}{% if appello.ora %} {{ appello.ora|time:"H:i" }}{% endif %}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
-    <div>
-        <h1 class="h3 section-title mb-1">{{ appello.corso_di_laurea }}</h1>
-        <div class="text-muted">
-            Appello del {{ appello.data|date:"d/m/Y" }}{% if appello.ora %},
-                ore {{ appello.ora|time:"H:i" }}{% endif %}
-        </div>
-        <div class="text-muted small">Commissione: {{ appello.commissione }}</div>
+<a class="btn btn-outline-secondary btn-sm mb-3"
+   href="{% url 'appelli:docente_dashboard' %}">
+    &larr; Torna indietro
+</a>
+
+<div class="mb-4">
+    <h1 class="h3 section-title mb-1">{{ appello.corso_di_laurea }}</h1>
+    <div class="text-muted">
+        Appello del {{ appello.data|date:"d/m/Y" }}{% if appello.ora %},
+            ore {{ appello.ora|time:"H:i" }}{% endif %}
     </div>
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'appelli:docente_dashboard' %}">
-        &larr; Torna indietro
-    </a>
+    <div class="text-muted small">Commissione: {{ appello.commissione }}</div>
 </div>
 
 <div class="card shadow-sm">
@@ -26,6 +26,8 @@
                     <thead class="table-light">
                         <tr>
                             <th>Studente</th>
+                            <th>Titolo</th>
+                            <th>Video</th>
                             <th class="text-end">Tesi</th>
                         </tr>
                     </thead>
@@ -35,11 +37,32 @@
                                 <td class="fw-semibold" data-label="Studente">
                                     {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
                                 </td>
+                                <td class="cell-titolo" data-label="Titolo">
+                                    {% if iscrizione.titolo %}{{ iscrizione.titolo }}{% else %}
+                                        <span class="text-muted small">non indicato</span>
+                                    {% endif %}
+                                </td>
+                                <td data-label="Video">
+                                    {% if iscrizione.file_video %}
+                                        <a class="btn btn-sm btn-soft-primary"
+                                           href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                                           <i class="bi bi-camera-video me-1"></i>Scarica video
+                                        </a>
+                                    {% elif iscrizione.link_video %}
+                                        <a class="btn btn-sm btn-soft-primary"
+                                           href="{{ iscrizione.link_video }}"
+                                           target="_blank" rel="noopener noreferrer">
+                                            <i class="bi bi-link me-1"></i>Apri link
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted small">nessuno</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end" data-label="Tesi">
                                     {% if iscrizione.file_tesi %}
-                                        <a class="btn btn-sm btn-primary"
+                                        <a class="btn btn-sm btn-soft-primary"
                                            href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                            Scarica tesi
+                                           <i class="bi bi-file-earmark-pdf me-1"></i>Scarica tesi
                                         </a>
                                     {% else %}
                                         <span class="text-muted small">Non ancora caricata</span>

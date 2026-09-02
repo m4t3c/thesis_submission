@@ -32,15 +32,19 @@ class AppelloDiLaureaAdmin(admin.ModelAdmin):
 
 @admin.register(StudenteAppelloDiLaurea)
 class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
-    list_display = ("studente", "appello", "data_iscrizione", "ha_tesi")
+    list_display = ("studente", "appello", "titolo", "data_iscrizione", "ha_tesi", "ha_video")
     list_filter = ("appello__corso_di_laurea",)
     # __str__ dell'appello include la commissione: senza questo si farebbe una
     # query in piu' per ogni riga dell'elenco.
     list_select_related = ("studente", "appello", "appello__commissione")
     readonly_fields = ("data_iscrizione",)
     autocomplete_fields = ("studente", "appello")
-    search_fields = ("studente__username", "studente__email")
+    search_fields = ("studente__username", "studente__email", "titolo")
 
     @admin.display(boolean=True, description="Tesi caricata")
     def ha_tesi(self, obj):
         return bool(obj.file_tesi)
+
+    @admin.display(boolean=True, description="Video")
+    def ha_video(self, obj):
+        return obj.ha_video

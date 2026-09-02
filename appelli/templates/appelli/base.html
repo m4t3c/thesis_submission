@@ -61,22 +61,23 @@
         }
         #footer { background-color: var(--surface); border-top: 1px solid #dcdcdc; }
 
-        /* ---------- Adattamenti per schermi piccoli (telefoni) ---------- */
-        @media (max-width: 575.98px) {
-            /* Navbar: oggetti distribuiti con spazio attorno, logo/titolo compatti */
-            .navbar-app .container { justify-content: space-around; }
-            .navbar-brand { margin-right: 0; }
-            .navbar-brand img { height: 32px; }
-            .brand-title { font-size: .95rem; }
-            main.container { padding-top: 1rem; }
+        /* Nelle tabelle certi valori non devono mai spezzarsi a meta': una data,
+           un orario e un link "icona + testo" restano su una riga sola. Senza
+           questo, appena la colonna si stringe la scritta finisce sotto la
+           propria icona. */
+        .table td .nowrap, .table td.nowrap { white-space: nowrap; }
+        /* Il titolo della tesi puo' essere lunghissimo: va spezzato lui, non
+           la tabella. */
+        .cell-titolo { overflow-wrap: anywhere; min-width: 12rem; }
 
-            /* Hero della landing: meno padding e titolo piu' piccolo */
-            .hero { padding: 1.75rem 1rem !important; }
-            .hero .display-6 { font-size: 1.5rem; }
-
-            /* Tabelle "a schede": ogni riga diventa un riquadro leggibile,
-               niente scorrimento orizzontale. Serve la classe .table-stack
-               e l'attributo data-label su ogni <td>. */
+        /* ---------- Tabelle "a schede" ----------
+           Ogni riga diventa un riquadro leggibile, senza scorrimento
+           orizzontale. Serve la classe .table-stack e un data-label su ogni
+           <td>. La soglia e' 992px (non 576px come il resto degli
+           adattamenti per telefoni) perche' le tabelle sono arrivate a sette
+           colonne: gia' sotto i 992px diventano illeggibili e sotto i 768px
+           le ultime colonne finiscono fuori dallo schermo. */
+        @media (max-width: 991.98px) {
             .table-stack thead { display: none; }
             .table-stack, .table-stack tbody, .table-stack tr, .table-stack td {
                 display: block;
@@ -116,13 +117,24 @@
             }
             /* Nella cella azioni non serve l'etichetta: si mostrano solo i bottoni */
             .table-stack td.cell-actions::before { display: none; }
-            .table-stack td.cell-actions .d-inline-flex,
             .table-stack td.cell-actions form { width: 100%; }
-            .table-stack td.cell-actions .d-inline-flex {
-                flex-direction: column;
-                gap: .5rem;
-            }
             .table-stack td.cell-actions .btn { width: 100%; }
+            /* In modalita' scheda la larghezza minima non serve piu' */
+            .table-stack .cell-titolo { min-width: 0; }
+        }
+
+        /* ---------- Adattamenti per schermi piccoli (telefoni) ---------- */
+        @media (max-width: 575.98px) {
+            /* Navbar: oggetti distribuiti con spazio attorno, logo/titolo compatti */
+            .navbar-app .container { justify-content: space-around; }
+            .navbar-brand { margin-right: 0; }
+            .navbar-brand img { height: 32px; }
+            .brand-title { font-size: .95rem; }
+            main.container { padding-top: 1rem; }
+
+            /* Hero della landing: meno padding e titolo piu' piccolo */
+            .hero { padding: 1.75rem 1rem !important; }
+            .hero .display-6 { font-size: 1.5rem; }
         }
     </style>
 </head>
