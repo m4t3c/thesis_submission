@@ -21,6 +21,25 @@
     .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
     .errorlist li { color: var(--bs-danger-text-emphasis); font-size: .875rem; }
     .video-box { border: 1px solid var(--line); border-radius: .6rem; padding: 1rem; }
+    /* Pannello di avanzamento: sostituisce il form durante il caricamento */
+    #pannello-avanzamento .progress { height: 1.25rem; }
+    #pannello-avanzamento .progress-bar { font-weight: 600; }
+    /* I numeri non "ballano" mentre si aggiornano */
+    .avanzamento-dettagli { font-variant-numeric: tabular-nums; }
+    /* Un dato per riga, etichetta a sinistra e valore a destra: lo stesso
+       schema delle tabelle a schede. Vale a ogni larghezza, non solo su
+       telefono, perche' la card e' stretta (col-lg-7) e tre dati affiancati
+       andrebbero a capo a meta' anche su desktop. */
+    .avanzamento-dettagli .dato {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .4rem 0;
+        border-bottom: 1px solid var(--line);
+    }
+    .avanzamento-dettagli .dato:last-child { border-bottom: 0; }
+    .avanzamento-dettagli .etichetta { color: var(--muted); }
+    .avanzamento-dettagli .valore { font-weight: 600; color: var(--ink); }
 </style>
 
 <div class="row justify-content-center">
@@ -142,6 +161,56 @@
                            href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
                     </div>
                 </form>
+
+                {% comment %}
+                    Sostituisce il form durante il caricamento: senza, una tesi
+                    o un video di grandi dimensioni lasciano l'utente davanti a
+                    una pagina ferma, senza modo di distinguere "sta caricando"
+                    da "si e' bloccato".
+                    NB: {# ... #} vale solo su UNA riga, un commento su piu'
+                    righe va scritto con {% templatetag openblock %} comment {% templatetag closeblock %}
+                    altrimenti Django lo stampa nella pagina.
+                {% endcomment %}
+                <div id="pannello-avanzamento" hidden>
+                    <h2 class="h6 section-title mb-3">
+                        <i class="bi bi-cloud-arrow-up text-primary me-1"></i>
+                        Caricamento in corso
+                    </h2>
+
+                    <div class="progress mb-2" role="progressbar"
+                         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             id="barra-avanzamento" style="width: 0%;">0%</div>
+                    </div>
+
+                    <div class="avanzamento-dettagli small text-muted">
+                        <div class="dato">
+                            <span class="etichetta">Caricati</span>
+                            <span class="valore" id="avanzamento-byte">&mdash;</span>
+                        </div>
+                        <div class="dato">
+                            <span class="etichetta">Tempo rimanente</span>
+                            <span class="valore" id="avanzamento-stima">&mdash;</span>
+                        </div>
+                        <div class="dato">
+                            <span class="etichetta">Velocità</span>
+                            <span class="valore" id="avanzamento-velocita">&mdash;</span>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning small mt-3 mb-3" role="alert">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Non chiudere questa pagina: il caricamento verrebbe annullato.
+                    </div>
+
+                    <button type="button" class="btn btn-outline-danger btn-sm"
+                            id="btn-annulla-caricamento">
+                        Annulla caricamento
+                    </button>
+                </div>
+
+                {# Errore di rete/interruzione: mostrato al posto del pannello #}
+                <div id="errore-caricamento" class="alert alert-danger mt-3" role="alert" hidden></div>
             </div>
         </div>
     </div>
@@ -162,6 +231,40 @@
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
                 <a href="{% url 'appelli:studente_dashboard' %}" class="btn btn-outline-danger">Esci senza salvare</a>
                 <button type="button" class="btn btn-primary" id="btn-salva-esci">Salva ed esci</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Popup: conferma dell'annullamento del caricamento.
+     Mentre e' aperto il caricamento PROSEGUE: metterlo in pausa in attesa
+     della risposta causerebbe proprio la perdita di tempo che si vuole
+     evitare. Per questo mostra anche l'avanzamento aggiornato in tempo
+     reale, cosi' la scelta si fa con il dato davanti. -->
+<div class="modal fade" id="annullaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Annullare il caricamento?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Il caricamento non può essere ripreso: annullandolo dovrai
+                    ricominciare da capo.
+                </p>
+                <p class="mb-0 small text-muted">
+                    Nel frattempo il caricamento prosegue:
+                    <span class="fw-semibold" id="annulla-progresso">&mdash;</span>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                    No, continua
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="btn-conferma-annulla">
+                    Sì, annulla
+                </button>
             </div>
         </div>
     </div>
@@ -208,6 +311,179 @@
         }
         var iniziale = istantanea();
 
+        // --- Caricamento con barra di avanzamento -------------------------
+        // Il form viene inviato via XMLHttpRequest per poter leggere gli
+        // eventi di progresso, che fetch() non espone per l'upload. Se il
+        // browser non li supporta si lascia partire l'invio classico: la
+        // pagina funziona lo stesso, solo senza barra.
+        var supportoProgresso = (function () {
+            try {
+                return !!(window.FormData && 'upload' in new XMLHttpRequest());
+            } catch (e) {
+                return false;
+            }
+        })();
+
+        // Sotto questa soglia il caricamento e' istantaneo e la barra
+        // comparirebbe solo per un lampo: si invia il form normalmente.
+        var SOGLIA_BYTE = 2 * 1024 * 1024;
+
+        var pannello = document.getElementById('pannello-avanzamento');
+        var barra = document.getElementById('barra-avanzamento');
+        var etichettaByte = document.getElementById('avanzamento-byte');
+        var etichettaStima = document.getElementById('avanzamento-stima');
+        var etichettaVelocita = document.getElementById('avanzamento-velocita');
+        var boxErrore = document.getElementById('errore-caricamento');
+        var btnAnnullaCaricamento = document.getElementById('btn-annulla-caricamento');
+        var progressoModale = document.getElementById('annulla-progresso');
+        var elModaleAnnulla = document.getElementById('annullaModal');
+        var richiesta = null;
+
+        function chiudiModaleAnnulla() {
+            if (!elModaleAnnulla || !window.bootstrap) return;
+            var m = bootstrap.Modal.getInstance(elModaleAnnulla);
+            if (m) m.hide();
+        }
+
+        function mb(byte) {
+            return (byte / 1048576).toFixed(1).replace('.', ',') + ' MB';
+        }
+        function durata(secondi) {
+            if (!isFinite(secondi) || secondi < 0) return '';
+            secondi = Math.round(secondi);
+            if (secondi < 60) return secondi + ' secondi';
+            var m = Math.floor(secondi / 60), sec = secondi % 60;
+            return m + ' min ' + (sec < 10 ? '0' : '') + sec + ' s';
+        }
+        function byteDaInviare() {
+            var totale = 0;
+            form.querySelectorAll('input[type="file"]').forEach(function (i) {
+                if (i.files && i.files[0]) totale += i.files[0].size;
+            });
+            return totale;
+        }
+
+        function mostraPannello() {
+            form.hidden = true;
+            boxErrore.hidden = true;
+            pannello.hidden = false;
+        }
+        function tornaAlForm(messaggio) {
+            pannello.hidden = true;
+            form.hidden = false;
+            if (messaggio) {
+                boxErrore.textContent = messaggio;
+                boxErrore.hidden = false;
+            }
+        }
+        function aggiornaBarra(inviati, totale, avvio) {
+            var perc = totale ? Math.round((inviati / totale) * 100) : 0;
+            barra.style.width = perc + '%';
+            barra.textContent = perc + '%';
+            barra.parentNode.setAttribute('aria-valuenow', perc);
+            etichettaByte.textContent = mb(inviati) + ' di ' + mb(totale);
+            if (progressoModale) {
+                progressoModale.textContent = perc + '% (' + mb(inviati) + ' di ' + mb(totale) + ')';
+            }
+
+            var trascorsi = (Date.now() - avvio) / 1000;
+            if (trascorsi > 1 && inviati > 0) {
+                var velocita = inviati / trascorsi;              // byte al secondo
+                etichettaStima.textContent = durata((totale - inviati) / velocita) || '—';
+                etichettaVelocita.textContent = mb(velocita) + '/s';
+            }
+        }
+        function faseSalvataggio() {
+            barra.classList.remove('progress-bar-animated');
+            etichettaStima.textContent = 'Salvataggio in corso…';
+            etichettaVelocita.textContent = '—';
+        }
+
+        form.addEventListener('submit', function (e) {
+            if (!supportoProgresso) return;          // invio classico
+            var totale = byteDaInviare();
+            if (totale < SOGLIA_BYTE) return;        // troppo piccolo: inutile
+            e.preventDefault();
+
+            var dati = new FormData(form);
+            var avvio = Date.now();
+            richiesta = new XMLHttpRequest();
+            richiesta.open('POST', form.action || window.location.href);
+            richiesta.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            richiesta.upload.addEventListener('progress', function (ev) {
+                if (ev.lengthComputable) aggiornaBarra(ev.loaded, ev.total, avvio);
+            });
+            // Byte finiti: ora e' il server a lavorare (validazione, scrittura).
+            richiesta.upload.addEventListener('load', faseSalvataggio);
+
+            richiesta.addEventListener('load', function () {
+                richiesta = null;   // sblocca l'avviso di chiusura pagina
+                // Se la conferma di annullamento era aperta va chiusa: il
+                // caricamento e' gia' finito e non c'e' piu' nulla da fermare.
+                chiudiModaleAnnulla();
+                if (this.status >= 200 && this.status < 400) {
+                    // La view reindirizza alla dashboard quando il salvataggio
+                    // riesce; se invece resta su questa pagina sono errori di
+                    // validazione, e si ridisegna la pagina per mostrarli.
+                    var arrivo = this.responseURL || '';
+                    if (arrivo && arrivo.indexOf('carica-tesi') === -1) {
+                        iniziale = istantanea();   // niente avviso "non salvato"
+                        window.location.href = arrivo;
+                        return;
+                    }
+                    document.open();
+                    document.write(this.responseText);
+                    document.close();
+                    return;
+                }
+                tornaAlForm('Il server ha risposto con un errore (codice ' +
+                            this.status + '). Riprova.');
+            });
+            richiesta.addEventListener('error', function () {
+                richiesta = null;
+                chiudiModaleAnnulla();
+                tornaAlForm('Caricamento interrotto: controlla la connessione e riprova.');
+            });
+            richiesta.addEventListener('abort', function () {
+                richiesta = null;
+                chiudiModaleAnnulla();
+                tornaAlForm('Caricamento annullato. Nessuna modifica è stata salvata.');
+            });
+
+            if (progressoModale) progressoModale.textContent = '0%';
+            mostraPannello();
+            richiesta.send(dati);
+        });
+
+        if (btnAnnullaCaricamento) {
+            btnAnnullaCaricamento.addEventListener('click', function () {
+                // Si apre solo la conferma: la richiesta NON viene toccata e
+                // i byte continuano a partire mentre l'utente decide.
+                if (!richiesta) return;
+                if (elModaleAnnulla && window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(elModaleAnnulla).show();
+                } else {
+                    richiesta.abort();   // senza Bootstrap: comportamento diretto
+                }
+            });
+        }
+        var btnConfermaAnnulla = document.getElementById('btn-conferma-annulla');
+        if (btnConfermaAnnulla) {
+            btnConfermaAnnulla.addEventListener('click', function () {
+                chiudiModaleAnnulla();
+                if (richiesta) richiesta.abort();
+            });
+        }
+
+        // Chiudere la scheda durante il caricamento lo annulla: va chiesto.
+        window.addEventListener('beforeunload', function (ev) {
+            if (richiesta) {
+                ev.preventDefault();
+                ev.returnValue = '';
+            }
+        });
+
         var annulla = document.getElementById('btn-annulla');
         if (annulla) {
             annulla.addEventListener('click', function (e) {
@@ -221,7 +497,18 @@
         }
         var salvaEsci = document.getElementById('btn-salva-esci');
         if (salvaEsci) {
-            salvaEsci.addEventListener('click', function () { form.submit(); });
+            salvaEsci.addEventListener('click', function () {
+                bootstrap.Modal.getOrCreateInstance(
+                    document.getElementById('unsavedModal')
+                ).hide();
+                // requestSubmit (non submit) fa scattare l'evento 'submit',
+                // quindi passa anche da qui la barra di avanzamento.
+                if (form.requestSubmit) {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            });
         }
     })();
 </script>
