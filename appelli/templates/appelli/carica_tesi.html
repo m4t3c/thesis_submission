@@ -21,6 +21,26 @@
     .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
     .errorlist li { color: var(--bs-danger-text-emphasis); font-size: .875rem; }
     .video-box { border: 1px solid var(--line); border-radius: .6rem; padding: 1rem; }
+    .errore-dimensione { font-size: .875rem; }
+    /* Premendo "Salva" con un file oltre il limite il box gia' presente viene
+       richiamato all'attenzione: senza, l'utente non capirebbe perche' il
+       pulsante "non fa niente". */
+    @keyframes richiamo-errore {
+        0%, 100% { transform: translateX(0); }
+        20%      { transform: translateX(-7px); }
+        40%      { transform: translateX(7px); }
+        60%      { transform: translateX(-4px); }
+        80%      { transform: translateX(4px); }
+    }
+    .errore-dimensione.evidenzia {
+        animation: richiamo-errore .45s ease;
+        box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .35) !important;
+    }
+    /* Per chi ha chiesto meno animazioni al sistema operativo: niente
+       movimento, solo l'alone colorato. */
+    @media (prefers-reduced-motion: reduce) {
+        .errore-dimensione.evidenzia { animation: none; }
+    }
     /* Pannello di avanzamento: sostituisce il form durante il caricamento */
     #pannello-avanzamento .progress { height: 1.25rem; }
     #pannello-avanzamento .progress-bar { font-weight: 600; }
@@ -345,8 +365,17 @@
             if (m) m.hide();
         }
 
+        // Sceglie l'unita' in base alla dimensione: un file da 800 KB non deve
+        // comparire come "0,8 MB", ne' una velocita' lenta come "0,1 MB/s".
         function mb(byte) {
-            return (byte / 1048576).toFixed(1).replace('.', ',') + ' MB';
+            var unita = ['B', 'KB', 'MB', 'GB'];
+            var i = 0;
+            while (byte >= 1024 && i < unita.length - 1) {
+                byte = byte / 1024;
+                i++;
+            }
+            var decimali = (i === 0 || byte >= 100) ? 0 : 1;
+            return byte.toFixed(decimali).replace('.', ',') + ' ' + unita[i];
         }
         function durata(secondi) {
             if (!isFinite(secondi) || secondi < 0) return '';
@@ -399,7 +428,88 @@
             etichettaVelocita.textContent = '—';
         }
 
+        // --- Controllo della dimensione PRIMA di iniziare il caricamento ---
+        // Il limite e' applicato anche lato server (clean_file_video), che
+        // resta l'autorita': questo controllo serve a non far attendere
+        // all'utente un caricamento intero per poi rifiutarlo. Il browser
+        // conosce la dimensione del file appena viene scelto, quindi puo'
+        // dirlo subito.
+        function erroreDimensione(input, messaggio) {
+            var box = input.parentNode.querySelector('.errore-dimensione');
+            if (!messaggio) {
+                if (box) box.remove();
+                input.classList.remove('file-troppo-grande');
+                return;
+            }
+            if (!box) {
+                box = document.createElement('div');
+                box.className = 'errore-dimensione alert alert-danger shadow-sm mt-2';
+                box.setAttribute('role', 'alert');
+                input.insertAdjacentElement('afterend', box);
+            }
+            // Si ricostruisce il contenuto con nodi DOM invece di innerHTML.
+            box.textContent = '';
+            var icona = document.createElement('i');
+            icona.className = 'bi bi-exclamation-triangle-fill me-1';
+            icona.setAttribute('aria-hidden', 'true');
+            box.appendChild(icona);
+            box.appendChild(document.createTextNode(messaggio));
+            input.classList.add('file-troppo-grande');
+        }
+
+        function dimensioneAmmessa(input) {
+            var max = parseInt(input.getAttribute('data-max-byte') || '0', 10);
+            if (!max || !input.files || !input.files[0]) {
+                erroreDimensione(input, '');
+                return true;
+            }
+            var file = input.files[0];
+            if (file.size <= max) {
+                erroreDimensione(input, '');
+                return true;
+            }
+            erroreDimensione(
+                input,
+                'Il file scelto occupa ' + mb(file.size) + ', oltre il limite di ' +
+                mb(max) + '. Scegline uno più piccolo, oppure indica il link a ' +
+                'un video già pubblicato online.'
+            );
+            return false;
+        }
+
+        function evidenziaErrori() {
+            var box = form.querySelector('.errore-dimensione');
+            if (!box) return;
+            // Togliere e rimettere la classe (con una lettura forzata del
+            // layout in mezzo) fa ripartire l'animazione anche al secondo
+            // tentativo: senza, il richiamo si vedrebbe una volta sola.
+            box.classList.remove('evidenzia');
+            void box.offsetWidth;
+            box.classList.add('evidenzia');
+            box.scrollIntoView({block: 'center', behavior: 'smooth'});
+        }
+
+        function tuttiIFileSonoAmmessi() {
+            var ok = true;
+            form.querySelectorAll('input[type="file"][data-max-byte]').forEach(function (i) {
+                if (!dimensioneAmmessa(i)) ok = false;
+            });
+            return ok;
+        }
+
+        // Avviso immediato, appena il file viene scelto.
+        form.querySelectorAll('input[type="file"][data-max-byte]').forEach(function (i) {
+            i.addEventListener('change', function () { dimensioneAmmessa(i); });
+        });
+
         form.addEventListener('submit', function (e) {
+            // Vale per entrambe le strade (con e senza barra di avanzamento):
+            // un file oltre il limite non deve partire in nessun caso.
+            if (!tuttiIFileSonoAmmessi()) {
+                e.preventDefault();
+                evidenziaErrori();
+                return;
+            }
             if (!supportoProgresso) return;          // invio classico
             var totale = byteDaInviare();
             if (totale < SOGLIA_BYTE) return;        // troppo piccolo: inutile

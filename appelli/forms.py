@@ -69,6 +69,11 @@ class TesiUploadForm(forms.ModelForm):
                 attrs={
                     "class": "form-control upload-input",
                     "accept": "video/*," + ",".join(f".{e}" for e in FORMATI_VIDEO),
+                    # Il limite viaggia con il campo, cosi' il controllo lato
+                    # browser (che avvisa PRIMA di iniziare il caricamento) usa
+                    # sempre lo stesso valore di clean_file_video e non una
+                    # copia da tenere allineata a mano.
+                    "data-max-byte": MAX_BYTE_VIDEO,
                 }
             ),
             "link_video": forms.URLInput(
