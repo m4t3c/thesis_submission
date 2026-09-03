@@ -39,7 +39,13 @@ services:
     build: .
     container_name: appelli_web
     restart: unless-stopped
-    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000"
+    # Con i default di gunicorn (1 worker "sync", timeout 30s) un upload che
+    # richiede piu' di 30 secondi (video pesanti, connessione lenta) fa
+    # scadere il worker A META' LETTURA: essendo l'unico, il sito resta fermo
+    # per tutti finche' non riparte. --threads passa al worker "gthread", che
+    # non ha questo problema; --timeout 300 lascia margine ai video piu'
+    # pesanti. Va tenuto allineato al compose di sviluppo.
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn thesis_submission.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 300"
     environment:
       DB_HOST: db
       # Stesse variabili del servizio 'db': restano allineate automaticamente.
