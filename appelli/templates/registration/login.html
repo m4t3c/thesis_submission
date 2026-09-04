@@ -1,5 +1,15 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Form di accesso con nome utente e password. In produzione non si usa: gli
+    utenti entrano da Shibboleth. Serve per l'area amministrativa e per provare
+    l'applicazione in locale con gli utenti demo.
+
+    Il messaggio di errore e' volutamente generico ("Nome utente o password non
+    corretti"): distinguere i due casi direbbe a chi tenta un accesso quali
+    nomi utente esistono.
+{% endcomment %}
+
 {% block title %}Accedi{% endblock %}
 
 {% block content %}

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Django's command-line utility for administrative tasks."""
+"""Utilita' da riga di comando di Django (migrazioni, test, avvio locale)."""
 import os
 import sys
 
 
 def main():
-    """Run administrative tasks."""
+    """Esegue il comando ricevuto da riga di comando."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'thesis_submission.settings')
     try:
         from django.core.management import execute_from_command_line

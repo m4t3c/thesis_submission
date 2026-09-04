@@ -1,10 +1,22 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Pagina degli appelli, usata sia dal docente sia dal presidente: cambiano
+    solo il titolo e la presenza del pulsante di creazione, entrambi decisi
+    dalla view. Un unico template evita che le due aree divergano col tempo.
+
+    "I miei appelli" sono quelli della cui commissione l'utente fa parte, ed e'
+    l'unica tabella con il collegamento al dettaglio: le tesi si scaricano solo
+    da li'.
+{% endcomment %}
+
 {% block title %}{{ titolo_pagina }}{% endblock %}
 
 {% block content %}
 <h1 class="h3 section-title mb-4">{{ titolo_pagina }}</h1>
 
+{# Solo il presidente crea appelli. Nascondere il pulsante e' una comodita':
+   il controllo che conta e' quello della view crea_appello. #}
 {% if puo_creare_appelli %}
     <div class="d-grid mb-4">
         <a class="btn btn-primary btn-lg py-3" href="{% url 'appelli:crea_appello' %}">
@@ -13,6 +25,7 @@
     </div>
 {% endif %}
 
+{# ---------------- Appelli delle proprie commissioni ---------------- #}
 <div class="card shadow-sm mb-4">
     <div class="card-header">I miei appelli</div>
     <div class="card-body p-0">
@@ -56,6 +69,7 @@
     </div>
 </div>
 
+{# ---------------- Altri appelli: sola consultazione, senza dettaglio ---------------- #}
 <div class="card shadow-sm">
     <div class="card-header">Altri appelli</div>
     <div class="card-body p-0">

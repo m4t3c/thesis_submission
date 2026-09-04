@@ -1,3 +1,10 @@
+"""Modelli del dominio: appelli di laurea, commissioni e iscrizioni.
+
+Le tre entita' seguono il diagramma ER della tesi: un appello "ha" una
+commissione, un docente "partecipa" a una commissione, uno studente si
+"iscrive" a un appello (relazione con attributi propri, quindi tabella
+esplicita).
+"""
 from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from django.db import models
@@ -125,6 +132,12 @@ FORMATI_VIDEO = ["mp4", "mov", "m4v", "webm", "mkv", "avi"]
 
 
 def _cartella_iscrizione(instance):
+    """Cartella riservata agli allegati di una singola iscrizione.
+
+    Appello e studente nel percorso rendono i file rintracciabili sul disco
+    anche senza interrogare il database, e garantiscono che due studenti non
+    finiscano mai nella stessa cartella.
+    """
     return f"tesi/appello_{instance.appello_id}/studente_{instance.studente_id}"
 
 
@@ -226,6 +239,12 @@ class StudenteAppelloDiLaurea(models.Model):
 
     @property
     def ha_video(self):
+        """True se il video e' stato fornito, come file oppure come link.
+
+        Le due modalita' si escludono a vicenda (vedi il CheckConstraint), ma
+        chi legge quasi sempre vuole sapere solo se un video c'e': tenerlo qui
+        evita di ripetere la doppia condizione in view, template e admin.
+        """
         return bool(self.file_video or self.link_video)
 
     def __str__(self):

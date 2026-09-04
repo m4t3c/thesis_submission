@@ -1,5 +1,12 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Creazione di un appello, riservata al presidente. I membri della
+    commissione non si scelgono da una tendina ma tramite ricerca: il
+    JavaScript in fondo interroga appelli:cerca_docenti e mantiene la
+    selezione in input nascosti, che sono cio' che il form riceve.
+{% endcomment %}
+
 {% block title %}Nuovo appello{% endblock %}
 
 {% block content %}
@@ -97,7 +104,7 @@
     </div>
 </div>
 
-<!-- Popup: modifiche non salvate, come nella pagina di caricamento tesi -->
+{# Popup: modifiche non salvate, come nella pagina di caricamento tesi #}
 <div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">

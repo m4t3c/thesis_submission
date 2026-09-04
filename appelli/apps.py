@@ -1,3 +1,4 @@
+"""Configurazione dell'applicazione "appelli"."""
 from django.apps import AppConfig
 
 

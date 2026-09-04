@@ -1,3 +1,13 @@
+"""Test dell'applicazione, raggruppati per regola verificata.
+
+Ogni classe copre una singola regola del dominio (chi accede a cosa, quali
+file sono ammessi, che cosa identifica un appello) e ne verifica sia il caso
+consentito sia quello vietato: e' il secondo a documentare davvero il vincolo.
+I controlli passano dal client HTTP, non dai soli modelli, perche' gran parte
+delle regole vive nelle view e nei form.
+
+Uso:  python manage.py test appelli
+"""
 import datetime
 import os
 
@@ -14,6 +24,12 @@ from .models import AppelloDiLaurea, Commissione, StudenteAppelloDiLaurea
 
 
 class BaseSetup(TestCase):
+    """Scenario minimo comune: uno studente, un docente e un appello.
+
+    I gruppi si leggono e non si creano: esistono gia' perche' li inserisce la
+    migrazione 0002, che e' esattamente la garanzia che si vuole verificare.
+    """
+
     def setUp(self):
         self.g_studente = Group.objects.get(name="studente")
         self.g_docente = Group.objects.get(name="docente")
@@ -35,6 +51,8 @@ class BaseSetup(TestCase):
 
 
 class RuoliTest(BaseSetup):
+    """Smistamento per ruolo e confini fra le aree."""
+
     def test_studente_redirezione_home(self):
         self.client.force_login(self.studente)
         resp = self.client.get(reverse("appelli:home"))
@@ -52,6 +70,8 @@ class RuoliTest(BaseSetup):
 
 
 class IscrizioneTest(BaseSetup):
+    """All'appello si iscrivono gli studenti, e nessun altro."""
+
     def test_studente_si_iscrive(self):
         self.client.force_login(self.studente)
         resp = self.client.post(
@@ -111,6 +131,13 @@ class DisiscrizioneRimossaTest(BaseSetup):
 
 
 class DownloadTesiTest(BaseSetup):
+    """La tesi la scarica solo chi ne ha diritto.
+
+    E' il controllo piu' delicato dell'applicazione: l'URL di download contiene
+    l'id dell'iscrizione, quindi senza una verifica dei permessi basterebbe
+    cambiare un numero per leggere la tesi di un altro studente.
+    """
+
     def setUp(self):
         super().setUp()
         self.iscrizione = StudenteAppelloDiLaurea.objects.create(
@@ -136,6 +163,8 @@ class DownloadTesiTest(BaseSetup):
         self.assertEqual(resp.status_code, 403)
 
     def tearDown(self):
+        # I file caricati finiscono in MEDIA_ROOT, che i test non ripuliscono
+        # da soli: senza questa cancellazione resterebbero sul disco.
         if self.iscrizione.file_tesi:
             self.iscrizione.file_tesi.delete(save=False)
 

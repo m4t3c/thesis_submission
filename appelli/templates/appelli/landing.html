@@ -1,5 +1,12 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Pagina pubblica, l'unica visibile senza autenticazione. In produzione il
+    percorso "/" non passa da Shibboleth, quindi e' quella che vede sempre chi
+    arriva sul sito: spiega a studenti e docenti che cosa troveranno dopo
+    l'accesso.
+{% endcomment %}
+
 {% block title %}Consegna Tesi di Laurea{% endblock %}
 
 {% block content %}

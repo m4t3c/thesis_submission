@@ -1,3 +1,14 @@
+"""Autenticazione tramite Shibboleth: identita' e ruolo dagli attributi del SP.
+
+L'utente non digita mai una password su questo sito: e' il Service Provider
+Shibboleth a riconoscerlo e a passare i suoi attributi in ``request.META``. Qui
+si traducono quegli attributi in uno User Django (creato al primo accesso e
+aggiornato ai successivi) e nel gruppo che ne determina il ruolo.
+
+In locale il modulo non e' attivo: il middleware viene inserito solo se
+SHIB_ENABLED=1 (vedi settings.py) e al suo posto si usa il form di login di
+Django.
+"""
 from django.contrib.auth.backends import RemoteUserBackend
 from django.contrib.auth.middleware import PersistentRemoteUserMiddleware
 from django.contrib.auth.models import Group
@@ -109,9 +120,10 @@ class AssignUserMiddleware(PersistentRemoteUserMiddleware):
 
 
 class AssignUserBackend(RemoteUserBackend):
-    """Crea/aggiorna lo User Django a ogni login, a partire dagli attributi Shibboleth."""
+    """Crea/aggiorna lo User Django a ogni login, dagli attributi Shibboleth."""
 
     def configure_user(self, request, user, created=True):
+        """Allinea anagrafica e gruppo dell'utente a quanto dice il SP."""
         meta = request.META
 
         # Dati anagrafici

@@ -1,3 +1,10 @@
+"""Form dell'applicazione: caricamento della tesi e creazione di un appello.
+
+Qui vive la validazione che il modello non puo' esprimere da solo: i controlli
+sul contenuto dei file caricati e le regole valide solo per l'utente finale
+(campi obbligatori nel form ma facoltativi nel database, perche' le righe gia'
+esistenti e quelle create dall'import automatico non li hanno).
+"""
 from django import forms
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import UploadedFile
@@ -101,6 +108,12 @@ class TesiUploadForm(forms.ModelForm):
             self.fields["modalita_video"].initial = self.modalita_iniziale()
 
     def modalita_iniziale(self):
+        """Modalita' video corrispondente a com'e' l'iscrizione adesso.
+
+        Serve due volte: per preselezionare il radio all'apertura della pagina
+        e, in ``clean()``, come valore di riserva quando la scelta non arriva
+        (richiesta manomessa o campo assente).
+        """
         if self.instance.pk and self.instance.file_video:
             return VIDEO_FILE
         if self.instance.pk and self.instance.link_video:
@@ -148,7 +161,14 @@ class TesiUploadForm(forms.ModelForm):
     # --- Video ------------------------------------------------------------
 
     def clean_file_video(self):
+        """Fa rispettare il limite di dimensione del video.
+
+        E' il controllo che conta davvero: quello lato browser avvisa prima di
+        iniziare il caricamento, ma si aggira disattivando il JavaScript.
+        """
         file = self.cleaned_data.get("file_video")
+        # Come per la tesi: senza una nuova scelta Django restituisce il file
+        # gia' presente, che non va rivalidato.
         if not isinstance(file, UploadedFile):
             return file
 
@@ -211,6 +231,11 @@ class DocentiField(forms.ModelMultipleChoiceField):
     widget = forms.MultipleHiddenInput
 
     def label_from_instance(self, utente):
+        """Etichetta di un docente: nome e cognome, con il nome utente a fianco.
+
+        Il nome utente compare sempre perche' due docenti possono chiamarsi
+        allo stesso modo, ed e' l'unico dato che li distingue con certezza.
+        """
         completo = utente.get_full_name()
         if not completo:
             return utente.get_username()

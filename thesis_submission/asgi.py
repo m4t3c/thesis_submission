@@ -1,9 +1,9 @@
-"""
-ASGI config for thesis_submission project.
+"""Punto di ingresso ASGI del progetto.
 
-It exposes the ASGI callable as a module-level variable named ``application``.
+Espone come ``application`` l'oggetto richiamato da un server asincrono. Il
+deploy usa WSGI (vedi wsgi.py): questo file resta a disposizione nel caso in
+futuro servisse un server ASGI.
 
-For more information on this file, see
 https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
 """
 

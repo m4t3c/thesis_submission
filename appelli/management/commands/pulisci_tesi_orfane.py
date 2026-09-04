@@ -28,6 +28,8 @@ class Command(BaseCommand):
     help = "Elimina i file delle tesi non piu' referenziati da nessuna iscrizione."
 
     def add_arguments(self, parser):
+        # L'anteprima e' il comportamento predefinito: un comando che cancella
+        # file non deve poterlo fare per una battitura distratta.
         parser.add_argument(
             "--apply",
             action="store_true",
@@ -35,6 +37,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Confronta i file su disco con quelli referenziati e riporta gli orfani."""
         applica = options["apply"]
         base_tesi = os.path.join(settings.MEDIA_ROOT, SOTTOCARTELLA)
 
@@ -57,6 +60,8 @@ class Command(BaseCommand):
                     os.path.normpath(os.path.join(settings.MEDIA_ROOT, nome))
                 )
 
+        # Tutto cio' che sta sotto tesi/ e non compare fra i referenziati non
+        # appartiene piu' a nessuna iscrizione.
         orfani = []
         for radice, _cartelle, files in os.walk(base_tesi):
             for f in files:
@@ -85,9 +90,14 @@ class Command(BaseCommand):
                     self.stdout.write(f"  - {rel}")
 
         # Rimuove le cartelle rimaste vuote (solo in modalita' --apply).
+        # topdown=False visita prima le sottocartelle: cosi' una cartella che
+        # si svuota perche' e' stato eliminato il suo contenuto viene a sua
+        # volta rimossa nella stessa passata.
         cartelle_rimosse = 0
         if applica:
             for radice, _cartelle, _files in os.walk(base_tesi, topdown=False):
+                # La radice tesi/ resta: e' la cartella che l'applicazione si
+                # aspetta di trovare.
                 if radice == base_tesi:
                     continue
                 if not os.listdir(radice):
@@ -95,6 +105,9 @@ class Command(BaseCommand):
                         os.rmdir(radice)
                         cartelle_rimosse += 1
                     except OSError:
+                        # Cartella non piu' vuota o non rimovibile: si tratta
+                        # comunque di pulizia accessoria, non di un errore che
+                        # debba fermare il comando.
                         pass
 
         # Riepilogo finale.

@@ -13,11 +13,13 @@ GRUPPO = "presidente"
 
 
 def crea_gruppo(apps, schema_editor):
+    """Aggiunge il gruppo, se non esiste gia'."""
     Group = apps.get_model("auth", "Group")
     Group.objects.get_or_create(name=GRUPPO)
 
 
 def elimina_gruppo(apps, schema_editor):
+    """Rimuove il gruppo in caso di annullamento della migrazione."""
     Group = apps.get_model("auth", "Group")
     Group.objects.filter(name=GRUPPO).delete()
 

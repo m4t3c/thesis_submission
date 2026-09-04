@@ -1,5 +1,12 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Mostrata a chi e' autenticato ma non ha un ruolo riconosciuto: la sua
+    affiliation Shibboleth non corrisponde ne' al profilo studente ne' a quello
+    docente (per esempio il personale tecnico-amministrativo). La view la
+    restituisce con stato 403, non 200: e' a tutti gli effetti un rifiuto.
+{% endcomment %}
+
 {% block title %}Accesso non consentito{% endblock %}
 
 {% block content %}

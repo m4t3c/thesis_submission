@@ -1,5 +1,14 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Dettaglio di un appello, riservato ai docenti della sua commissione: e' la
+    pagina da cui si scaricano le tesi e i video degli iscritti.
+
+    "url_ritorno" arriva dalla view perche' il presidente e' anche docente: un
+    collegamento fisso lo riporterebbe sempre nell'area docente, cioe' non da
+    dove era venuto.
+{% endcomment %}
+
 {% block title %}{{ appello.corso_di_laurea }} — {{ appello.data|date:"d/m/Y" }}{% if appello.ora %} {{ appello.ora|time:"H:i" }}{% endif %}{% endblock %}
 
 {% block content %}
@@ -53,6 +62,7 @@
     }
 </style>
 
+{# ---------------- Studenti iscritti e loro allegati ---------------- #}
 <div class="card shadow-sm">
     <div class="card-header">Studenti iscritti</div>
     <div class="card-body p-0">

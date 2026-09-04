@@ -1,3 +1,9 @@
+"""Viste dell'applicazione, divise per area (studente, docente, presidente).
+
+I permessi si controllano SEMPRE qui, all'inizio di ogni view: i template si
+limitano a nascondere quello che l'utente non puo' fare, ma nascondere un
+pulsante non impedisce di inviare la richiesta a mano.
+"""
 import os
 
 from django.contrib import messages
@@ -22,10 +28,12 @@ from .models import (
 # --- Helper per i ruoli (basati sui gruppi di Django) ---------------------
 
 def is_studente(user):
+    """True se l'utente appartiene al gruppo "studente"."""
     return user.groups.filter(name="studente").exists()
 
 
 def is_docente(user):
+    """True se l'utente appartiene al gruppo "docente"."""
     return user.groups.filter(name="docente").exists()
 
 
@@ -101,6 +109,12 @@ def dashboard(request):
 
 @login_required
 def studente_dashboard(request):
+    """Pagina dello studente: le sue iscrizioni e gli appelli a cui puo' iscriversi.
+
+    I due elenchi sono complementari: un appello a cui lo studente e' gia'
+    iscritto non deve ricomparire fra quelli disponibili, altrimenti il
+    pulsante "Iscriviti" prometterebbe un'azione che non ha piu' effetto.
+    """
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono accedere a questa pagina.")
 
@@ -125,6 +139,12 @@ def studente_dashboard(request):
 
 @login_required
 def iscriviti(request, appello_id):
+    """Iscrive lo studente a un appello.
+
+    L'iscrizione non e' annullabile dallo studente (non esiste alcun percorso
+    di disiscrizione): un ripensamento va gestito dalla segreteria, come
+    indicato nel messaggio di conferma.
+    """
     # Il vincolo "solo gli studenti si iscrivono" e' applicato qui, lato view.
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono iscriversi a un appello.")
@@ -148,6 +168,11 @@ def iscriviti(request, appello_id):
 
 @login_required
 def carica_tesi(request, iscrizione_id):
+    """Titolo, file della tesi ed eventuale video di una propria iscrizione.
+
+    Il filtro su ``studente=request.user`` non e' un dettaglio: senza, l'id
+    nell'URL basterebbe ad aprire (e sovrascrivere) la tesi di chiunque altro.
+    """
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono caricare la tesi.")
 
@@ -214,6 +239,7 @@ def _contesto_appelli(utente, puo_creare, titolo):
 
 @login_required
 def docente_dashboard(request):
+    """Elenco degli appelli visto dal docente, senza il pulsante di creazione."""
     if not is_docente(request.user):
         raise PermissionDenied("Solo i docenti possono accedere a questa pagina.")
 
@@ -226,6 +252,11 @@ def docente_dashboard(request):
 
 @login_required
 def appello_detail(request, appello_id):
+    """Dettaglio di un appello: commissione e studenti iscritti.
+
+    Riservata ai docenti che compongono QUELLA commissione: e' la pagina da
+    cui si scaricano le tesi, quindi il solo ruolo di docente non basta.
+    """
     if not is_docente(request.user):
         raise PermissionDenied("Solo i docenti possono accedere a questa pagina.")
 
@@ -277,6 +308,12 @@ def presidente_dashboard(request):
 
 @login_required
 def crea_appello(request):
+    """Creazione di un appello (data, orario, corso e membri della commissione).
+
+    La commissione non si sceglie da un elenco: la ricava AppelloForm dai
+    docenti selezionati, riusandone una gia' esistente se composta dalle
+    stesse persone.
+    """
     if not is_presidente(request.user):
         raise PermissionDenied("Solo il presidente può creare un appello.")
 

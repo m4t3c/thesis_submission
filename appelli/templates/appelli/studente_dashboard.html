@@ -1,10 +1,18 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Pagina iniziale dello studente, divisa in due tabelle: le iscrizioni gia'
+    fatte (con lo stato di titolo, tesi e video) e gli appelli a cui puo'
+    ancora iscriversi. La commissione non compare mai: allo studente si mostra
+    solo etichetta_pubblica (corso, data ed eventuale orario).
+{% endcomment %}
+
 {% block title %}Area Studente{% endblock %}
 
 {% block content %}
 <h1 class="h3 section-title mb-4">Area Studente</h1>
 
+{# ---------------- Le mie iscrizioni ---------------- #}
 <div class="card shadow-sm mb-4">
     <div class="card-header">Le mie iscrizioni</div>
     <div class="card-body p-0">
@@ -58,6 +66,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end cell-actions" data-label="Azioni">
+                                    {# Unica azione possibile: l'iscrizione non e' annullabile dallo studente #}
                                     <a class="btn btn-sm btn-outline-primary text-nowrap"
                                        href="{% url 'appelli:carica_tesi' iscrizione.id %}">
                                         {% if iscrizione.file_tesi %}Modifica{% else %}Completa{% endif %}
@@ -74,6 +83,7 @@
     </div>
 </div>
 
+{# ---------------- Appelli disponibili ---------------- #}
 <div class="card shadow-sm">
     <div class="card-header">Appelli disponibili</div>
     <div class="card-body p-0">
@@ -99,6 +109,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end cell-actions" data-label="Azioni">
+                                    {# js-confirm: l'iscrizione non si annulla, quindi va confermata #}
                                     <form method="post"
                                           action="{% url 'appelli:iscriviti' appello.id %}"
                                           class="js-confirm m-0"

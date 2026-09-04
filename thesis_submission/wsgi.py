@@ -1,9 +1,7 @@
-"""
-WSGI config for thesis_submission project.
+"""Punto di ingresso WSGI del progetto: e' quello usato in produzione.
 
-It exposes the WSGI callable as a module-level variable named ``application``.
+Espone come ``application`` l'oggetto che Gunicorn richiama a ogni richiesta.
 
-For more information on this file, see
 https://docs.djangoproject.com/en/6.0/howto/deployment/wsgi/
 """
 

@@ -1,5 +1,13 @@
 {% extends "appelli/base.html" %}
 
+{% comment %}
+    Pagina con cui lo studente compila la propria iscrizione: titolo, file
+    della tesi ed eventuale video. E' l'unica pagina con un caricamento di
+    file pesanti, e da li' viene quasi tutto il JavaScript in fondo: barra di
+    avanzamento, controllo della dimensione prima dell'invio e avviso sulle
+    modifiche non salvate.
+{% endcomment %}
+
 {% block title %}La mia tesi{% endblock %}
 
 {% block content %}
@@ -187,9 +195,6 @@
                     o un video di grandi dimensioni lasciano l'utente davanti a
                     una pagina ferma, senza modo di distinguere "sta caricando"
                     da "si e' bloccato".
-                    NB: {# ... #} vale solo su UNA riga, un commento su piu'
-                    righe va scritto con {% templatetag openblock %} comment {% templatetag closeblock %}
-                    altrimenti Django lo stampa nella pagina.
                 {% endcomment %}
                 <div id="pannello-avanzamento" hidden>
                     <h2 class="h6 section-title mb-3">
@@ -236,7 +241,7 @@
     </div>
 </div>
 
-<!-- Popup: modifiche non salvate -->
+{# Popup: modifiche non salvate #}
 <div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -256,11 +261,13 @@
     </div>
 </div>
 
-<!-- Popup: conferma dell'annullamento del caricamento.
-     Mentre e' aperto il caricamento PROSEGUE: metterlo in pausa in attesa
-     della risposta causerebbe proprio la perdita di tempo che si vuole
-     evitare. Per questo mostra anche l'avanzamento aggiornato in tempo
-     reale, cosi' la scelta si fa con il dato davanti. -->
+{% comment %}
+    Popup: conferma dell'annullamento del caricamento.
+    Mentre e' aperto il caricamento PROSEGUE: metterlo in pausa in attesa
+    della risposta causerebbe proprio la perdita di tempo che si vuole
+    evitare. Per questo mostra anche l'avanzamento aggiornato in tempo reale,
+    cosi' la scelta si fa con il dato davanti.
+{% endcomment %}
 <div class="modal fade" id="annullaModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">

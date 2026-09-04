@@ -23,6 +23,11 @@ class Command(BaseCommand):
     help = "Crea utenti, gruppi, una commissione e un appello di esempio."
 
     def _crea_utente(self, username, gruppo):
+        """Utente demo con password nota, creato o riportato allo stato atteso.
+
+        Il comando deve poter essere rilanciato senza effetti collaterali: si
+        riparte sempre dagli utenti gia' presenti invece di duplicarli.
+        """
         user, _creato = User.objects.get_or_create(
             username=username,
             defaults={"email": f"{username}@example.com"},
@@ -39,6 +44,7 @@ class Command(BaseCommand):
         return user
 
     def handle(self, *args, **options):
+        """Crea i tre profili di prova (studente, docente, presidente) e un appello."""
         studenti = [self._crea_utente(f"studente{i}", "studente") for i in (1, 2)]
         docenti = [self._crea_utente(f"docente{i}", "docente") for i in (1, 2)]
         # Il presidente e' un docente con in piu' il gruppo "presidente":

@@ -1,3 +1,13 @@
+{% comment %}
+    Struttura comune a tutte le pagine: intestazione, area dei messaggi,
+    contenuto e footer. Ogni altro template la estende e riempie il blocco
+    "content"; qui stanno percio' solo gli elementi che si ripetono ovunque,
+    compresi lo stile condiviso e la modale di conferma.
+
+    NB: {# ... #} vale solo su UNA riga; un commento su piu' righe va scritto
+    con {% templatetag openblock %} comment {% templatetag closeblock %},
+    altrimenti Django lo stampa nella pagina.
+{% endcomment %}
 {% load static %}
 <!DOCTYPE html>
 <html lang="it">
@@ -13,6 +23,9 @@
         rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="{% static 'icona-tesi.svg' %}">
     <style>
+        /* Colori del sito, definiti una volta sola: le pagine e i blocchi di
+           stile dei singoli template usano queste variabili, cosi' una
+           modifica alla tavolozza vale ovunque. */
         :root {
             --brand: #9b1b30;
             --ink: #1f2933;
@@ -168,6 +181,7 @@
 </nav>
 
 <main class="container py-4">
+    {# Messaggi inviati dalle view con django.contrib.messages #}
     {% if messages %}
         {% for message in messages %}
             <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show"
@@ -192,7 +206,12 @@
     </div>
 </footer>
 
-<!-- Modale di conferma condivisa (iscrizione / disiscrizione) -->
+{% comment %}
+    Modale di conferma condivisa: la usa qualunque form con class "js-confirm",
+    che ne personalizza titolo, testo e pulsanti con gli attributi
+    data-confirm-*. Sta qui e non nelle singole pagine perche' la conferma
+    serve a ogni azione non annullabile, e una copia per pagina divergerebbe.
+{% endcomment %}
 <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">

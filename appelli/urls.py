@@ -1,3 +1,8 @@
+"""Percorsi dell'applicazione, raggruppati per area.
+
+I nomi delle rotte ("appelli:carica_tesi", ...) sono l'unico riferimento usato
+in view e template: cambiando un percorso qui non si deve toccare nient'altro.
+"""
 from django.urls import path
 
 from . import views
