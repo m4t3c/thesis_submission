@@ -13,17 +13,16 @@
 {% block title %}{{ titolo_pagina }}{% endblock %}
 
 {% block content %}
-<h1 class="h3 section-title mb-4">{{ titolo_pagina }}</h1>
+<div style="display: flex; justify-content: space-between;" class="mb-4">
+    <h1 class="h3 section-title" style="margin-top: auto; margin-bottom: auto;">{{ titolo_pagina }}</h1>
 
-{# Solo il presidente crea appelli. Nascondere il pulsante e' una comodita':
-   il controllo che conta e' quello della view crea_appello. #}
 {% if puo_creare_appelli %}
-    <div class="d-grid mb-4">
-        <a class="btn btn-primary btn-lg py-3" href="{% url 'appelli:crea_appello' %}">
+        <a class="btn btn-primary btn-lg py-3" href="/appelli/nuovo/">
             <i class="bi bi-plus-circle me-2"></i>Crea un nuovo appello
         </a>
     </div>
 {% endif %}
+</div>
 
 {# ---------------- Appelli delle proprie commissioni ---------------- #}
 <div class="card shadow-sm mb-4">
