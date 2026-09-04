@@ -2,15 +2,21 @@ import os
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
-from django.db.models import F
-from django.http import FileResponse, Http404, HttpResponse
+from django.db.models import Count, F, Q
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from django.template.defaultfilters import filesizeformat
 
-from .forms import MAX_BYTE_VIDEO, TesiUploadForm
-from .models import FORMATI_VIDEO, AppelloDiLaurea, StudenteAppelloDiLaurea
+from .forms import MAX_BYTE_VIDEO, AppelloForm, TesiUploadForm
+from .models import (
+    FORMATI_VIDEO,
+    ORDINE_APPELLI,
+    AppelloDiLaurea,
+    StudenteAppelloDiLaurea,
+)
 
 
 # --- Helper per i ruoli (basati sui gruppi di Django) ---------------------
@@ -21,6 +27,15 @@ def is_studente(user):
 
 def is_docente(user):
     return user.groups.filter(name="docente").exists()
+
+
+def is_presidente(user):
+    """Il presidente e' un docente con in piu' il gruppo "presidente".
+
+    Il gruppo non arriva da Shibboleth (l'affiliation di un presidente e'
+    identica a quella di un docente): lo assegna a mano un amministratore.
+    """
+    return user.groups.filter(name="presidente").exists()
 
 
 def docente_in_commissione(user, appello):
@@ -70,6 +85,10 @@ def dashboard(request):
     """
     if is_studente(request.user):
         return redirect("appelli:studente_dashboard")
+    # Prima del docente: un presidente appartiene a entrambi i gruppi, e la
+    # sua pagina e' quella piu' completa.
+    if is_presidente(request.user):
+        return redirect("appelli:presidente_dashboard")
     if is_docente(request.user):
         return redirect("appelli:docente_dashboard")
     # Nessun gruppo noto: l'affiliation Shibboleth non corrisponde ne' al
@@ -166,16 +185,42 @@ def carica_tesi(request, iscrizione_id):
 
 # --- Area docente ----------------------------------------------------------
 
+def _contesto_appelli(utente, puo_creare, titolo):
+    """Contesto della pagina appelli, condiviso da docenti e presidente.
+
+    Le due pagine mostrano le stesse due tabelle ("i miei appelli" e gli
+    altri): al presidente si aggiunge soltanto il pulsante di creazione. Un
+    unico contesto evita che le due viste divergano col tempo.
+    """
+    def elenco(queryset):
+        # order_by esplicito: con annotate() il Meta.ordering non viene
+        # applicato (vedi ORDINE_APPELLI in models.py).
+        return (
+            queryset.select_related("commissione")
+            .annotate(numero_iscritti=Count("iscrizioni"))
+            .distinct()
+            .order_by(*ORDINE_APPELLI)
+        )
+
+    miei = elenco(AppelloDiLaurea.objects.filter(commissione__docenti=utente))
+    altri = elenco(AppelloDiLaurea.objects.exclude(commissione__docenti=utente))
+    return {
+        "miei_appelli": miei,
+        "altri_appelli": altri,
+        "puo_creare_appelli": puo_creare,
+        "titolo_pagina": titolo,
+    }
+
+
 @login_required
 def docente_dashboard(request):
     if not is_docente(request.user):
         raise PermissionDenied("Solo i docenti possono accedere a questa pagina.")
 
-    commissioni = request.user.commissioni.prefetch_related("appelli")
     return render(
         request,
         "appelli/docente_dashboard.html",
-        {"commissioni": commissioni},
+        _contesto_appelli(request.user, puo_creare=False, titolo="Area Docente"),
     )
 
 
@@ -185,7 +230,10 @@ def appello_detail(request, appello_id):
         raise PermissionDenied("Solo i docenti possono accedere a questa pagina.")
 
     appello = get_object_or_404(
-        AppelloDiLaurea.objects.select_related("commissione"), pk=appello_id
+        AppelloDiLaurea.objects.select_related("commissione").prefetch_related(
+            "commissione__docenti"
+        ),
+        pk=appello_id,
     )
     if not docente_in_commissione(request.user, appello):
         raise PermissionDenied("Non fai parte della commissione di questo appello.")
@@ -194,8 +242,128 @@ def appello_detail(request, appello_id):
     return render(
         request,
         "appelli/appello_detail.html",
-        {"appello": appello, "iscrizioni": iscrizioni},
+        {
+            "appello": appello,
+            "iscrizioni": iscrizioni,
+            # Un presidente e' anche docente: senza questo, "Torna indietro" lo
+            # riporterebbe sempre nell'area docente, cioe' non da dove veniva.
+            "url_ritorno": (
+                "appelli:presidente_dashboard"
+                if is_presidente(request.user)
+                else "appelli:docente_dashboard"
+            ),
+        },
     )
+
+
+# --- Area presidente -------------------------------------------------------
+
+@login_required
+def presidente_dashboard(request):
+    """La stessa pagina del docente, piu' il pulsante per creare un appello.
+
+    Il presidente E' un docente: mostrargli una pagina diversa lo priverebbe
+    della vista sui propri appelli senza alcun vantaggio.
+    """
+    if not is_presidente(request.user):
+        raise PermissionDenied("Solo il presidente può accedere a questa pagina.")
+
+    return render(
+        request,
+        "appelli/docente_dashboard.html",
+        _contesto_appelli(request.user, puo_creare=True, titolo="Area Presidente"),
+    )
+
+
+@login_required
+def crea_appello(request):
+    if not is_presidente(request.user):
+        raise PermissionDenied("Solo il presidente può creare un appello.")
+
+    if request.method == "POST":
+        form = AppelloForm(request.POST)
+        if form.is_valid():
+            appello = form.save()
+            messages.success(
+                request, f"Appello «{appello.etichetta_pubblica}» creato."
+            )
+            return redirect("appelli:presidente_dashboard")
+    else:
+        form = AppelloForm()
+
+    return render(request, "appelli/crea_appello.html", {"form": form})
+
+
+# --- Ricerca dei docenti (per comporre la commissione) ---------------------
+
+# Quanti risultati al massimo tornano da una ricerca. Serve a tenere leggera
+# sia la query sia la tendina: con qualche migliaio di utenti un elenco
+# completo sarebbe inutilizzabile per chi cerca e costoso per il server.
+MAX_RISULTATI_RICERCA = 10
+
+
+def _richiesta_interna(request):
+    """True se la richiesta arriva dalle pagine di questa applicazione.
+
+    ATTENZIONE a cosa protegge e cosa no: questi controlli impediscono di
+    aprire l'endpoint incollando l'URL nel browser e di interrogarlo da un
+    altro sito, ma sono header, quindi falsificabili da chiunque sappia usare
+    curl. La difesa VERA e' il controllo di autenticazione e ruolo nella view:
+    senza una sessione valida da presidente non si ottiene nulla comunque.
+    """
+    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+        return False
+
+    # Origin non viene sempre inviato sulle GET same-origin: si verifica solo
+    # se c'e', altrimenti si rifiuterebbero richieste legittime.
+    origine = request.headers.get("Origin") or request.headers.get("Referer")
+    if origine:
+        atteso = f"{request.scheme}://{request.get_host()}"
+        if not origine.startswith(atteso):
+            return False
+    return True
+
+
+@login_required
+def cerca_docenti(request):
+    """Cerca docenti per nome, cognome, nome utente o email.
+
+    Risponde in JSON alla tendina di composizione della commissione.
+    """
+    if not is_presidente(request.user):
+        raise PermissionDenied("Solo il presidente può cercare i docenti.")
+    if not _richiesta_interna(request):
+        raise PermissionDenied("Questo endpoint è riservato all'applicazione.")
+
+    termine = (request.GET.get("q") or "").strip()
+    if len(termine) < 2:
+        # Con una lettera sola i risultati sarebbero troppi per essere utili.
+        return JsonResponse({"risultati": []})
+
+    # Ogni parola digitata deve comparire in almeno uno dei campi: cosi'
+    # "ada cig" trova "Ada Cigala" senza richiedere l'ordine esatto.
+    docenti = User.objects.filter(groups__name="docente")
+    for parola in termine.split():
+        docenti = docenti.filter(
+            Q(first_name__icontains=parola)
+            | Q(last_name__icontains=parola)
+            | Q(username__icontains=parola)
+            | Q(email__icontains=parola)
+        )
+
+    docenti = docenti.distinct().order_by("last_name", "first_name", "username")
+
+    risultati = [
+        {
+            "id": u.pk,
+            "nome": u.first_name,
+            "cognome": u.last_name,
+            "username": u.get_username(),
+            "email": u.email,
+        }
+        for u in docenti[:MAX_RISULTATI_RICERCA]
+    ]
+    return JsonResponse({"risultati": risultati})
 
 
 # --- Download protetto del file della tesi ---------------------------------

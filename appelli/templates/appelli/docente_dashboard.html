@@ -1,58 +1,94 @@
 {% extends "appelli/base.html" %}
 
-{% block title %}Area Docente{% endblock %}
+{% block title %}{{ titolo_pagina }}{% endblock %}
 
 {% block content %}
-<h1 class="h3 section-title mb-4">Area Docente</h1>
+<h1 class="h3 section-title mb-4">{{ titolo_pagina }}</h1>
 
-{% if commissioni %}
-    {% for commissione in commissioni %}
-        <div class="card shadow-sm mb-4">
-            <div class="card-header">{{ commissione }}</div>
-            <div class="card-body p-0">
-                {% if commissione.appelli.all %}
-                    <div class="table-responsive">
-                        <table class="table table-stack table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Corso di laurea</th>
-                                    <th>Data</th>
-                                    <th>Orario</th>
-                                    <th class="text-end">Azioni</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for appello in commissione.appelli.all %}
-                                    <tr>
-                                        <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
-                                        <td class="nowrap" data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
-                                        <td class="nowrap" data-label="Orario">
-                                            {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
-                                                <span class="text-muted small">da definire</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end cell-actions" data-label="Azioni">
-                                            <a class="btn btn-sm btn-soft-primary"
-                                               href="{% url 'appelli:appello_detail' appello.id %}">
-                                                Vedi iscritti
-                                            </a>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <p class="text-muted mb-0 p-3">Nessun appello associato a questa commissione.</p>
-                {% endif %}
-            </div>
-        </div>
-    {% endfor %}
-{% else %}
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <p class="text-muted mb-0">Non fai parte di nessuna commissione.</p>
-        </div>
+{% if puo_creare_appelli %}
+    <div class="d-grid mb-4">
+        <a class="btn btn-primary btn-lg py-3" href="{% url 'appelli:crea_appello' %}">
+            <i class="bi bi-plus-circle me-2"></i>Crea un nuovo appello
+        </a>
     </div>
 {% endif %}
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header">I miei appelli</div>
+    <div class="card-body p-0">
+        {% if miei_appelli %}
+            <div class="table-responsive">
+                <table class="table table-stack table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Corso di laurea</th>
+                            <th>Data</th>
+                            <th>Orario</th>
+                            <th class="text-end">Iscritti</th>
+                            <th class="text-end">Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for appello in miei_appelli %}
+                            <tr>
+                                <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
+                                <td class="nowrap" data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                <td class="nowrap" data-label="Orario">
+                                    {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
+                                        <span class="text-muted small">da definire</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end" data-label="Iscritti">{{ appello.numero_iscritti }}</td>
+                                <td class="text-end cell-actions" data-label="Azioni">
+                                    <a class="btn btn-sm btn-soft-primary text-nowrap"
+                                       href="{% url 'appelli:appello_detail' appello.id %}">
+                                        Vedi dettagli
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0 p-3">Non fai parte della commissione di nessun appello.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header">Altri appelli</div>
+    <div class="card-body p-0">
+        {% if altri_appelli %}
+            <div class="table-responsive">
+                <table class="table table-stack table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Corso di laurea</th>
+                            <th>Data</th>
+                            <th>Orario</th>
+                            <th class="text-end">Iscritti</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for appello in altri_appelli %}
+                            <tr>
+                                <td class="fw-semibold" data-label="Corso di laurea">{{ appello.corso_di_laurea }}</td>
+                                <td class="nowrap" data-label="Data">{{ appello.data|date:"d/m/Y" }}</td>
+                                <td class="nowrap" data-label="Orario">
+                                    {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
+                                        <span class="text-muted small">da definire</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end" data-label="Iscritti">{{ appello.numero_iscritti }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0 p-3">Nessun altro appello.</p>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}

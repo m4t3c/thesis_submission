@@ -1,0 +1,360 @@
+{% extends "appelli/base.html" %}
+
+{% block title %}Nuovo appello{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7 col-md-9">
+        <a class="btn btn-outline-secondary btn-sm mb-3 js-esci"
+           href="{% url 'appelli:presidente_dashboard' %}">
+            &larr; Torna indietro
+        </a>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h1 class="h4 section-title mb-3">
+                    <i class="bi bi-plus-circle text-primary me-1"></i>Nuovo appello
+                </h1>
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger shadow-sm" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        {{ form.non_field_errors.0 }}
+                    </div>
+                {% endif %}
+
+                <form method="post" id="appello-form">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="{{ form.corso_di_laurea.id_for_label }}" class="form-label">
+                            Corso di laurea
+                        </label>
+                        {{ form.corso_di_laurea }}
+                        {{ form.corso_di_laurea.errors }}
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label for="{{ form.data.id_for_label }}" class="form-label">Data</label>
+                            {{ form.data }}
+                            {{ form.data.errors }}
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="{{ form.ora.id_for_label }}" class="form-label">Orario</label>
+                            {{ form.ora }}
+                            {{ form.ora.errors }}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="ricerca-docenti" class="form-label">
+                            Membri della commissione
+                        </label>
+
+                        {# Gli id scelti viaggiano in input nascosti #}
+                        <div id="docenti-hidden">{{ form.docenti }}</div>
+
+                        <div class="position-relative">
+                            <input type="text" id="ricerca-docenti" class="form-control"
+                                   placeholder="Cerca per nome, cognome, nome utente o email"
+                                   autocomplete="off" role="combobox"
+                                   aria-expanded="false" aria-controls="risultati-docenti">
+                            <div id="risultati-docenti" class="list-group shadow" role="listbox" hidden></div>
+                        </div>
+                        <div class="form-text" id="aiuto-ricerca">
+                            Scrivi almeno due lettere. Se una commissione con esattamente
+                            queste persone esiste già, viene riutilizzata.
+                        </div>
+
+                        {% if form.docenti.errors %}
+                            <div class="alert alert-danger shadow-sm mt-3" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.docenti.errors.0 }}
+                            </div>
+                        {% endif %}
+
+                        {# Riquadro dei membri scelti #}
+                        <div class="box-membri mt-3" id="box-membri">
+                            <p class="text-muted text-center mb-0 py-3" id="nessun-docente">
+                                <i class="bi bi-people me-1" aria-hidden="true"></i>
+                                Nessun membro selezionato
+                            </p>
+                            <div id="docenti-scelti"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-column flex-sm-row gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check2"></i> Crea appello
+                        </button>
+                        <a class="btn btn-outline-secondary js-esci"
+                           href="{% url 'appelli:presidente_dashboard' %}">Annulla</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Popup: modifiche non salvate, come nella pagina di caricamento tesi -->
+<div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifiche non salvate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Hai delle modifiche non ancora salvate. Vuoi salvarle prima di uscire?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
+                <a href="{% url 'appelli:presidente_dashboard' %}" class="btn btn-outline-danger">Esci senza salvare</a>
+                <button type="button" class="btn btn-primary" id="btn-salva-esci">Salva ed esci</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* La tendina dei risultati si sovrappone al contenuto sottostante */
+    #risultati-docenti {
+        position: absolute;
+        z-index: 1000;
+        width: 100%;
+        max-height: 22rem;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: .4rem;
+    }
+    #risultati-docenti .list-group-item { cursor: pointer; }
+    #risultati-docenti .list-group-item.attivo { background: var(--bs-primary-bg-subtle); }
+    .riga-docente-nome { font-weight: 600; }
+    .riga-docente-mail { color: var(--muted); font-size: .875rem; }
+
+    /* Riquadro dei membri scelti: il bordo tratteggiato comunica "qui dentro
+       finisce quello che selezioni", anche quando e' ancora vuoto. */
+    .box-membri {
+        border: 2px dashed var(--line);
+        border-radius: .6rem;
+        padding: .75rem;
+        background: #fbfbfc;
+    }
+    .box-membri.pieno { border-style: solid; }
+    .membro {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: .5rem;
+        padding: .6rem .75rem;
+    }
+    .membro + .membro { margin-top: .5rem; }
+    .membro-icona { color: var(--muted); flex-shrink: 0; }
+    .membro-testo { min-width: 0; flex: 1; }
+    .membro-rimuovi { flex-shrink: 0; }
+</style>
+
+{{ form.docenti_selezionati|json_script:"docenti-iniziali" }}
+
+<script>
+(function () {
+    var URL_RICERCA = "{% url 'appelli:cerca_docenti' %}";
+    var input = document.getElementById('ricerca-docenti');
+    var elencoRisultati = document.getElementById('risultati-docenti');
+    var elencoScelti = document.getElementById('docenti-scelti');
+    var contenitoreHidden = document.getElementById('docenti-hidden');
+    var vuoto = document.getElementById('nessun-docente');
+    var boxMembri = document.getElementById('box-membri');
+    if (!input) return;
+
+    var scelti = [];          // [{id, nome, cognome, username, email}]
+    var attesa = null;        // timer del debounce
+    var richiesta = null;     // ricerca in corso, da annullare se ne parte un'altra
+
+    function nomeCompleto(d) {
+        var pezzi = [d.nome, d.cognome].filter(Boolean).join(' ');
+        return pezzi ? pezzi + ' (' + d.username + ')' : d.username;
+    }
+
+    // --- Selezionati ---------------------------------------------------
+    function disegnaScelti() {
+        elencoScelti.textContent = '';
+        contenitoreHidden.textContent = '';
+        scelti.forEach(function (d) {
+            var riga = document.createElement('div');
+            riga.className = 'membro';
+
+            var icona = document.createElement('i');
+            icona.className = 'bi bi-person-fill membro-icona';
+            icona.setAttribute('aria-hidden', 'true');
+
+            var testo = document.createElement('div');
+            testo.className = 'membro-testo';
+            var riga1 = document.createElement('div');
+            riga1.className = 'riga-docente-nome text-truncate';
+            riga1.textContent = nomeCompleto(d);
+            var riga2 = document.createElement('div');
+            riga2.className = 'riga-docente-mail text-truncate';
+            riga2.textContent = d.email || '';
+            testo.appendChild(riga1);
+            testo.appendChild(riga2);
+
+            var togli = document.createElement('button');
+            togli.type = 'button';
+            togli.className = 'btn btn-sm btn-danger membro-rimuovi';
+            togli.setAttribute('aria-label', 'Rimuovi ' + nomeCompleto(d));
+            togli.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+            togli.addEventListener('click', function () {
+                scelti = scelti.filter(function (x) { return x.id !== d.id; });
+                disegnaScelti();
+            });
+
+            riga.appendChild(icona);
+            riga.appendChild(testo);
+            riga.appendChild(togli);
+            elencoScelti.appendChild(riga);
+
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'docenti';
+            hidden.value = d.id;
+            contenitoreHidden.appendChild(hidden);
+        });
+        vuoto.hidden = scelti.length > 0;
+        boxMembri.classList.toggle('pieno', scelti.length > 0);
+    }
+
+    function aggiungi(d) {
+        if (!scelti.some(function (x) { return x.id === d.id; })) {
+            scelti.push(d);
+            disegnaScelti();
+        }
+        input.value = '';
+        chiudiRisultati();
+        input.focus();
+    }
+
+    // --- Tendina dei risultati ------------------------------------------
+    function chiudiRisultati() {
+        elencoRisultati.hidden = true;
+        elencoRisultati.textContent = '';
+        input.setAttribute('aria-expanded', 'false');
+    }
+
+    function disegnaRisultati(risultati) {
+        elencoRisultati.textContent = '';
+        if (!risultati.length) {
+            var vuotoEl = document.createElement('div');
+            vuotoEl.className = 'list-group-item text-muted';
+            vuotoEl.textContent = 'Nessun docente trovato.';
+            elencoRisultati.appendChild(vuotoEl);
+        }
+        risultati.forEach(function (d) {
+            var voce = document.createElement('button');
+            voce.type = 'button';
+            voce.className = 'list-group-item list-group-item-action';
+            voce.setAttribute('role', 'option');
+
+            var riga1 = document.createElement('div');
+            riga1.className = 'riga-docente-nome';
+            riga1.textContent = nomeCompleto(d);
+            var riga2 = document.createElement('div');
+            riga2.className = 'riga-docente-mail';
+            riga2.textContent = d.email || '';
+            voce.appendChild(riga1);
+            voce.appendChild(riga2);
+
+            voce.addEventListener('click', function () { aggiungi(d); });
+            elencoRisultati.appendChild(voce);
+        });
+        elencoRisultati.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+    }
+
+    function cerca(termine) {
+        if (richiesta) richiesta.abort();
+        richiesta = new AbortController();
+        fetch(URL_RICERCA + '?q=' + encodeURIComponent(termine), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            credentials: 'same-origin',
+            signal: richiesta.signal
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (dati) {
+            // Chi e' gia' stato scelto non va riproposto.
+            disegnaRisultati(dati.risultati.filter(function (d) {
+                return !scelti.some(function (x) { return x.id === d.id; });
+            }));
+        })
+        .catch(function (e) { if (e.name !== 'AbortError') chiudiRisultati(); });
+    }
+
+    // Si aspetta una breve pausa nella digitazione: senza, ogni tasto
+    // premuto produrrebbe una query al database.
+    input.addEventListener('input', function () {
+        clearTimeout(attesa);
+        var termine = input.value.trim();
+        if (termine.length < 2) { chiudiRisultati(); return; }
+        attesa = setTimeout(function () { cerca(termine); }, 250);
+    });
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') chiudiRisultati();
+        // Invio nel campo di ricerca non deve inviare tutto il form.
+        if (e.key === 'Enter') e.preventDefault();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!elencoRisultati.contains(e.target) && e.target !== input) chiudiRisultati();
+    });
+
+    // Ripristina la selezione quando il form torna indietro con un errore.
+    var iniziali = document.getElementById('docenti-iniziali');
+    if (iniziali) {
+        try { scelti = JSON.parse(iniziali.textContent) || []; } catch (e) { scelti = []; }
+    }
+    disegnaScelti();
+
+    // --- Conferma all'uscita se ci sono modifiche non salvate ------------
+    // Si confronta lo stato iniziale del form con quello attuale: cosi' vale
+    // per corso, data, orario e membri senza doverli elencare a mano.
+    var form = document.getElementById('appello-form');
+
+    function istantanea() {
+        var parti = scelti.map(function (d) { return d.id; }).sort();
+        form.querySelectorAll('input[type="text"], input[type="date"], input[type="time"]')
+            .forEach(function (i) {
+                if (i.id !== 'ricerca-docenti') parti.push(i.name + '=' + i.value);
+            });
+        return parti.join('|');
+    }
+    var statoIniziale = istantanea();
+
+    document.querySelectorAll('a.js-esci').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+            if (istantanea() !== statoIniziale && window.bootstrap) {
+                e.preventDefault();
+                bootstrap.Modal.getOrCreateInstance(
+                    document.getElementById('unsavedModal')
+                ).show();
+            }
+        });
+    });
+
+    var salvaEsci = document.getElementById('btn-salva-esci');
+    if (salvaEsci) {
+        salvaEsci.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(
+                document.getElementById('unsavedModal')
+            ).hide();
+            // requestSubmit (non submit) fa scattare la validazione del browser
+            // e gli eventuali gestori di 'submit'.
+            if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+        });
+    }
+})();
+</script>
+{% endblock %}

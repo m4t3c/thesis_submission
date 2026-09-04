@@ -1,8 +1,16 @@
 from django import forms
+from django.contrib.auth.models import User
 from django.core.files.uploadedfile import UploadedFile
 from django.template.defaultfilters import filesizeformat
 
-from .models import FORMATI_VIDEO, StudenteAppelloDiLaurea
+from thesis_submission.assign_user import GRUPPO_DOCENTE
+
+from .models import (
+    FORMATI_VIDEO,
+    AppelloDiLaurea,
+    Commissione,
+    StudenteAppelloDiLaurea,
+)
 
 # Primi byte di ogni file PDF valido ("%PDF-"): serve a scartare i file
 # rinominati in .pdf che PDF non sono.
@@ -184,3 +192,173 @@ class TesiUploadForm(forms.ModelForm):
             dati["link_video"] = ""
 
         return dati
+
+
+class DocentiField(forms.ModelMultipleChoiceField):
+    """Docenti scelti tramite ricerca, non da un elenco a tendina.
+
+    Il widget e' MultipleHiddenInput: la pagina NON stampa un <option> per
+    ogni docente. Con qualche migliaio di utenti quell'elenco renderebbe la
+    pagina pesantissima e la scelta impraticabile; la selezione avviene invece
+    interrogando l'endpoint di ricerca (appelli:cerca_docenti), che restituisce
+    al massimo dieci risultati per volta.
+
+    La validazione resta quella normale di Django: gli id ricevuti vengono
+    verificati contro il queryset, quindi non si puo' far passare un utente
+    che non e' un docente manomettendo il form.
+    """
+
+    widget = forms.MultipleHiddenInput
+
+    def label_from_instance(self, utente):
+        completo = utente.get_full_name()
+        if not completo:
+            return utente.get_username()
+        return f"{completo} ({utente.get_username()})"
+
+
+class AppelloForm(forms.ModelForm):
+    """Creazione di un appello da parte del presidente.
+
+    Il presidente sceglie data, orario e i docenti che compongono la
+    commissione; la Commissione vera e propria non si seleziona da un elenco ma
+    viene ricavata da quei docenti (riusata se ne esiste gia' una con
+    esattamente le stesse persone, creata altrimenti). Cosi' chi crea
+    l'appello ragiona in termini di persone, che e' come funziona davvero, e
+    non deve prima censire delle commissioni.
+
+    NOTA: "corso_di_laurea" e' per ora inserito a mano. Quando arrivera'
+    l'importazione da xlsx sara' quel file a fornirlo, e il campo potra'
+    sparire da questo form senza toccare il resto.
+    """
+
+    docenti = DocentiField(
+        queryset=User.objects.none(),          # popolato in __init__
+        label="Membri della commissione",
+        help_text="Cerca i docenti per nome, cognome, nome utente o email.",
+        error_messages={
+            "required": "Seleziona almeno un membro della commissione.",
+        },
+    )
+
+    class Meta:
+        model = AppelloDiLaurea
+        fields = ["corso_di_laurea", "data", "ora"]
+        widgets = {
+            "corso_di_laurea": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Es. Ingegneria Informatica"}
+            ),
+            "data": forms.DateInput(
+                attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"
+            ),
+            "ora": forms.TimeInput(
+                attrs={"class": "form-control", "type": "time"}, format="%H:%M"
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["docenti"].queryset = (
+            User.objects.filter(groups__name=GRUPPO_DOCENTE)
+            .order_by("last_name", "first_name", "username")
+            .distinct()
+        )
+        # L'orario e' facoltativo nel modello, ma un appello creato qui ha
+        # senso che ce l'abbia: si chiede sempre.
+        self.fields["ora"].required = True
+
+    def docenti_selezionati(self):
+        """Docenti attualmente scelti, come dati pronti per il template.
+
+        Serve a ridisegnare le persone gia' selezionate quando il form torna
+        indietro con un errore: gli input nascosti contengono solo gli id, e
+        senza questi dati l'utente vedrebbe la selezione svuotarsi.
+        """
+        if not self.is_bound:
+            valori = self.initial.get("docenti") or []
+        else:
+            valori = self.data.getlist(self.add_prefix("docenti"))
+        if not valori:
+            return []
+        ids = [v.pk if hasattr(v, "pk") else v for v in valori]
+        return [
+            {
+                "id": u.pk,
+                "nome": u.first_name,
+                "cognome": u.last_name,
+                "username": u.get_username(),
+                "email": u.email,
+            }
+            for u in self.fields["docenti"].queryset.filter(pk__in=ids)
+        ]
+
+    def clean(self):
+        """Verifica che l'appello non esista gia'.
+
+        La commissione va identificata qui e non solo in save() perche'
+        partecipa al vincolo di unicita' (data + corso + commissione): senza
+        questo controllo il duplicato emergerebbe come IntegrityError al
+        salvataggio, cioe' come errore 500 invece che come messaggio.
+        """
+        dati = super().clean()
+        docenti = dati.get("docenti")
+        if not docenti:
+            return dati
+
+        # Solo una LETTURA: se la commissione non esiste ancora viene creata in
+        # save(), altrimenti una validazione fallita lascerebbe in giro
+        # commissioni mai usate da nessun appello.
+        self.commissione = commissione_esistente_con(docenti)
+
+        if self.commissione and dati.get("data") and dati.get("corso_di_laurea"):
+            duplicato = (
+                AppelloDiLaurea.objects.filter(
+                    data=dati["data"],
+                    corso_di_laurea=dati["corso_di_laurea"],
+                    commissione=self.commissione,
+                )
+                .exclude(pk=self.instance.pk)
+                .exists()
+            )
+            if duplicato:
+                raise forms.ValidationError(
+                    "Esiste già un appello per questo corso, in questa data e "
+                    "con questa stessa commissione."
+                )
+        return dati
+
+    def save(self, commit=True):
+        """Crea la commissione se serve, poi salva l'appello.
+
+        Il form non e' utilizzabile con commit=False: l'appello ha bisogno di
+        una commissione gia' salvata per poterla referenziare.
+        """
+        if not commit:
+            raise ValueError(
+                "AppelloForm richiede commit=True: la commissione va salvata "
+                "prima dell'appello che la referenzia."
+            )
+
+        docenti = self.cleaned_data["docenti"]
+        commissione = getattr(self, "commissione", None)
+        if commissione is None:
+            # Nessun nome: la commissione si identifica con il proprio id.
+            commissione = Commissione.objects.create()
+            commissione.docenti.set(docenti)
+
+        self.instance.commissione = commissione
+        return super().save(commit=True)
+
+
+def commissione_esistente_con(docenti):
+    """Commissione composta esattamente da questi docenti, se gia' esiste.
+
+    Riusarla evita di riempire il database di commissioni identiche ogni volta
+    che il presidente ripete gli stessi nomi. Restituisce None se non c'e'.
+    """
+    voluti = {d.pk for d in docenti}
+    for commissione in Commissione.objects.prefetch_related("docenti"):
+        if {d.pk for d in commissione.docenti.all()} == voluti:
+            return commissione
+    return None
+

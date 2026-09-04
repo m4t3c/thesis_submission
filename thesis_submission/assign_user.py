@@ -55,6 +55,11 @@ RUOLI_DOCENTE = frozenset({"member", "employee", "faculty"})
 
 GRUPPO_STUDENTE = "studente"
 GRUPPO_DOCENTE = "docente"
+
+# Gruppi che questo backend gestisce da solo: a ogni accesso l'utente viene
+# tolto da tutti e riassegnato secondo l'affiliation. I ruoli assegnati a mano
+# dall'area amministrativa non vanno elencati qui, altrimenti verrebbero
+# revocati al primo accesso.
 GRUPPI_NOTI = (GRUPPO_STUDENTE, GRUPPO_DOCENTE)
 
 

@@ -227,3 +227,6 @@ __marimo__/
 
 # MacOS
 .DS_Store
+# Configurazioni degli agenti di sviluppo (locali, non fanno parte del progetto)
+.agents/
+skills-lock.json

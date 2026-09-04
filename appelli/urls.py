@@ -18,6 +18,10 @@ urlpatterns = [
         views.carica_tesi,
         name="carica_tesi",
     ),
+    # Area presidente
+    path("presidente/", views.presidente_dashboard, name="presidente_dashboard"),
+    path("appelli/nuovo/", views.crea_appello, name="crea_appello"),
+    path("api/docenti/", views.cerca_docenti, name="cerca_docenti"),
     # Area docente
     path("docente/", views.docente_dashboard, name="docente_dashboard"),
     path("appelli/<int:appello_id>/", views.appello_detail, name="appello_detail"),

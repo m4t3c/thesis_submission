@@ -3,8 +3,7 @@
 {% block title %}{{ appello.corso_di_laurea }} — {{ appello.data|date:"d/m/Y" }}{% if appello.ora %} {{ appello.ora|time:"H:i" }}{% endif %}{% endblock %}
 
 {% block content %}
-<a class="btn btn-outline-secondary btn-sm mb-3"
-   href="{% url 'appelli:docente_dashboard' %}">
+<a class="btn btn-outline-secondary btn-sm mb-3" href="{% url url_ritorno %}">
     &larr; Torna indietro
 </a>
 
@@ -14,8 +13,45 @@
         Appello del {{ appello.data|date:"d/m/Y" }}{% if appello.ora %},
             ore {{ appello.ora|time:"H:i" }}{% endif %}
     </div>
-    <div class="text-muted small">Commissione: {{ appello.commissione }}</div>
 </div>
+
+{# Unico punto in cui la commissione compare, e come persone non come id #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header">Commissione</div>
+    <div class="card-body">
+        <div class="row g-2">
+            {% for docente in appello.commissione.docenti.all %}
+                <div class="col-md-6">
+                    <div class="membro-commissione d-flex align-items-center gap-2">
+                        <i class="bi bi-person-fill text-muted flex-shrink-0" aria-hidden="true"></i>
+                        <div style="min-width: 0;">
+                            <div class="fw-semibold text-truncate">
+                                {{ docente.get_full_name|default:docente.get_username }}
+                            </div>
+                            {% if docente.email %}
+                                <div class="text-muted small text-truncate">{{ docente.email }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="col-12">
+                    <p class="text-muted mb-0">Nessun membro assegnato.</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .membro-commissione {
+        border: 1px solid var(--line);
+        border-radius: .5rem;
+        padding: .6rem .75rem;
+        background: #fbfbfc;
+        height: 100%;
+    }
+</style>
 
 <div class="card shadow-sm">
     <div class="card-header">Studenti iscritti</div>

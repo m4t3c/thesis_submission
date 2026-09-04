@@ -6,6 +6,15 @@ from django.db.models import F
 from .storage import SovrascriviStorage
 
 
+# Ordine con cui gli appelli vanno sempre elencati: dal piu' vecchio, e a
+# parita' di giorno prima quelli con un orario gia' fissato.
+# ATTENZIONE: non basta metterlo in Meta.ordering. Quando una query usa
+# annotate() con un'aggregazione, Django RIMUOVE l'ORDER BY di default per non
+# interferire con il GROUP BY, e le righe tornano in ordine arbitrario: in quei
+# casi va passato esplicitamente con .order_by(*ORDINE_APPELLI).
+ORDINE_APPELLI = ["data", F("ora").asc(nulls_last=True)]
+
+
 class Commissione(models.Model):
     """Commissione di laurea: insieme di docenti che valutano un appello.
 
@@ -26,7 +35,14 @@ class Commissione(models.Model):
         verbose_name_plural = "Commissioni"
 
     def __str__(self):
-        return self.nome or f"Commissione #{self.pk}"
+        """Il solo identificativo numerico.
+
+        Una commissione non ha un nome che significhi qualcosa per chi legge:
+        e' semplicemente l'insieme di docenti associato a un appello. Cio' che
+        interessa davvero sono le persone, mostrate nel dettaglio dell'appello;
+        altrove non compare alcun riferimento alla commissione.
+        """
+        return str(self.pk)
 
 
 class AppelloDiLaurea(models.Model):
@@ -67,7 +83,7 @@ class AppelloDiLaurea(models.Model):
         # "commissione.appelli.all", che non passano da nessuna view.
         # A parita' di giorno, chi ha gia' un orario precede chi non ce l'ha:
         # senza nulls_last i NULL finirebbero per primi.
-        ordering = ["data", F("ora").asc(nulls_last=True)]
+        ordering = ORDINE_APPELLI
         # Nello stesso giorno e per lo stesso corso possono esserci piu'
         # appelli, purche' affidati a commissioni diverse: cio' che identifica
         # logicamente l'appello e' quindi la tripletta data + corso +
@@ -96,12 +112,12 @@ class AppelloDiLaurea(models.Model):
         return f"{self.corso_di_laurea} - {quando}"
 
     def __str__(self):
-        # Rappresentazione COMPLETA, per admin e area docente: la commissione
-        # fa parte dell'identita' dell'appello e senza di essa due appelli
-        # dello stesso giorno e corso sarebbero indistinguibili nei menu a
-        # tendina. Non usare nulla di tutto cio' verso gli studenti: per loro
-        # c'e' etichetta_pubblica.
-        return f"{self.etichetta_pubblica} ({self.commissione})"
+        # Rappresentazione COMPLETA, usata dall'area amministrativa: senza il
+        # riferimento alla commissione due appelli dello stesso giorno e corso
+        # sarebbero indistinguibili nei menu a tendina. Nelle pagine
+        # dell'applicazione non si usa: per gli studenti c'e'
+        # etichetta_pubblica, per i docenti l'elenco dei membri.
+        return f"{self.etichetta_pubblica} (commissione {self.commissione})"
 
 
 # Estensioni video accettate per il caricamento diretto.

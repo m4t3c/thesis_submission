@@ -285,7 +285,9 @@ class UnicitaAppelloTest(BaseSetup):
         con = self._altro_appello(altra, ora=datetime.time(9, 30))
         # Lo __str__ distingue i due appelli, altrimenti indistinguibili.
         self.assertIn("09:30", str(con))
-        self.assertIn("Commissione B", str(con))
+        self.assertIn(f"commissione {altra.pk}", str(con))
+        # Il nome non deve comparire: la commissione e' solo il suo id.
+        self.assertNotIn("Commissione B", str(con))
         self.assertNotEqual(str(con), str(senza))
 
     def test_studente_sceglie_tra_appelli_omonimi_senza_vedere_commissione(self):
@@ -329,8 +331,8 @@ class UnicitaAppelloTest(BaseSetup):
         # Pubblica: corso, data, ora. Mai la commissione.
         self.assertIn("09:30", appello.etichetta_pubblica)
         self.assertNotIn("Commissione", appello.etichetta_pubblica)
-        # Completa (admin / area docente): include la commissione.
-        self.assertIn("Commissione B", str(appello))
+        # Completa (solo area amministrativa): include l'identificativo.
+        self.assertIn(f"commissione {altra.pk}", str(appello))
 
 
 # Il middleware Shibboleth in produzione e' inserito solo se SHIB_ENABLED=1.
@@ -747,14 +749,14 @@ class OrdinamentoAppelliTest(BaseSetup):
         self.assertEqual(nostri, [presto, tardi])
 
     def test_ordine_nella_dashboard_docente(self):
-        """La lista del docente e' costruita nel template, non in una view."""
         tardi = self._appello(20)
         presto = self._appello(5)
 
         self.client.force_login(self.docente)
         resp = self.client.get(reverse("appelli:docente_dashboard"))
-        commissioni = list(resp.context["commissioni"])
-        appelli = list(commissioni[0].appelli.all())
+        # Entrambi usano la commissione di BaseSetup, di cui il docente fa
+        # parte: compaiono quindi fra "i miei appelli".
+        appelli = list(resp.context["miei_appelli"])
         nostri = [a for a in appelli if a in (tardi, presto)]
         self.assertEqual(nostri, [presto, tardi])
 
@@ -771,3 +773,439 @@ class OrdinamentoAppelliTest(BaseSetup):
         resp = self.client.get(reverse("appelli:studente_dashboard"))
         appelli = [i.appello for i in resp.context["iscrizioni"]]
         self.assertEqual(appelli, [presto, tardi])
+
+
+class PresidenteTest(BaseSetup):
+    """Ruolo presidente: accesso riservato e creazione degli appelli."""
+
+    def setUp(self):
+        super().setUp()
+        self.g_presidente = Group.objects.get(name="presidente")
+        # Un presidente e' un docente con in piu' il gruppo "presidente".
+        self.presidente = User.objects.create_user("presidente_test", password="pw")
+        self.presidente.groups.add(self.g_docente, self.g_presidente)
+
+    # --- Accesso ---------------------------------------------------------
+
+    def test_dashboard_smista_il_presidente(self):
+        """Appartiene anche a "docente": deve prevalere la pagina presidente."""
+        self.client.force_login(self.presidente)
+        resp = self.client.get(reverse("appelli:dashboard"))
+        self.assertRedirects(
+            resp,
+            reverse("appelli:presidente_dashboard"),
+            fetch_redirect_response=False,
+        )
+
+    def test_docente_semplice_non_accede(self):
+        self.client.force_login(self.docente)
+        for nome in ("presidente_dashboard", "crea_appello"):
+            with self.subTest(vista=nome):
+                self.assertEqual(self.client.get(reverse("appelli:" + nome)).status_code, 403)
+
+    def test_studente_non_accede(self):
+        self.client.force_login(self.studente)
+        self.assertEqual(
+            self.client.get(reverse("appelli:presidente_dashboard")).status_code, 403
+        )
+
+    def test_docente_non_crea_appelli_via_post(self):
+        """Non basta nascondere il pulsante: la POST deve essere respinta."""
+        self.client.force_login(self.docente)
+        prima = AppelloDiLaurea.objects.count()
+        resp = self.client.post(reverse("appelli:crea_appello"), {
+            "corso_di_laurea": "Abusivo",
+            "data": "2031-06-01",
+            "ora": "10:00",
+            "docenti": [self.docente.pk],
+        })
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(AppelloDiLaurea.objects.count(), prima)
+
+    # --- Creazione -------------------------------------------------------
+
+    def _crea(self, **extra):
+        dati = {
+            "corso_di_laurea": "Ingegneria Informatica",
+            "data": "2031-06-01",
+            "ora": "10:00",
+            "docenti": [self.docente.pk, self.presidente.pk],
+        }
+        dati.update(extra)
+        return self.client.post(reverse("appelli:crea_appello"), dati)
+
+    def test_creazione_appello(self):
+        self.client.force_login(self.presidente)
+        resp = self._crea()
+        self.assertRedirects(
+            resp,
+            reverse("appelli:presidente_dashboard"),
+            fetch_redirect_response=False,
+        )
+        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Ingegneria Informatica")
+        self.assertEqual(appello.data, datetime.date(2031, 6, 1))
+        self.assertEqual(appello.ora, datetime.time(10, 0))
+        self.assertEqual(
+            set(appello.commissione.docenti.values_list("pk", flat=True)),
+            {self.docente.pk, self.presidente.pk},
+        )
+
+    def test_commissione_riusata_se_stessi_docenti(self):
+        """Ripetere le stesse persone non deve creare commissioni doppione."""
+        self.client.force_login(self.presidente)
+        self._crea()
+        quante = Commissione.objects.count()
+
+        self._crea(data="2031-07-15")   # stessa commissione, altra data
+        self.assertEqual(Commissione.objects.count(), quante)
+        self.assertEqual(
+            AppelloDiLaurea.objects.filter(
+                corso_di_laurea="Ingegneria Informatica"
+            ).count(),
+            2,
+        )
+
+    def test_commissione_nuova_se_docenti_diversi(self):
+        self.client.force_login(self.presidente)
+        self._crea()
+        quante = Commissione.objects.count()
+
+        # Serve un docente che non compaia in nessuna commissione esistente:
+        # BaseSetup ne ha gia' creata una con il solo self.docente, che
+        # verrebbe (correttamente) riusata.
+        terzo = User.objects.create_user("docente_terzo", password="pw")
+        terzo.groups.add(self.g_docente)
+
+        self._crea(data="2031-07-15", docenti=[terzo.pk])
+        self.assertEqual(Commissione.objects.count(), quante + 1)
+
+    def test_duplicato_rifiutato_con_messaggio(self):
+        """Stessa tripletta: errore leggibile, non un IntegrityError."""
+        self.client.force_login(self.presidente)
+        self._crea()
+        resp = self._crea()
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Esiste già un appello")
+
+    def test_commissione_non_creata_se_il_form_e_invalido(self):
+        """Una validazione fallita non deve lasciare commissioni orfane."""
+        self.client.force_login(self.presidente)
+        quante = Commissione.objects.count()
+        resp = self._crea(data="")        # data mancante
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Commissione.objects.count(), quante)
+
+    def test_dashboard_elenca_appelli_e_iscritti(self):
+        self.client.force_login(self.presidente)
+        self._crea()
+        StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        resp = self.client.get(reverse("appelli:presidente_dashboard"))
+        self.assertContains(resp, "Ingegneria Informatica")
+        self.assertContains(resp, "Crea un nuovo appello")
+
+
+@override_settings(MIDDLEWARE=MIDDLEWARE_SHIB)
+class PresidenteRuoloPersistenteTest(TestCase):
+    """Il gruppo "presidente" non deve essere revocato dal login Shibboleth.
+
+    E' il rischio principale di questo ruolo: configure_user toglie l'utente da
+    tutti i GRUPPI_NOTI a ogni accesso. Se "presidente" finisse in quella lista,
+    l'assegnazione fatta a mano sparirebbe al primo login, in silenzio.
+    """
+
+    DOCENTE = "member@unimore.it;employee@unimore.it;faculty@unimore.it"
+
+    def test_login_non_revoca_il_gruppo_presidente(self):
+        utente = User.objects.create_user("presidente_shib")
+        utente.groups.add(Group.objects.get(name="presidente"))
+
+        resp = self.client.get(
+            reverse("appelli:dashboard"),
+            **{"HTTP_X_SHIB_UID": "presidente_shib",
+               "HTTP_X_SHIB_AFFILIATION": self.DOCENTE},
+        )
+
+        gruppi = set(
+            User.objects.get(username="presidente_shib")
+            .groups.values_list("name", flat=True)
+        )
+        # Shibboleth assegna "docente"; "presidente" deve sopravvivere.
+        self.assertEqual(gruppi, {"docente", "presidente"})
+        self.assertRedirects(
+            resp,
+            reverse("appelli:presidente_dashboard"),
+            fetch_redirect_response=False,
+        )
+
+
+class RicercaDocentiTest(BaseSetup):
+    """Endpoint di ricerca dei docenti per comporre la commissione."""
+
+    AJAX = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
+
+    def setUp(self):
+        super().setUp()
+        self.g_presidente = Group.objects.get(name="presidente")
+        self.presidente = User.objects.create_user("pres", password="pw")
+        self.presidente.groups.add(self.g_docente, self.g_presidente)
+        self.url = reverse("appelli:cerca_docenti")
+
+        self.ada = User.objects.create_user(
+            "adcigala", first_name="Ada", last_name="Cigala",
+            email="ada.cigala@unimore.it",
+        )
+        self.ada.groups.add(self.g_docente)
+
+    def _cerca(self, q, **extra):
+        parametri = dict(self.AJAX)
+        parametri.update(extra)
+        return self.client.get(self.url, {"q": q}, **parametri)
+
+    # --- Accesso ---------------------------------------------------------
+
+    def test_anonimo_non_accede(self):
+        resp = self._cerca("ada")
+        self.assertEqual(resp.status_code, 302)   # verso il login
+
+    def test_studente_non_accede(self):
+        self.client.force_login(self.studente)
+        self.assertEqual(self._cerca("ada").status_code, 403)
+
+    def test_docente_semplice_non_accede(self):
+        self.client.force_login(self.docente)
+        self.assertEqual(self._cerca("ada").status_code, 403)
+
+    def test_senza_header_ajax_non_risponde(self):
+        """Aprire l'URL nel browser non deve restituire l'elenco."""
+        self.client.force_login(self.presidente)
+        resp = self.client.get(self.url, {"q": "ada"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_origine_esterna_rifiutata(self):
+        self.client.force_login(self.presidente)
+        resp = self._cerca("ada", HTTP_ORIGIN="https://sito-esterno.example")
+        self.assertEqual(resp.status_code, 403)
+
+    # --- Ricerca ---------------------------------------------------------
+
+    def test_ricerca_per_nome_cognome_username_email(self):
+        self.client.force_login(self.presidente)
+        for termine in ("Ada", "Cigala", "adcigala", "ada.cigala@unimore.it"):
+            with self.subTest(termine=termine):
+                dati = self._cerca(termine).json()
+                self.assertIn(
+                    self.ada.pk, [r["id"] for r in dati["risultati"]]
+                )
+
+    def test_piu_parole_in_ordine_libero(self):
+        self.client.force_login(self.presidente)
+        dati = self._cerca("cigala ada").json()
+        self.assertEqual([r["id"] for r in dati["risultati"]], [self.ada.pk])
+
+    def test_campi_restituiti(self):
+        self.client.force_login(self.presidente)
+        risultato = self._cerca("adcigala").json()["risultati"][0]
+        self.assertEqual(
+            set(risultato),
+            {"id", "nome", "cognome", "username", "email"},
+        )
+        self.assertEqual(risultato["cognome"], "Cigala")
+        self.assertEqual(risultato["email"], "ada.cigala@unimore.it")
+
+    def test_solo_docenti(self):
+        """Uno studente con un nome simile non deve comparire."""
+        studente = User.objects.create_user(
+            "adastudente", first_name="Ada", last_name="Rossi"
+        )
+        studente.groups.add(self.g_studente)
+
+        self.client.force_login(self.presidente)
+        ids = [r["id"] for r in self._cerca("Ada").json()["risultati"]]
+        self.assertIn(self.ada.pk, ids)
+        self.assertNotIn(studente.pk, ids)
+
+    def test_massimo_dieci_risultati(self):
+        for i in range(15):
+            u = User.objects.create_user(f"zztest{i}", last_name="Zzcognome")
+            u.groups.add(self.g_docente)
+
+        self.client.force_login(self.presidente)
+        self.assertEqual(len(self._cerca("Zzcognome").json()["risultati"]), 10)
+
+    def test_termine_troppo_corto(self):
+        """Con una lettera sola non si interroga il database."""
+        self.client.force_login(self.presidente)
+        self.assertEqual(self._cerca("a").json()["risultati"], [])
+
+    def test_nessun_risultato(self):
+        self.client.force_login(self.presidente)
+        self.assertEqual(self._cerca("inesistente").json()["risultati"], [])
+
+
+class CommissioneSenzaNomeTest(BaseSetup):
+    """La commissione si identifica con l'id: il nome non si mostra mai."""
+
+    def test_str_e_solo_il_numero(self):
+        c = Commissione.objects.create(nome="Un nome qualsiasi")
+        self.assertEqual(str(c), str(c.pk))
+
+    def test_commissione_creata_dal_form_non_ha_nome(self):
+        presidente = User.objects.create_user("pres2", password="pw")
+        presidente.groups.add(self.g_docente, Group.objects.get(name="presidente"))
+        nuovo = User.objects.create_user("doc_nuovo", password="pw")
+        nuovo.groups.add(self.g_docente)
+
+        self.client.force_login(presidente)
+        self.client.post(reverse("appelli:crea_appello"), {
+            "corso_di_laurea": "Matematica",
+            "data": "2032-03-03",
+            "ora": "09:00",
+            "docenti": [nuovo.pk],
+        })
+        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Matematica")
+        self.assertEqual(appello.commissione.nome, "")
+
+    def test_il_nome_non_compare_nelle_pagine(self):
+        Commissione.objects.filter(pk=self.commissione.pk).update(
+            nome="NOMESEGRETO"
+        )
+        self.client.force_login(self.docente)
+        for url in (
+            reverse("appelli:docente_dashboard"),
+            reverse("appelli:appello_detail", args=[self.appello.id]),
+        ):
+            with self.subTest(url=url):
+                self.assertNotContains(self.client.get(url), "NOMESEGRETO")
+
+    def test_dashboard_non_nomina_la_commissione(self):
+        """Nelle tabelle non deve restare traccia della commissione."""
+        self.client.force_login(self.docente)
+        resp = self.client.get(reverse("appelli:docente_dashboard"))
+        testo = resp.content.decode()
+        self.assertNotIn("<th>Commissione</th>", testo)
+        self.assertIn("Vedi dettagli", testo)
+        self.assertNotIn("Vedi iscritti", testo)
+
+    def test_dettaglio_mostra_i_membri_non_l_identificativo(self):
+        """L'unico punto in cui la commissione compare: come elenco di persone."""
+        self.docente.first_name = "Marco"
+        self.docente.last_name = "Rossi"
+        self.docente.email = "marco.rossi@unimore.it"
+        self.docente.save()
+
+        self.client.force_login(self.docente)
+        resp = self.client.get(
+            reverse("appelli:appello_detail", args=[self.appello.id])
+        )
+        self.assertContains(resp, "Marco Rossi")
+        self.assertContains(resp, "marco.rossi@unimore.it")
+        # niente identificativo della commissione in pagina
+        self.assertNotContains(resp, f"Commissione #{self.commissione.pk}")
+
+
+class DashboardUnificataTest(BaseSetup):
+    """Docente e presidente vedono la stessa pagina, con o senza il pulsante."""
+
+    def setUp(self):
+        super().setUp()
+        self.presidente = User.objects.create_user("pres3", password="pw")
+        self.presidente.groups.add(
+            self.g_docente, Group.objects.get(name="presidente")
+        )
+
+    def test_docente_vede_i_propri_appelli_e_gli_altri(self):
+        altra = Commissione.objects.create()
+        estraneo = AppelloDiLaurea.objects.create(
+            data=datetime.date(2030, 5, 5),
+            corso_di_laurea="Fisica",
+            commissione=altra,
+        )
+        self.client.force_login(self.docente)
+        resp = self.client.get(reverse("appelli:docente_dashboard"))
+        self.assertIn(self.appello, list(resp.context["miei_appelli"]))
+        self.assertIn(estraneo, list(resp.context["altri_appelli"]))
+        self.assertNotIn(estraneo, list(resp.context["miei_appelli"]))
+
+    def test_docente_non_vede_il_pulsante_crea(self):
+        self.client.force_login(self.docente)
+        resp = self.client.get(reverse("appelli:docente_dashboard"))
+        self.assertFalse(resp.context["puo_creare_appelli"])
+        self.assertNotContains(resp, "Crea un nuovo appello")
+
+    def test_presidente_vede_la_stessa_pagina_piu_il_pulsante(self):
+        self.client.force_login(self.presidente)
+        resp = self.client.get(reverse("appelli:presidente_dashboard"))
+        self.assertTemplateUsed(resp, "appelli/docente_dashboard.html")
+        self.assertTrue(resp.context["puo_creare_appelli"])
+        self.assertContains(resp, "Crea un nuovo appello")
+        # e conserva le due tabelle del docente
+        self.assertIn("miei_appelli", resp.context)
+        self.assertIn("altri_appelli", resp.context)
+
+
+class ErroreDocentiMancantiTest(BaseSetup):
+    """Creare un appello senza membri deve dirlo chiaramente."""
+
+    def test_messaggio_in_un_alert(self):
+        presidente = User.objects.create_user("pres4", password="pw")
+        presidente.groups.add(self.g_docente, Group.objects.get(name="presidente"))
+        self.client.force_login(presidente)
+
+        resp = self.client.post(reverse("appelli:crea_appello"), {
+            "corso_di_laurea": "Informatica",
+            "data": "2033-01-10",
+            "ora": "09:00",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Seleziona almeno un membro della commissione")
+        self.assertContains(resp, "alert alert-danger")
+
+
+class RitornoDaDettaglioTest(BaseSetup):
+    """"Torna indietro" deve riportare nell'area da cui si proviene."""
+
+    def setUp(self):
+        super().setUp()
+        self.presidente = User.objects.create_user("pres5", password="pw")
+        self.presidente.groups.add(
+            self.g_docente, Group.objects.get(name="presidente")
+        )
+        self.commissione.docenti.add(self.presidente)
+        self.url = reverse("appelli:appello_detail", args=[self.appello.id])
+
+    def test_docente_torna_all_area_docente(self):
+        self.client.force_login(self.docente)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.context["url_ritorno"], "appelli:docente_dashboard")
+        self.assertContains(resp, reverse("appelli:docente_dashboard"))
+
+    def test_presidente_torna_all_area_presidente(self):
+        self.client.force_login(self.presidente)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.context["url_ritorno"], "appelli:presidente_dashboard")
+        self.assertContains(resp, reverse("appelli:presidente_dashboard"))
+        self.assertNotContains(resp, reverse("appelli:docente_dashboard"))
+
+
+class ConfermaUscitaCreaAppelloTest(BaseSetup):
+    """La pagina di creazione avvisa prima di uscire senza salvare."""
+
+    def test_modale_e_pulsanti_presenti(self):
+        presidente = User.objects.create_user("pres6", password="pw")
+        presidente.groups.add(self.g_docente, Group.objects.get(name="presidente"))
+        self.client.force_login(presidente)
+
+        resp = self.client.get(reverse("appelli:crea_appello"))
+        testo = resp.content.decode()
+        self.assertIn('id="unsavedModal"', testo)
+        for etichetta in ("Rimani", "Esci senza salvare", "Salva ed esci"):
+            with self.subTest(pulsante=etichetta):
+                self.assertIn(etichetta, testo)
+        # I due modi di uscire (link in alto e pulsante Annulla) passano
+        # entrambi dal controllo. Si contano i tag <a>, non le occorrenze
+        # della stringa: una compare anche nel JavaScript.
+        import re
+        link = re.findall(r"<a\b[^>]*js-esci[^>]*>", testo)
+        self.assertEqual(len(link), 2, link)
