@@ -30,11 +30,29 @@
                     </div>
                 {% endif %}
 
+                {# Fuori dal form: il file non viene inviato con l'appello #}
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Elenco laureandi (.xlsx)</label>
+                    <div id="zona-drop" class="zona-drop">
+                        <i class="bi bi-file-earmark-spreadsheet fs-3 text-success d-block mb-1"></i>
+                        <span id="etichetta-file">Trascina qui il file, oppure fai clic per sceglierlo</span>
+                        <input type="file" id="file-xlsx" accept=".xlsx" hidden>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary mt-2" id="btn-carica-dati">
+                        <i class="bi bi-download me-1"></i>Carica dati
+                    </button>
+                    <div class="form-text">
+                        Compila il corso di laurea e prepara l'elenco degli studenti
+                        da iscrivere.
+                    </div>
+                    <div id="esito-xlsx" class="mt-2" hidden></div>
+                </div>
+
                 <form method="post" id="appello-form">
                     {% csrf_token %}
 
                     <div class="mb-3">
-                        <label for="{{ form.corso_di_laurea.id_for_label }}" class="form-label">
+                        <label for="{{ form.corso_di_laurea.id_for_label }}" class="form-labe fw-bold">
                             Corso di laurea
                         </label>
                         {{ form.corso_di_laurea }}
@@ -43,19 +61,19 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label for="{{ form.data.id_for_label }}" class="form-label">Data</label>
+                            <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">Data</label>
                             {{ form.data }}
                             {{ form.data.errors }}
                         </div>
                         <div class="col-sm-6">
-                            <label for="{{ form.ora.id_for_label }}" class="form-label">Orario</label>
+                            <label for="{{ form.ora.id_for_label }}" class="form-label fw-bold">Orario</label>
                             {{ form.ora }}
                             {{ form.ora.errors }}
                         </div>
                     </div>
 
                     <div class="mb-4">
-                        <label for="ricerca-docenti" class="form-label">
+                        <label for="ricerca-docenti" class="form-label fw-bold">
                             Membri della commissione
                         </label>
 
@@ -89,6 +107,19 @@
                             </p>
                             <div id="docenti-scelti"></div>
                         </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Studenti da iscrivere</label>
+                        <div id="studenti-hidden">{{ form.studenti }}</div>
+                        <div class="box-membri" id="box-studenti">
+                            <p class="text-muted text-center mb-0 py-3" id="nessuno-studente">
+                                <i class="bi bi-mortarboard me-1" aria-hidden="true"></i>
+                                Nessuno studente: carica l'elenco laureandi
+                            </p>
+                            <div id="studenti-scelti"></div>
+                        </div>
+                        {{ form.studenti.errors }}
                     </div>
 
                     <div class="d-flex flex-column flex-sm-row gap-2">
@@ -149,6 +180,19 @@
         background: #fbfbfc;
     }
     .box-membri.pieno { border-style: solid; }
+    .zona-drop {
+        border: 2px dashed var(--line);
+        border-radius: .6rem;
+        padding: 1.25rem;
+        text-align: center;
+        cursor: pointer;
+        background: #fbfbfc;
+        color: var(--muted);
+        transition: border-color .15s ease, background .15s ease;
+    }
+    .zona-drop:hover { border-color: #1b8754; }
+    .zona-drop.sopra { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+    .zona-drop.con-file { border-style: solid; color: var(--ink); }
     .membro {
         display: flex;
         align-items: center;
@@ -165,6 +209,7 @@
 </style>
 
 {{ form.docenti_selezionati|json_script:"docenti-iniziali" }}
+{{ form.studenti_selezionati|json_script:"studenti-iniziali" }}
 
 <script>
 (function () {
@@ -325,6 +370,165 @@
     }
     disegnaScelti();
 
+    // --- Caricamento dell'elenco laureandi (.xlsx) -----------------------
+    var URL_XLSX = "{% url 'appelli:analizza_xlsx' %}";
+    var zona = document.getElementById('zona-drop');
+    var inputFile = document.getElementById('file-xlsx');
+    var etichettaFile = document.getElementById('etichetta-file');
+    var btnCarica = document.getElementById('btn-carica-dati');
+    var esito = document.getElementById('esito-xlsx');
+    var elencoStudenti = document.getElementById('studenti-scelti');
+    var hiddenStudenti = document.getElementById('studenti-hidden');
+    var nessunoStudente = document.getElementById('nessuno-studente');
+    var boxStudenti = document.getElementById('box-studenti');
+    var studenti = [];
+
+    function messaggio(testo, tipo) {
+        esito.className = 'mt-2 alert alert-' + tipo + ' shadow-sm';
+        esito.setAttribute('role', 'alert');
+        esito.textContent = testo;
+        esito.hidden = false;
+    }
+
+    function disegnaStudenti() {
+        elencoStudenti.textContent = '';
+        hiddenStudenti.textContent = '';
+        studenti.forEach(function (d) {
+            var riga = document.createElement('div');
+            riga.className = 'membro';
+
+            var icona = document.createElement('i');
+            icona.className = 'bi bi-mortarboard-fill membro-icona';
+            icona.setAttribute('aria-hidden', 'true');
+
+            var testo = document.createElement('div');
+            testo.className = 'membro-testo';
+            var r1 = document.createElement('div');
+            r1.className = 'riga-docente-nome text-truncate';
+            r1.textContent = nomeCompleto(d);
+            var r2 = document.createElement('div');
+            r2.className = 'riga-docente-mail text-truncate';
+            r2.textContent = d.email || '';
+            testo.appendChild(r1);
+            testo.appendChild(r2);
+
+            var togli = document.createElement('button');
+            togli.type = 'button';
+            togli.className = 'btn btn-sm btn-danger membro-rimuovi';
+            togli.setAttribute('aria-label', 'Togli ' + nomeCompleto(d));
+            togli.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+            togli.addEventListener('click', function () {
+                studenti = studenti.filter(function (x) { return x.id !== d.id; });
+                disegnaStudenti();
+            });
+
+            riga.appendChild(icona);
+            riga.appendChild(testo);
+            riga.appendChild(togli);
+            elencoStudenti.appendChild(riga);
+
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'studenti';
+            hidden.value = d.id;
+            hiddenStudenti.appendChild(hidden);
+        });
+        nessunoStudente.hidden = studenti.length > 0;
+        boxStudenti.classList.toggle('pieno', studenti.length > 0);
+    }
+
+    function fileScelto(file) {
+        if (!file) return;
+        inputFile._file = file;
+        etichettaFile.textContent = file.name;
+        zona.classList.add('con-file');
+        esito.hidden = true;
+    }
+
+    if (zona) {
+        zona.addEventListener('click', function () { inputFile.click(); });
+        inputFile.addEventListener('change', function () {
+            fileScelto(inputFile.files[0]);
+        });
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            zona.addEventListener(ev, function (e) {
+                e.preventDefault(); zona.classList.add('sopra');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            zona.addEventListener(ev, function (e) {
+                e.preventDefault(); zona.classList.remove('sopra');
+            });
+        });
+        zona.addEventListener('drop', function (e) {
+            var f = e.dataTransfer.files[0];
+            if (!f) return;
+            // Si porta il file anche nell'input, cosi' resta una sola fonte.
+            try {
+                var dt = new DataTransfer();
+                dt.items.add(f);
+                inputFile.files = dt.files;
+            } catch (err) { /* browser senza DataTransfer: si usa _file */ }
+            fileScelto(f);
+        });
+    }
+
+    if (btnCarica) {
+        btnCarica.addEventListener('click', function () {
+            var file = (inputFile.files && inputFile.files[0]) || inputFile._file;
+            if (!file) {
+                messaggio('Scegli prima un file .xlsx.', 'warning');
+                return;
+            }
+            var dati = new FormData();
+            dati.append('file', file);
+            btnCarica.disabled = true;
+            messaggio('Lettura del file in corso…', 'info');
+
+            fetch(URL_XLSX, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value || ''
+                },
+                credentials: 'same-origin',
+                body: dati
+            })
+            .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
+            .then(function (res) {
+                btnCarica.disabled = false;
+                if (!res.ok) {
+                    messaggio(res.j.errore || 'Lettura non riuscita.', 'danger');
+                    return;
+                }
+                var corso = document.getElementById('id_corso_di_laurea');
+                if (corso && res.j.corso) corso.value = res.j.corso;
+                studenti = res.j.studenti || [];
+                disegnaStudenti();
+
+                var righe = ['Trovati ' + studenti.length + ' studenti su ' +
+                             res.j.totale_nel_file + ' presenti nel file.'];
+                if ((res.j.mancanti || []).length) {
+                    righe.push('Non ancora registrati nel sistema e quindi non ' +
+                               'iscrivibili: ' + res.j.mancanti.join(', ') + '.');
+                }
+                messaggio(righe.join(' '),
+                          (res.j.mancanti || []).length ? 'warning' : 'success');
+            })
+            .catch(function () {
+                btnCarica.disabled = false;
+                messaggio('Errore di rete durante la lettura del file.', 'danger');
+            });
+        });
+    }
+
+    var studentiIniziali = document.getElementById('studenti-iniziali');
+    if (studentiIniziali) {
+        try { studenti = JSON.parse(studentiIniziali.textContent) || []; }
+        catch (e) { studenti = []; }
+    }
+    disegnaStudenti();
+
     // --- Conferma all'uscita se ci sono modifiche non salvate ------------
     // Si confronta lo stato iniziale del form con quello attuale: cosi' vale
     // per corso, data, orario e membri senza doverli elencare a mano.
@@ -332,6 +536,7 @@
 
     function istantanea() {
         var parti = scelti.map(function (d) { return d.id; }).sort();
+        parti = parti.concat(studenti.map(function (d) { return 's' + d.id; }).sort());
         form.querySelectorAll('input[type="text"], input[type="date"], input[type="time"]')
             .forEach(function (i) {
                 if (i.id !== 'ricerca-docenti') parti.push(i.name + '=' + i.value);

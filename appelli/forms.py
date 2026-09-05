@@ -10,7 +10,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import UploadedFile
 from django.template.defaultfilters import filesizeformat
 
-from thesis_submission.assign_user import GRUPPO_DOCENTE
+from thesis_submission.assign_user import GRUPPO_DOCENTE, GRUPPO_STUDENTE
 
 from .models import (
     FORMATI_VIDEO,
@@ -266,6 +266,13 @@ class AppelloForm(forms.ModelForm):
         },
     )
 
+    studenti = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),          # popolato in __init__
+        required=False,
+        label="Studenti da iscrivere",
+        widget=forms.MultipleHiddenInput,
+    )
+
     class Meta:
         model = AppelloDiLaurea
         fields = ["corso_di_laurea", "data", "ora"]
@@ -288,6 +295,9 @@ class AppelloForm(forms.ModelForm):
             .order_by("last_name", "first_name", "username")
             .distinct()
         )
+        self.fields["studenti"].queryset = User.objects.filter(
+            groups__name=GRUPPO_STUDENTE
+        ).distinct()
         # L'orario e' facoltativo nel modello, ma un appello creato qui ha
         # senso che ce l'abbia: si chiede sempre.
         self.fields["ora"].required = True
@@ -315,6 +325,26 @@ class AppelloForm(forms.ModelForm):
                 "email": u.email,
             }
             for u in self.fields["docenti"].queryset.filter(pk__in=ids)
+        ]
+
+    def studenti_selezionati(self):
+        """Studenti attualmente in elenco, come dati pronti per il template."""
+        if not self.is_bound:
+            valori = self.initial.get("studenti") or []
+        else:
+            valori = self.data.getlist(self.add_prefix("studenti"))
+        if not valori:
+            return []
+        ids = [v.pk if hasattr(v, "pk") else v for v in valori]
+        return [
+            {
+                "id": u.pk,
+                "nome": u.first_name,
+                "cognome": u.last_name,
+                "username": u.get_username(),
+                "email": u.email,
+            }
+            for u in self.fields["studenti"].queryset.filter(pk__in=ids)
         ]
 
     def clean(self):
@@ -372,7 +402,16 @@ class AppelloForm(forms.ModelForm):
             commissione.docenti.set(docenti)
 
         self.instance.commissione = commissione
-        return super().save(commit=True)
+        appello = super().save(commit=True)
+
+        # Iscrizioni prese dall'elenco xlsx. get_or_create e non create: se il
+        # form viene reinviato (doppio click, ricarica) non deve fallire sul
+        # vincolo di unicita' studente+appello.
+        for studente in self.cleaned_data.get("studenti") or []:
+            StudenteAppelloDiLaurea.objects.get_or_create(
+                studente=studente, appello=appello
+            )
+        return appello
 
 
 def commissione_esistente_con(docenti):

@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import filesizeformat
 
 from .forms import MAX_BYTE_VIDEO, AppelloForm, TesiUploadForm
+from .xlsx import MAX_BYTE_XLSX, ErroreXlsx, leggi_elenco
 from .models import (
     FORMATI_VIDEO,
     ORDINE_APPELLI,
@@ -135,35 +136,6 @@ def studente_dashboard(request):
             "appelli_disponibili": appelli_disponibili,
         },
     )
-
-
-@login_required
-def iscriviti(request, appello_id):
-    """Iscrive lo studente a un appello.
-
-    L'iscrizione non e' annullabile dallo studente (non esiste alcun percorso
-    di disiscrizione): un ripensamento va gestito dalla segreteria, come
-    indicato nel messaggio di conferma.
-    """
-    # Il vincolo "solo gli studenti si iscrivono" e' applicato qui, lato view.
-    if not is_studente(request.user):
-        raise PermissionDenied("Solo gli studenti possono iscriversi a un appello.")
-    if request.method != "POST":
-        return redirect("appelli:studente_dashboard")
-
-    appello = get_object_or_404(AppelloDiLaurea, pk=appello_id)
-    iscrizione, created = StudenteAppelloDiLaurea.objects.get_or_create(
-        studente=request.user, appello=appello
-    )
-    if created:
-        messages.success(
-            request,
-            f"Iscrizione a «{appello.etichetta_pubblica}» effettuata. "
-            "Per annullarla rivolgiti alla segreteria.",
-        )
-    else:
-        messages.info(request, f"Sei gia' iscritto a «{appello.etichetta_pubblica}».")
-    return redirect("appelli:studente_dashboard")
 
 
 @login_required
@@ -401,6 +373,71 @@ def cerca_docenti(request):
         for u in docenti[:MAX_RISULTATI_RICERCA]
     ]
     return JsonResponse({"risultati": risultati})
+
+
+@login_required
+def analizza_xlsx(request):
+    """Legge l'elenco laureandi caricato e risponde con corso e studenti.
+
+    Non salva niente: serve solo a compilare il form di creazione. L'appello
+    e le iscrizioni nascono quando il presidente conferma.
+    """
+    if not is_presidente(request.user):
+        raise PermissionDenied("Solo il presidente può caricare l'elenco.")
+    if not _richiesta_interna(request):
+        raise PermissionDenied("Questo endpoint è riservato all'applicazione.")
+    if request.method != "POST":
+        return JsonResponse({"errore": "Metodo non consentito."}, status=405)
+
+    file_caricato = request.FILES.get("file")
+    if not file_caricato:
+        return JsonResponse({"errore": "Nessun file ricevuto."}, status=400)
+    if not file_caricato.name.lower().endswith(".xlsx"):
+        return JsonResponse(
+            {"errore": "Il file deve essere in formato .xlsx."}, status=400
+        )
+    if file_caricato.size > MAX_BYTE_XLSX:
+        return JsonResponse(
+            {"errore": "Il file è troppo grande per essere un elenco laureandi."},
+            status=400,
+        )
+
+    try:
+        corso, email = leggi_elenco(file_caricato)
+    except ErroreXlsx as exc:
+        return JsonResponse({"errore": str(exc)}, status=400)
+
+    # Gli studenti si riconoscono dall'email: chi non e' gia' nel database non
+    # puo' essere iscritto, e va segnalato al presidente invece di sparire.
+    utenti = {
+        u.email.lower(): u
+        for u in User.objects.filter(groups__name="studente", email__in=email)
+    }
+
+    trovati, mancanti = [], []
+    for indirizzo in email:
+        utente = utenti.get(indirizzo)
+        if utente:
+            trovati.append(
+                {
+                    "id": utente.pk,
+                    "nome": utente.first_name,
+                    "cognome": utente.last_name,
+                    "username": utente.get_username(),
+                    "email": utente.email,
+                }
+            )
+        else:
+            mancanti.append(indirizzo)
+
+    return JsonResponse(
+        {
+            "corso": corso,
+            "studenti": trovati,
+            "mancanti": mancanti,
+            "totale_nel_file": len(email),
+        }
+    )
 
 
 # --- Download protetto del file della tesi ---------------------------------

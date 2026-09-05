@@ -95,7 +95,6 @@
                             <th>Corso di laurea</th>
                             <th>Data</th>
                             <th>Orario</th>
-                            <th class="text-end">Azioni</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -107,19 +106,6 @@
                                     {% if appello.ora %}{{ appello.ora|time:"H:i" }}{% else %}
                                         <span class="text-muted small">da definire</span>
                                     {% endif %}
-                                </td>
-                                <td class="text-end cell-actions" data-label="Azioni">
-                                    {# js-confirm: l'iscrizione non si annulla, quindi va confermata #}
-                                    <form method="post"
-                                          action="{% url 'appelli:iscriviti' appello.id %}"
-                                          class="js-confirm m-0"
-                                          data-confirm-title="Conferma iscrizione"
-                                          data-confirm-body="Vuoi iscriverti all'appello «{{ appello.etichetta_pubblica }}»? L'iscrizione non è annullabile in autonomia."
-                                          data-confirm-ok="Iscriviti"
-                                          data-confirm-variant="btn-primary">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-primary">Iscriviti</button>
-                                    </form>
                                 </td>
                             </tr>
                         {% endfor %}

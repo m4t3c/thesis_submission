@@ -17,7 +17,6 @@ urlpatterns = [
     path("shibboleth/test/", views.shibboleth_test, name="shibboleth_test"),
     # Area studente
     path("studente/", views.studente_dashboard, name="studente_dashboard"),
-    path("appelli/<int:appello_id>/iscriviti/", views.iscriviti, name="iscriviti"),
     path(
         "iscrizioni/<int:iscrizione_id>/carica-tesi/",
         views.carica_tesi,
@@ -27,6 +26,7 @@ urlpatterns = [
     path("presidente/", views.presidente_dashboard, name="presidente_dashboard"),
     path("appelli/nuovo/", views.crea_appello, name="crea_appello"),
     path("api/docenti/", views.cerca_docenti, name="cerca_docenti"),
+    path("api/elenco-xlsx/", views.analizza_xlsx, name="analizza_xlsx"),
     # Area docente
     path("docente/", views.docente_dashboard, name="docente_dashboard"),
     path("appelli/<int:appello_id>/", views.appello_detail, name="appello_detail"),

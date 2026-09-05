@@ -69,29 +69,31 @@ class RuoliTest(BaseSetup):
         self.assertEqual(resp.status_code, 403)
 
 
-class IscrizioneTest(BaseSetup):
-    """All'appello si iscrivono gli studenti, e nessun altro."""
+class IscrizioneManualeRimossaTest(BaseSetup):
+    """Ci si iscrive solo tramite l'elenco caricato dal presidente."""
 
-    def test_studente_si_iscrive(self):
+    def test_rotta_inesistente(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("appelli:iscriviti", args=[self.appello.id])
+
+    def test_nessun_endpoint_di_iscrizione_risponde(self):
         self.client.force_login(self.studente)
-        resp = self.client.post(
-            reverse("appelli:iscriviti", args=[self.appello.id])
-        )
-        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
-        self.assertTrue(
-            StudenteAppelloDiLaurea.objects.filter(
-                studente=self.studente, appello=self.appello
-            ).exists()
-        )
-
-    def test_docente_non_si_iscrive(self):
-        # Vincolo applicato lato view: il docente non puo' iscriversi.
-        self.client.force_login(self.docente)
-        resp = self.client.post(
-            reverse("appelli:iscriviti", args=[self.appello.id])
-        )
-        self.assertEqual(resp.status_code, 403)
+        for percorso in (
+            f"/appelli/{self.appello.id}/iscriviti/",
+            f"/appelli/{self.appello.id}/iscriviti",
+        ):
+            with self.subTest(percorso=percorso):
+                self.assertEqual(self.client.post(percorso).status_code, 404)
         self.assertFalse(StudenteAppelloDiLaurea.objects.exists())
+
+    def test_dashboard_senza_pulsante_iscriviti(self):
+        self.client.force_login(self.studente)
+        testo = self.client.get(
+            reverse("appelli:studente_dashboard")
+        ).content.decode()
+        self.assertNotIn("Iscriviti", testo)
+        # L'elenco degli appelli disponibili resta comunque visibile
+        self.assertIn("Appelli disponibili", testo)
 
 
 class DisiscrizioneRimossaTest(BaseSetup):
@@ -332,25 +334,15 @@ class UnicitaAppelloTest(BaseSetup):
         self.assertNotIn("Commissione A", testo)
         self.assertNotIn("Commissione B", testo)
 
-        # E si puo' iscrivere proprio a quello scelto.
-        self.client.post(reverse("appelli:iscriviti", args=[secondo.id]))
-        self.assertTrue(
-            StudenteAppelloDiLaurea.objects.filter(
-                studente=self.studente, appello=secondo
-            ).exists()
-        )
+        # L'orario resta l'unico elemento che li distingue.
+        self.assertIn(secondo.ora.strftime("%H:%M"), testo)
 
-    def test_messaggi_allo_studente_senza_commissione(self):
-        """I messaggi delle view usano etichetta_pubblica, non __str__."""
+    def test_pagine_dello_studente_senza_commissione(self):
+        """Le pagine dello studente non nominano mai la commissione."""
+        StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
         self.client.force_login(self.studente)
-
-        resp = self.client.post(
-            reverse("appelli:iscriviti", args=[self.appello.id]), follow=True
-        )
-        testo = resp.content.decode()
-        self.assertIn("Iscrizione a", testo)
-        self.assertNotIn("Commissione A", testo)
-
         resp = self.client.get(reverse("appelli:studente_dashboard"))
         self.assertNotIn("Commissione A", resp.content.decode())
 
@@ -1238,3 +1230,258 @@ class ConfermaUscitaCreaAppelloTest(BaseSetup):
         import re
         link = re.findall(r"<a\b[^>]*js-esci[^>]*>", testo)
         self.assertEqual(len(link), 2, link)
+
+
+def _xlsx(intestazioni, righe):
+    """Crea in memoria un xlsx con le colonne e i dati richiesti.
+
+    I file veri contengono nomi ed email di studenti reali: qui si generano
+    fogli sintetici, che restano nel repository senza dati personali.
+    """
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    libro = Workbook()
+    foglio = libro.active
+    foglio.append(list(intestazioni))
+    for r in righe:
+        foglio.append(list(r))
+    buffer = BytesIO()
+    libro.save(buffer)
+    buffer.seek(0)
+    return SimpleUploadedFile(
+        "elenco.xlsx",
+        buffer.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# Le due varianti di intestazione realmente incontrate nei file di ateneo.
+COLONNE_FORMATO_A = ["matricola", "CORSO", "cognome", "nome", "email", "ate"]
+COLONNE_FORMATO_B = [
+    "p06_cds_des", "p04_mat_matricola", "p01_anaper_cognome",
+    "p01_anaper_nome", "p01_anaper_email", "p01_anaper_email_ate",
+]
+
+
+class LetturaXlsxTest(TestCase):
+    """Il parser deve reggere entrambi i formati di estrazione."""
+
+    def test_formato_con_colonne_brevi(self):
+        from appelli.xlsx import leggi_elenco
+
+        f = _xlsx(COLONNE_FORMATO_A, [
+            ["1", "Ingegneria Informatica (MO)", "Rossi", "Mario",
+             "mario@gmail.com", "111@studenti.unimore.it"],
+        ])
+        corso, email = leggi_elenco(f)
+        self.assertEqual(corso, "Ingegneria Informatica (MO)")
+        self.assertEqual(email, ["111@studenti.unimore.it"])
+
+    def test_formato_con_colonne_prefissate(self):
+        from appelli.xlsx import leggi_elenco
+
+        f = _xlsx(COLONNE_FORMATO_B, [
+            ["Artificial intelligence engineering", "1", "Rossi", "Mario",
+             "mario@gmail.com", "111@studenti.unimore.it"],
+        ])
+        corso, email = leggi_elenco(f)
+        self.assertEqual(corso, "Artificial intelligence engineering")
+        self.assertEqual(email, ["111@studenti.unimore.it"])
+
+    def test_prende_l_email_di_ateneo_non_quella_personale(self):
+        """La colonna «email» esiste in entrambi i formati e non va usata."""
+        from appelli.xlsx import leggi_elenco
+
+        f = _xlsx(COLONNE_FORMATO_A, [
+            ["1", "Informatica", "Rossi", "Mario",
+             "personale@gmail.com", "111@studenti.unimore.it"],
+        ])
+        _corso, email = leggi_elenco(f)
+        self.assertEqual(email, ["111@studenti.unimore.it"])
+
+    def test_righe_vuote_ignorate(self):
+        """I file reali hanno righe vuote in coda al foglio."""
+        from appelli.xlsx import leggi_elenco
+
+        f = _xlsx(COLONNE_FORMATO_A, [
+            ["1", "Informatica", "Rossi", "Mario", "a@g.it", "111@studenti.unimore.it"],
+            [None, None, None, None, None, None],
+            [None, None, None, None, None, None],
+        ])
+        _corso, email = leggi_elenco(f)
+        self.assertEqual(email, ["111@studenti.unimore.it"])
+
+    def test_duplicati_rimossi(self):
+        from appelli.xlsx import leggi_elenco
+
+        f = _xlsx(COLONNE_FORMATO_A, [
+            ["1", "Informatica", "Rossi", "Mario", "a@g.it", "111@studenti.unimore.it"],
+            ["1", "Informatica", "Rossi", "Mario", "a@g.it", "111@studenti.unimore.it"],
+        ])
+        _corso, email = leggi_elenco(f)
+        self.assertEqual(email, ["111@studenti.unimore.it"])
+
+    def test_senza_colonna_email_errore_chiaro(self):
+        from appelli.xlsx import ErroreXlsx, leggi_elenco
+
+        f = _xlsx(["matricola", "CORSO", "cognome"], [["1", "Informatica", "Rossi"]])
+        with self.assertRaises(ErroreXlsx) as ctx:
+            leggi_elenco(f)
+        self.assertIn("email di ateneo", str(ctx.exception))
+
+    def test_senza_colonna_corso_errore_chiaro(self):
+        from appelli.xlsx import ErroreXlsx, leggi_elenco
+
+        f = _xlsx(["matricola", "cognome", "ate"],
+                  [["1", "Rossi", "111@studenti.unimore.it"]])
+        with self.assertRaises(ErroreXlsx) as ctx:
+            leggi_elenco(f)
+        self.assertIn("corso di laurea", str(ctx.exception))
+
+    def test_file_non_xlsx_errore_chiaro(self):
+        from appelli.xlsx import ErroreXlsx, leggi_elenco
+
+        finto = SimpleUploadedFile("elenco.xlsx", b"non sono un foglio di calcolo")
+        with self.assertRaises(ErroreXlsx):
+            leggi_elenco(finto)
+
+
+@override_settings(MIDDLEWARE=list(settings.MIDDLEWARE))
+class CaricamentoElencoTest(BaseSetup):
+    """Endpoint che legge l'elenco e prepara il form di creazione."""
+
+    AJAX = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
+
+    def setUp(self):
+        super().setUp()
+        self.presidente = User.objects.create_user("pres_x", password="pw")
+        self.presidente.groups.add(
+            self.g_docente, Group.objects.get(name="presidente")
+        )
+        self.url = reverse("appelli:analizza_xlsx")
+
+        self.iscritto = User.objects.create_user(
+            "s111", email="111@studenti.unimore.it",
+            first_name="Mario", last_name="Rossi",
+        )
+        self.iscritto.groups.add(self.g_studente)
+
+    def _invia(self, file, utente=None):
+        self.client.force_login(utente or self.presidente)
+        return self.client.post(self.url, {"file": file}, **self.AJAX)
+
+    def _elenco(self, email=("111@studenti.unimore.it",), corso="Informatica"):
+        return _xlsx(
+            COLONNE_FORMATO_A,
+            [["1", corso, "Rossi", "Mario", "p@g.it", e] for e in email],
+        )
+
+    # --- Accesso ---------------------------------------------------------
+
+    def test_docente_semplice_non_accede(self):
+        resp = self._invia(self._elenco(), utente=self.docente)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_studente_non_accede(self):
+        resp = self._invia(self._elenco(), utente=self.studente)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_senza_header_ajax_rifiutato(self):
+        self.client.force_login(self.presidente)
+        resp = self.client.post(self.url, {"file": self._elenco()})
+        self.assertEqual(resp.status_code, 403)
+
+    # --- Lettura ---------------------------------------------------------
+
+    def test_corso_e_studenti_riconosciuti(self):
+        resp = self._invia(self._elenco())
+        self.assertEqual(resp.status_code, 200)
+        dati = resp.json()
+        self.assertEqual(dati["corso"], "Informatica")
+        self.assertEqual([s["id"] for s in dati["studenti"]], [self.iscritto.pk])
+        self.assertEqual(dati["mancanti"], [])
+
+    def test_studente_non_registrato_segnalato(self):
+        """Chi non e' nel database non si puo' iscrivere: va detto, non nascosto."""
+        resp = self._invia(self._elenco(
+            email=("111@studenti.unimore.it", "999@studenti.unimore.it")
+        ))
+        dati = resp.json()
+        self.assertEqual([s["id"] for s in dati["studenti"]], [self.iscritto.pk])
+        self.assertEqual(dati["mancanti"], ["999@studenti.unimore.it"])
+        self.assertEqual(dati["totale_nel_file"], 2)
+
+    def test_un_docente_nel_file_non_diventa_iscritto(self):
+        """Solo chi e' nel gruppo studente puo' essere iscritto."""
+        self.docente.email = "prof@unimore.it"
+        self.docente.save()
+        resp = self._invia(self._elenco(email=("prof@unimore.it",)))
+        dati = resp.json()
+        self.assertEqual(dati["studenti"], [])
+        self.assertEqual(dati["mancanti"], ["prof@unimore.it"])
+
+    def test_file_non_xlsx_rifiutato(self):
+        resp = self._invia(SimpleUploadedFile("elenco.csv", b"a,b,c"))
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(".xlsx", resp.json()["errore"])
+
+    def test_senza_file(self):
+        self.client.force_login(self.presidente)
+        resp = self.client.post(self.url, {}, **self.AJAX)
+        self.assertEqual(resp.status_code, 400)
+
+
+class CreazioneAppelloConStudentiTest(BaseSetup):
+    """Gli studenti dell'elenco vengono iscritti insieme all'appello."""
+
+    def setUp(self):
+        super().setUp()
+        self.presidente = User.objects.create_user("pres_y", password="pw")
+        self.presidente.groups.add(
+            self.g_docente, Group.objects.get(name="presidente")
+        )
+        self.altro_studente = User.objects.create_user(
+            "s222", email="222@studenti.unimore.it"
+        )
+        self.altro_studente.groups.add(self.g_studente)
+        self.client.force_login(self.presidente)
+
+    def _crea(self, studenti):
+        return self.client.post(reverse("appelli:crea_appello"), {
+            "corso_di_laurea": "Ingegneria Informatica",
+            "data": "2032-06-10",
+            "ora": "09:00",
+            "docenti": [self.docente.pk],
+            "studenti": studenti,
+        })
+
+    def test_iscrizioni_create(self):
+        self._crea([self.studente.pk, self.altro_studente.pk])
+        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Ingegneria Informatica")
+        iscritti = set(
+            appello.iscrizioni.values_list("studente_id", flat=True)
+        )
+        self.assertEqual(iscritti, {self.studente.pk, self.altro_studente.pk})
+
+    def test_appello_senza_studenti_consentito(self):
+        """L'elenco puo' mancare: l'appello si crea comunque."""
+        resp = self._crea([])
+        self.assertRedirects(
+            resp,
+            reverse("appelli:presidente_dashboard"),
+            fetch_redirect_response=False,
+        )
+        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Ingegneria Informatica")
+        self.assertEqual(appello.iscrizioni.count(), 0)
+
+    def test_un_docente_non_puo_essere_iscritto(self):
+        """Il campo accetta solo utenti del gruppo studente."""
+        resp = self._crea([self.docente.pk])
+        self.assertEqual(resp.status_code, 200)   # form non valido
+        self.assertFalse(
+            AppelloDiLaurea.objects.filter(
+                corso_di_laurea="Ingegneria Informatica"
+            ).exists()
+        )
