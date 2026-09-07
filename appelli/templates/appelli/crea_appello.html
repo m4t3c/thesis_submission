@@ -34,6 +34,11 @@
                 <div class="mb-4">
                     <label class="form-label fw-bold">Elenco laureandi (.xlsx)</label>
                     <div id="zona-drop" class="zona-drop">
+                        <button type="button" id="rimuovi-file" class="rimuovi-file"
+                                aria-label="Rimuovi il file caricato"
+                                title="Rimuovi il file caricato" hidden>
+                            <i class="bi bi-x-circle-fill" aria-hidden="true"></i>
+                        </button>
                         <i class="bi bi-file-earmark-spreadsheet fs-3 text-success d-block mb-1"></i>
                         <span id="etichetta-file">Trascina qui il file, oppure fai clic per sceglierlo</span>
                         <input type="file" id="file-xlsx" accept=".xlsx" hidden>
@@ -41,15 +46,27 @@
                     <button type="button" class="btn btn-outline-primary mt-2" id="btn-carica-dati">
                         <i class="bi bi-download me-1"></i>Carica dati
                     </button>
+                    <div id="esito-xlsx" class="mt-2" hidden></div>
                     <div class="form-text">
-                        Compila il corso di laurea e prepara l'elenco degli studenti
+                        Carica i dati dal file poi compila il corso di laurea e prepara l'elenco degli studenti
                         da iscrivere.
                     </div>
-                    <div id="esito-xlsx" class="mt-2" hidden></div>
                 </div>
 
                 <form method="post" id="appello-form">
                     {% csrf_token %}
+
+                    <div class="alert alert-secondary shadow-sm" id="nota-blocco" role="status">
+                        <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>
+                        Carica l'elenco laureandi e premi "Carica dati" per compilare il modulo.
+                    </div>
+
+                    {% comment %}
+                    Se il modulo torna indietro con degli errori i dati del file
+                    sono gia' stati caricati: riaprirlo bloccato cancellerebbe
+                    quello che l'utente aveva compilato.
+                    {% endcomment %}
+                    <fieldset id="campi-appello" class="campi-appello"{% if not form.is_bound %} disabled{% endif %}>
 
                     <div class="mb-3">
                         <label for="{{ form.corso_di_laurea.id_for_label }}" class="form-labe fw-bold">
@@ -122,8 +139,11 @@
                         {{ form.studenti.errors }}
                     </div>
 
+                    </fieldset>
+
                     <div class="d-flex flex-column flex-sm-row gap-2">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" id="btn-crea-appello"
+                                {% if not form.is_bound %}disabled{% endif %}>
                             <i class="bi bi-check2"></i> Crea appello
                         </button>
                         <a class="btn btn-outline-secondary js-esci"
@@ -181,6 +201,8 @@
     }
     .box-membri.pieno { border-style: solid; }
     .zona-drop {
+        --verde-xlsx: #1b8754;
+        position: relative;
         border: 2px dashed var(--line);
         border-radius: .6rem;
         padding: 1.25rem;
@@ -188,11 +210,49 @@
         cursor: pointer;
         background: #fbfbfc;
         color: var(--muted);
-        transition: border-color .15s ease, background .15s ease;
+        transition: border-color .15s ease, background .15s ease, color .15s ease;
     }
-    .zona-drop:hover { border-color: #1b8754; }
-    .zona-drop.sopra { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
-    .zona-drop.con-file { border-style: solid; color: var(--ink); }
+    .zona-drop:hover { border-color: var(--verde-xlsx); }
+    .zona-drop.sopra {
+        border-color: var(--verde-xlsx);
+        background: #e8f5ee;
+        color: var(--verde-xlsx);
+    }
+    .zona-drop.con-file {
+        border-style: solid;
+        border-color: var(--verde-xlsx);
+        color: var(--ink);
+    }
+    /* La X sta dentro il riquadro, quindi il clic arriverebbe anche alla zona
+       e aprirebbe la finestra di scelta del file: il gestore lo ferma. */
+    .rimuovi-file {
+        position: absolute;
+        top: .35rem;
+        right: .45rem;
+        border: 0;
+        padding: 0;
+        line-height: 1;
+        font-size: 1.35rem;
+        background: transparent;
+        color: var(--muted);
+    }
+    .rimuovi-file:hover { color: var(--bs-danger); }
+    /* Un fieldset porta con se' bordo e margini propri: qui deve solo
+       raggruppare, non farsi vedere. */
+    .campi-appello { border: 0; padding: 0; margin: 0; min-width: 0; }
+    /* Niente opacita' su tutto il fieldset: sbiadirebbe anche il link
+       "Annulla", che invece resta cliccabile. I campi disabilitati li
+       ingrigisce gia' Bootstrap, e le etichette restano leggibili. */
+    .campi-appello[disabled] .form-label,
+    .campi-appello[disabled] .box-membri { color: var(--muted); }
+    /* Trascinamento di qualcosa che non e' un .xlsx: il riquadro diventa rosso
+       prima ancora del rilascio, cosi' l'utente sa che non verra' accettato. */
+    .zona-drop.rifiuta {
+        border-color: var(--bs-danger);
+        background: var(--bs-danger-bg-subtle);
+        color: var(--bs-danger-text-emphasis);
+        cursor: not-allowed;
+    }
     .membro {
         display: flex;
         align-items: center;
@@ -381,6 +441,10 @@
     var hiddenStudenti = document.getElementById('studenti-hidden');
     var nessunoStudente = document.getElementById('nessuno-studente');
     var boxStudenti = document.getElementById('box-studenti');
+    var btnRimuovi = document.getElementById('rimuovi-file');
+    var campiAppello = document.getElementById('campi-appello');
+    var notaBlocco = document.getElementById('nota-blocco');
+    var btnCrea = document.getElementById('btn-crea-appello');
     var studenti = [];
 
     function messaggio(testo, tipo) {
@@ -437,12 +501,107 @@
         boxStudenti.classList.toggle('pieno', studenti.length > 0);
     }
 
+    // Tipo MIME dei .xlsx: e' l'unica informazione che il browser espone
+    // durante il trascinamento, prima che il file venga rilasciato.
+    var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    var ETICHETTA_VUOTA = etichettaFile.textContent;
+    var NON_SUPPORTATO = 'File non supportato. L\u2019unico tipo di file accettato è un file xlsx.';
+    var UN_SOLO_FILE = 'Trascina un solo file xlsx per volta.';
+
+    function estensioneOk(nome) {
+        return /\.xlsx$/i.test(nome || '');
+    }
+
+    // Un file sbagliato non cancella quello valido gia' scelto: si svuota solo
+    // l'input, dove il browser ha appena messo il file sbagliato. Il file buono
+    // resta in _file, che e' anche quello che legge il pulsante "Carica dati".
+    function rifiutaFile(testo) {
+        inputFile.value = '';
+        if (!inputFile._file) {
+            etichettaFile.textContent = ETICHETTA_VUOTA;
+            zona.classList.remove('con-file');
+            btnRimuovi.hidden = true;
+        }
+        messaggio(testo, 'danger');
+    }
+
     function fileScelto(file) {
         if (!file) return;
+        if (!estensioneOk(file.name)) {
+            rifiutaFile(NON_SUPPORTATO);
+            return;
+        }
         inputFile._file = file;
         etichettaFile.textContent = file.name;
         zona.classList.add('con-file');
+        btnRimuovi.hidden = false;
         esito.hidden = true;
+    }
+
+    // Il modulo si apre solo quando i dati arrivano davvero dal file.
+    function bloccaCampi(bloccato) {
+        if (campiAppello) campiAppello.disabled = bloccato;
+        if (btnCrea) btnCrea.disabled = bloccato;
+        if (notaBlocco) notaBlocco.hidden = !bloccato;
+    }
+
+    // La X annulla il caricamento: se ne vanno il file e i dati che ne erano
+    // arrivati, quindi il modulo torna bloccato come all'apertura.
+    function annullaCaricamento() {
+        inputFile.value = '';
+        inputFile._file = null;
+        etichettaFile.textContent = ETICHETTA_VUOTA;
+        zona.classList.remove('con-file');
+        btnRimuovi.hidden = true;
+        esito.hidden = true;
+        studenti = [];
+        disegnaStudenti();
+        var corso = document.getElementById('id_corso_di_laurea');
+        if (corso) corso.value = '';
+        bloccaCampi(true);
+    }
+
+    // L'avviso mostrato durante il trascinamento e' provvisorio: se il file non
+    // viene poi rilasciato non e' successo niente, quindi il riquadro torna
+    // com'era invece di lasciare un errore che non riguarda il file caricato.
+    var statoPrimaDelTrascinamento = null;
+
+    function avvisoTrascinamento(testo) {
+        if (statoPrimaDelTrascinamento === null) {
+            statoPrimaDelTrascinamento = {
+                classe: esito.className,
+                testo: esito.textContent,
+                nascosto: esito.hidden
+            };
+        }
+        messaggio(testo, 'danger');
+    }
+
+    function fineTrascinamento() {
+        if (statoPrimaDelTrascinamento === null) return;
+        esito.className = statoPrimaDelTrascinamento.classe;
+        esito.textContent = statoPrimaDelTrascinamento.testo;
+        esito.hidden = statoPrimaDelTrascinamento.nascosto;
+        statoPrimaDelTrascinamento = null;
+    }
+
+    // In dragover il nome del file non e' leggibile: si guarda il tipo MIME,
+    // che pero' puo' essere vuoto. In quel caso si lascia passare e si
+    // controlla l'estensione al rilascio. Torna il motivo, o null se va bene.
+    function motivoRifiuto(dt) {
+        if (!dt || !dt.items || !dt.items.length) return null;
+        if (dt.items.length > 1) return UN_SOLO_FILE;
+        var elemento = dt.items[0];
+        if (elemento.kind !== 'file') return NON_SUPPORTATO;
+        if (elemento.type !== '' && elemento.type !== MIME_XLSX) return NON_SUPPORTATO;
+        return null;
+    }
+
+    if (btnRimuovi) {
+        btnRimuovi.addEventListener('click', function (e) {
+            e.stopPropagation();
+            annullaCaricamento();
+        });
     }
 
     if (zona) {
@@ -452,17 +611,39 @@
         });
         ['dragenter', 'dragover'].forEach(function (ev) {
             zona.addEventListener(ev, function (e) {
-                e.preventDefault(); zona.classList.add('sopra');
+                e.preventDefault();
+                var motivo = motivoRifiuto(e.dataTransfer);
+                if (e.dataTransfer) {
+                    e.dataTransfer.dropEffect = motivo ? 'none' : 'copy';
+                }
+                zona.classList.toggle('rifiuta', !!motivo);
+                zona.classList.toggle('sopra', !motivo);
+                // Con dropEffect 'none' il rilascio non avviene e l'evento
+                // 'drop' non arriva mai: l'errore va mostrato gia' qui.
+                if (motivo) { avvisoTrascinamento(motivo); }
+                else { fineTrascinamento(); }
             });
         });
         ['dragleave', 'drop'].forEach(function (ev) {
             zona.addEventListener(ev, function (e) {
-                e.preventDefault(); zona.classList.remove('sopra');
+                e.preventDefault();
+                zona.classList.remove('sopra');
+                zona.classList.remove('rifiuta');
+                fineTrascinamento();
             });
         });
         zona.addEventListener('drop', function (e) {
-            var f = e.dataTransfer.files[0];
-            if (!f) return;
+            var files = e.dataTransfer.files;
+            if (!files || !files.length) return;
+            if (files.length > 1) {
+                messaggio(UN_SOLO_FILE, 'danger');
+                return;
+            }
+            var f = files[0];
+            if (!estensioneOk(f.name)) {
+                messaggio(NON_SUPPORTATO, 'danger');
+                return;
+            }
             // Si porta il file anche nell'input, cosi' resta una sola fonte.
             try {
                 var dt = new DataTransfer();
@@ -505,6 +686,7 @@
                 if (corso && res.j.corso) corso.value = res.j.corso;
                 studenti = res.j.studenti || [];
                 disegnaStudenti();
+                bloccaCampi(false);
 
                 var righe = ['Trovati ' + studenti.length + ' studenti su ' +
                              res.j.totale_nel_file + ' presenti nel file.'];
@@ -521,6 +703,10 @@
             });
         });
     }
+
+    // Lo stato iniziale del fieldset lo decide il template: qui si allinea solo
+    // la nota che spiega il blocco.
+    bloccaCampi(campiAppello ? campiAppello.disabled : false);
 
     var studentiIniziali = document.getElementById('studenti-iniziali');
     if (studentiIniziali) {
