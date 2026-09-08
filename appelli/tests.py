@@ -13,6 +13,8 @@ import os
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
+from django.core import mail
+from django.core.mail.backends.base import BaseEmailBackend
 from django.db import IntegrityError, transaction
 from django.test import override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -1485,3 +1487,102 @@ class CreazioneAppelloConStudentiTest(BaseSetup):
                 corso_di_laurea="Ingegneria Informatica"
             ).exists()
         )
+
+
+class BackendPostaRotto(BaseEmailBackend):
+    """Server di posta che non risponde: serve a provare il caso peggiore."""
+
+    def send_messages(self, messaggi):
+        raise OSError("server di posta irraggiungibile")
+
+
+class AvvisiEmailTest(BaseSetup):
+    """Email mandate alla creazione di un appello."""
+
+    def setUp(self):
+        super().setUp()
+        self.g_presidente = Group.objects.get(name="presidente")
+        self.presidente = User.objects.create_user(
+            "presidente_test", password="pw", email="presidente@unimore.it"
+        )
+        self.presidente.groups.add(self.g_docente, self.g_presidente)
+
+        self.docente.email = "docente@unimore.it"
+        self.docente.save(update_fields=["email"])
+        self.studente.email = "111111@studenti.unimore.it"
+        self.studente.save(update_fields=["email"])
+
+        self.studente2 = User.objects.create_user(
+            "studente_test2", password="pw", email="222222@studenti.unimore.it"
+        )
+        self.studente2.groups.add(self.g_studente)
+
+        self.client.force_login(self.presidente)
+
+    def _crea(self, **extra):
+        dati = {
+            "corso_di_laurea": "Ingegneria Informatica",
+            "data": "2031-06-01",
+            "ora": "10:00",
+            "docenti": [self.docente.pk, self.presidente.pk],
+            "studenti": [self.studente.pk, self.studente2.pk],
+        }
+        dati.update(extra)
+        return self.client.post(reverse("appelli:crea_appello"), dati, follow=True)
+
+    def test_avviso_a_ogni_studente_e_a_ogni_docente(self):
+        self._crea()
+        destinatari = sorted(sum((m.to for m in mail.outbox), []))
+        self.assertEqual(
+            destinatari,
+            [
+                "111111@studenti.unimore.it",
+                "222222@studenti.unimore.it",
+                "docente@unimore.it",
+                "presidente@unimore.it",
+            ],
+        )
+
+    def test_email_studente_porta_alla_sua_pagina_della_tesi(self):
+        self._crea()
+        iscrizione = StudenteAppelloDiLaurea.objects.get(studente=self.studente)
+        avviso = next(m for m in mail.outbox if m.to == [self.studente.email])
+        self.assertIn(
+            "http://testserver"
+            + reverse("appelli:carica_tesi", args=[iscrizione.pk]),
+            avviso.body,
+        )
+
+    def test_email_studente_non_nomina_la_commissione(self):
+        """Regola del progetto: allo studente la commissione non si mostra."""
+        self._crea()
+        avviso = next(m for m in mail.outbox if m.to == [self.studente.email])
+        self.assertNotIn("docente_test", avviso.body)
+        self.assertNotIn("commissione", avviso.body.lower())
+
+    def test_email_docente_porta_al_dettaglio_dell_appello(self):
+        self._crea()
+        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Ingegneria Informatica")
+        avviso = next(m for m in mail.outbox if m.to == [self.docente.email])
+        self.assertIn(
+            "http://testserver"
+            + reverse("appelli:appello_detail", args=[appello.pk]),
+            avviso.body,
+        )
+
+    def test_chi_non_ha_indirizzo_viene_segnalato(self):
+        self.studente2.email = ""
+        self.studente2.save(update_fields=["email"])
+        resp = self._crea()
+        self.assertEqual(len(mail.outbox), 3)
+        self.assertContains(resp, "Nessun indirizzo email per")
+
+    @override_settings(EMAIL_BACKEND="appelli.tests.BackendPostaRotto")
+    def test_posta_guasta_non_fa_perdere_l_appello(self):
+        resp = self._crea()
+        self.assertTrue(
+            AppelloDiLaurea.objects.filter(
+                corso_di_laurea="Ingegneria Informatica"
+            ).exists()
+        )
+        self.assertContains(resp, "non sono state inviate")

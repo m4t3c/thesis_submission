@@ -226,6 +226,33 @@ else:
     _default_logout = "login"
 LOGOUT_REDIRECT_URL = os.environ.get("DJANGO_LOGOUT_REDIRECT_URL", _default_logout)
 
+# --- Posta ------------------------------------------------------------------
+# Gli avvisi di iscrizione (appelli/notifiche.py) partono da qui.
+#
+# Senza un server SMTP configurato si usa il backend "console": le email non
+# escono, vengono stampate nei log del container. E' il comportamento giusto
+# in locale, dove non si vuole (e non si puo') scrivere a indirizzi veri.
+# Basta valorizzare DJANGO_EMAIL_HOST perche' l'invio diventi reale.
+EMAIL_HOST = os.environ.get("DJANGO_EMAIL_HOST", "")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+EMAIL_PORT = int(os.environ.get("DJANGO_EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("DJANGO_EMAIL_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("DJANGO_EMAIL_USE_TLS", "1") == "1"
+
+# Secondi di attesa massima verso il server di posta. Senza limite, un SMTP
+# che non risponde terrebbe bloccato il worker che sta creando l'appello.
+EMAIL_TIMEOUT = int(os.environ.get("DJANGO_EMAIL_TIMEOUT", "10"))
+
+# Mittente usato quando il messaggio non ne indica uno.
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DJANGO_DEFAULT_FROM_EMAIL", "Consegna Tesi <noreply@ing.unimore.it>"
+)
+
 # Tipo di chiave primaria assegnato ai modelli che non ne dichiarano una.
 # https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

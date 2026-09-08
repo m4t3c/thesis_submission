@@ -72,6 +72,11 @@
 
 <div class="row justify-content-center">
     <div class="col-lg-7 col-md-9">
+        <a class="btn btn-outline-secondary btn-sm mb-3 js-esci"
+           href="{% url 'appelli:studente_dashboard' %}">
+            &larr; Torna indietro
+        </a>
+
         <div class="card shadow-sm">
             <div class="card-body">
                 <h1 class="h4 section-title mb-1">
@@ -185,7 +190,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check2"></i> Salva
                         </button>
-                        <a class="btn btn-outline-secondary" id="btn-annulla"
+                        <a class="btn btn-outline-secondary js-esci" id="btn-annulla"
                            href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
                     </div>
                 </form>
@@ -601,17 +606,19 @@
             }
         });
 
-        var annulla = document.getElementById('btn-annulla');
-        if (annulla) {
-            annulla.addEventListener('click', function (e) {
-                if (istantanea() !== iniziale && window.bootstrap) {
-                    e.preventDefault();
-                    bootstrap.Modal.getOrCreateInstance(
-                        document.getElementById('unsavedModal')
-                    ).show();
-                }
-            });
-        }
+        Array.prototype.forEach.call(
+            document.querySelectorAll('.js-esci'),
+            function (uscita) {
+                uscita.addEventListener('click', function (e) {
+                    if (istantanea() !== iniziale && window.bootstrap) {
+                        e.preventDefault();
+                        bootstrap.Modal.getOrCreateInstance(
+                            document.getElementById('unsavedModal')
+                        ).show();
+                    }
+                });
+            }
+        );
         var salvaEsci = document.getElementById('btn-salva-esci');
         if (salvaEsci) {
             salvaEsci.addEventListener('click', function () {

@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import filesizeformat
 
 from .forms import MAX_BYTE_VIDEO, AppelloForm, TesiUploadForm
+from .notifiche import avvisa_nuovo_appello
 from .xlsx import MAX_BYTE_XLSX, ErroreXlsx, leggi_elenco
 from .models import (
     FORMATI_VIDEO,
@@ -296,6 +297,26 @@ def crea_appello(request):
             messages.success(
                 request, f"Appello «{appello.etichetta_pubblica}» creato."
             )
+            # Gli avvisi partono dopo il salvataggio, e un loro errore non
+            # annulla l'appello: quello che conta e' gia' nel database. Il
+            # presidente deve pero' sapere chi NON e' stato avvisato,
+            # altrimenti darebbe per scontato che tutti abbiano ricevuto la
+            # comunicazione.
+            _, senza_email, errore = avvisa_nuovo_appello(request, appello)
+            if errore:
+                messages.warning(
+                    request,
+                    "Le email di avviso non sono state inviate (problema con "
+                    "il server di posta). L'appello è stato creato lo stesso: "
+                    "avvisa tu gli interessati.",
+                )
+            elif senza_email:
+                messages.warning(
+                    request,
+                    "Nessun indirizzo email per: "
+                    + ", ".join(senza_email)
+                    + ". Queste persone non hanno ricevuto l'avviso.",
+                )
             return redirect("appelli:presidente_dashboard")
     else:
         form = AppelloForm()

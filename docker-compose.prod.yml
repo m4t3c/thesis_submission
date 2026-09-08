@@ -59,6 +59,17 @@ services:
       # sessione Shibboleth e riporta all'autenticazione. Se cambia l'host del
       # SP o del sito, aggiorna qui.
       DJANGO_LOGOUT_REDIRECT_URL: "https://services-host.ing.unimore.it/Shibboleth.sso/Logout?return=https://tesi.ing.unimore.it/"
+      # --- Posta -------------------------------------------------------
+      # Finche' DJANGO_EMAIL_HOST resta vuoto NESSUNA email parte davvero:
+      # Django usa il backend "console" e i messaggi finiscono solo nei log
+      # (docker compose logs web). Per attivare l'invio vero servono i dati
+      # del server SMTP di ateneo; toglierli dal commento e valorizzarli.
+      # DJANGO_EMAIL_HOST: "smtp.unimore.it"
+      # DJANGO_EMAIL_PORT: "587"
+      # DJANGO_EMAIL_USER: "${EMAIL_USER}"
+      # DJANGO_EMAIL_PASSWORD: "${EMAIL_PASSWORD}"
+      # DJANGO_EMAIL_USE_TLS: "1"
+      # DJANGO_DEFAULT_FROM_EMAIL: "Consegna Tesi <noreply@ing.unimore.it>"
     volumes:
       - media_data:/app/media          # le tesi caricate persistono
     networks:

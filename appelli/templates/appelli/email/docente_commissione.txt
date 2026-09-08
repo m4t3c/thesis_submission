@@ -1,0 +1,17 @@
+Gentile {{ nome }},
+
+sei stato inserito nella commissione dell'appello di laurea:
+
+    {{ appello }}
+{% if colleghi %}
+Insieme a: {{ colleghi|join:", " }}.
+{% endif %}
+Nella pagina dell'appello trovi l'elenco dei candidati e, quando le avranno
+caricate, le loro tesi:
+
+    {{ url }}
+
+Per accedere userai le tue credenziali UNIMORE.
+
+Questo messaggio è stato inviato automaticamente: non rispondere a questo
+indirizzo.

@@ -1,0 +1,16 @@
+Gentile {{ nome }},
+
+sei stato iscritto all'appello di laurea:
+
+    {{ appello }}
+
+Da questo momento puoi caricare i dati della tua tesi (titolo, file in PDF ed
+eventuale video) a questo indirizzo:
+
+    {{ url }}
+
+Per accedere userai le tue credenziali UNIMORE. Puoi modificare quanto hai
+caricato tutte le volte che serve fino alla discussione.
+
+Questo messaggio è stato inviato automaticamente: non rispondere a questo
+indirizzo.
