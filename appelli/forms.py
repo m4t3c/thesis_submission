@@ -14,6 +14,8 @@ from thesis_submission.assign_user import GRUPPO_DOCENTE, GRUPPO_STUDENTE
 
 from .models import (
     FORMATI_VIDEO,
+    PUNTEGGIO_MAX,
+    PUNTEGGIO_MIN,
     AppelloDiLaurea,
     Commissione,
     StudenteAppelloDiLaurea,
@@ -34,6 +36,55 @@ VIDEO_FILE = "file"
 VIDEO_LINK = "link"
 
 
+def etichetta_persona(utente):
+    """Nome e cognome, con il nome utente a fianco.
+
+    Il nome utente compare sempre perche' due persone possono chiamarsi allo
+    stesso modo, ed e' l'unico dato che le distingue con certezza.
+    """
+    completo = utente.get_full_name()
+    if not completo:
+        return utente.get_username()
+    return f"{completo} ({utente.get_username()})"
+
+
+def dati_utente(utente):
+    """Utente ridotto ai campi che servono alle ricerche (JSON e template).
+
+    E' la stessa forma restituita dall'endpoint di ricerca: cosi' il codice che
+    disegna una persona scelta e' uno solo, sia che i dati arrivino da una
+    ricerca sia che siano gia' presenti all'apertura della pagina.
+
+    "etichetta" e' gia' pronta da stampare: senza, ogni template e ogni
+    funzione JavaScript rifarebbe per conto proprio la stessa composizione di
+    nome, cognome e nome utente.
+    """
+    return {
+        "id": utente.pk,
+        "nome": utente.first_name,
+        "cognome": utente.last_name,
+        "username": utente.get_username(),
+        "email": utente.email,
+        "etichetta": etichetta_persona(utente),
+    }
+
+
+class TutorField(forms.ModelChoiceField):
+    """Il tutor si sceglie con la ricerca, non da un elenco a tendina.
+
+    Stessa ragione di DocentiField (vedi sotto), con una sola differenza: qui
+    il docente e' uno solo, quindi l'input nascosto e' singolo. La validazione
+    resta quella di Django, che verifica l'id ricevuto contro il queryset:
+    manomettendo il form non si puo' indicare come tutor qualcuno che docente
+    non e'.
+    """
+
+    widget = forms.HiddenInput
+
+    def label_from_instance(self, utente):
+        return etichetta_persona(utente)
+
+
 class TesiUploadForm(forms.ModelForm):
     """Form per titolo, file della tesi ed eventuale video.
 
@@ -48,7 +99,20 @@ class TesiUploadForm(forms.ModelForm):
        Cosi' un invio a vuoto non puo' essere usato per cancellarli.
     3. il video e' invece facoltativo E rimovibile: essendo un'aggiunta
        opzionale, impedirne la rimozione renderebbe permanente un errore.
+    4. il tutor e' obbligatorio ma si sceglie UNA VOLTA SOLA: quando c'e' gia',
+       il campo viene disabilitato (vedi __init__), quindi non e' modificabile
+       nemmeno manomettendo la richiesta.
     """
+
+    tutor = TutorField(
+        queryset=User.objects.none(),          # popolato in __init__
+        label="Tutor",
+        help_text="Cerca il docente per nome, cognome, nome utente o email.",
+        error_messages={
+            "required": "Scegli il docente che ti farà da tutor.",
+            "invalid_choice": "Il docente scelto non è valido.",
+        },
+    )
 
     modalita_video = forms.ChoiceField(
         required=False,
@@ -63,7 +127,7 @@ class TesiUploadForm(forms.ModelForm):
 
     class Meta:
         model = StudenteAppelloDiLaurea
-        fields = ["titolo", "file_tesi", "file_video", "link_video"]
+        fields = ["titolo", "tutor", "file_tesi", "file_video", "link_video"]
         widgets = {
             "titolo": forms.TextInput(
                 attrs={
@@ -103,9 +167,47 @@ class TesiUploadForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["file_tesi"].required = True
         self.fields["titolo"].required = True
+        self.fields["tutor"].queryset = (
+            User.objects.filter(groups__name=GRUPPO_DOCENTE)
+            .order_by("last_name", "first_name", "username")
+            .distinct()
+        )
+
+        # Si legge QUI, prima della validazione: su un POST rifiutato il
+        # ModelForm copia comunque i dati inviati dentro l'istanza, quindi piu'
+        # avanti "instance.tutor" sarebbe il docente appena scelto e non quello
+        # gia' salvato. Letto dopo, un primo invio andato male mostrerebbe la
+        # scelta come definitiva pur non essendo mai stata salvata.
+        self.tutor_bloccato = bool(self.instance.pk and self.instance.tutor_id)
+        self.tutor_iniziale = self.instance.tutor if self.tutor_bloccato else None
+        # disabled non e' un accorgimento grafico: Django ignora il valore
+        # ricevuto e riusa quello iniziale, quindi il tutor gia' scelto non si
+        # puo' cambiare nemmeno inviando un altro id a mano.
+        if self.tutor_bloccato:
+            self.fields["tutor"].disabled = True
+
         # Il radio parte gia' sulla modalita' in uso dall'iscrizione.
         if not self.is_bound:
             self.fields["modalita_video"].initial = self.modalita_iniziale()
+
+    def tutor_selezionato(self):
+        """Tutor attualmente scelto, come dati pronti per il template (o None).
+
+        Serve a ridisegnare la persona scelta quando il form torna indietro con
+        un errore: l'input nascosto contiene solo l'id, e senza questi dati la
+        selezione sembrerebbe essersi svuotata.
+        """
+        if self.tutor_bloccato:
+            return dati_utente(self.tutor_iniziale)
+        if self.is_bound:
+            valore = self.data.get(self.add_prefix("tutor"))
+            # isdigit: un id non numerico farebbe fallire filter(pk=...) con un
+            # ValueError invece di risolversi in "nessuna selezione".
+            if valore and str(valore).isdigit():
+                utente = self.fields["tutor"].queryset.filter(pk=valore).first()
+                if utente:
+                    return dati_utente(utente)
+        return None
 
     def modalita_iniziale(self):
         """Modalita' video corrispondente a com'e' l'iscrizione adesso.
@@ -231,15 +333,7 @@ class DocentiField(forms.ModelMultipleChoiceField):
     widget = forms.MultipleHiddenInput
 
     def label_from_instance(self, utente):
-        """Etichetta di un docente: nome e cognome, con il nome utente a fianco.
-
-        Il nome utente compare sempre perche' due docenti possono chiamarsi
-        allo stesso modo, ed e' l'unico dato che li distingue con certezza.
-        """
-        completo = utente.get_full_name()
-        if not completo:
-            return utente.get_username()
-        return f"{completo} ({utente.get_username()})"
+        return etichetta_persona(utente)
 
 
 class AppelloForm(forms.ModelForm):
@@ -317,13 +411,7 @@ class AppelloForm(forms.ModelForm):
             return []
         ids = [v.pk if hasattr(v, "pk") else v for v in valori]
         return [
-            {
-                "id": u.pk,
-                "nome": u.first_name,
-                "cognome": u.last_name,
-                "username": u.get_username(),
-                "email": u.email,
-            }
+            dati_utente(u)
             for u in self.fields["docenti"].queryset.filter(pk__in=ids)
         ]
 
@@ -337,13 +425,7 @@ class AppelloForm(forms.ModelForm):
             return []
         ids = [v.pk if hasattr(v, "pk") else v for v in valori]
         return [
-            {
-                "id": u.pk,
-                "nome": u.first_name,
-                "cognome": u.last_name,
-                "username": u.get_username(),
-                "email": u.email,
-            }
+            dati_utente(u)
             for u in self.fields["studenti"].queryset.filter(pk__in=ids)
         ]
 
@@ -426,3 +508,71 @@ def commissione_esistente_con(docenti):
             return commissione
     return None
 
+
+class ValutazioneForm(forms.ModelForm):
+    """Titolo, punti e giudizio, compilati dal RELATORE dei propri studenti.
+
+    Punteggio e giudizio sono materiale interno ai docenti: non esiste nessun
+    form dell'area studente che li contenga, quindi lo studente non puo'
+    toccarli nemmeno inviando una richiesta costruita a mano.
+
+    Sul titolo vale la stessa regola del form dello studente: si puo' sempre
+    correggere, mai svuotare. Qui pero' e' ammesso lasciarlo vuoto se vuoto
+    era gia', altrimenti il relatore non potrebbe registrare una valutazione
+    per uno studente che il titolo non l'ha ancora messo.
+    """
+
+    # I punti sono tre valori, non un numero qualsiasi: si scelgono con tre
+    # pulsanti affiancati invece che digitandoli. Il campo va dichiarato qui
+    # perche' quello dedotto dal modello sarebbe un IntegerField, che non ha
+    # le scelte da cui i pulsanti nascono.
+    #
+    # required=False: chi non e' ancora stato valutato non ha nessun pulsante
+    # premuto, e il salvataggio deve restare possibile (si corregge il titolo
+    # senza per forza dare un voto). empty_value=None fa si' che l'assenza
+    # arrivi al modello come NULL, cioe' "non ancora valutato", e non come 0.
+    punteggio = forms.TypedChoiceField(
+        choices=[(v, v) for v in range(PUNTEGGIO_MIN, PUNTEGGIO_MAX + 1)],
+        coerce=int,
+        empty_value=None,
+        required=False,
+        label="Punteggio",
+        help_text="punti da aggiungere al voto",
+        widget=forms.RadioSelect(
+            # btn-check e' la casella di spunta "invisibile" di Bootstrap: si
+            # vede solo l'etichetta che le sta accanto, resa come pulsante.
+            # autocomplete="off" evita che il browser, tornando indietro,
+            # ripristini una scelta diversa da quella mostrata dalla pagina.
+            attrs={"class": "btn-check", "autocomplete": "off"}
+        ),
+    )
+
+    class Meta:
+        model = StudenteAppelloDiLaurea
+        fields = ["titolo", "punteggio", "giudizio"]
+        widgets = {
+            "titolo": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Titolo della tesi"}
+            ),
+            "giudizio": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3,
+                    "placeholder": "Note per la commissione...",
+                }
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Letto prima della validazione: dopo, _post_clean avrebbe gia' copiato
+        # nell'istanza il titolo appena inviato.
+        self.titolo_iniziale = self.instance.titolo if self.instance.pk else ""
+
+    def clean_titolo(self):
+        titolo = (self.cleaned_data.get("titolo") or "").strip()
+        if not titolo and self.titolo_iniziale:
+            raise forms.ValidationError(
+                "Il titolo non puo' essere svuotato: correggilo, semmai."
+            )
+        return titolo

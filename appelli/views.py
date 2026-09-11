@@ -5,6 +5,8 @@ limitano a nascondere quello che l'utente non puo' fare, ma nascondere un
 pulsante non impedisce di inviare la richiesta a mano.
 """
 import os
+from itertools import groupby
+from urllib.parse import parse_qsl, urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -13,15 +15,25 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Count, F, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils import timezone
 
 from django.template.defaultfilters import filesizeformat
 
-from .forms import MAX_BYTE_VIDEO, AppelloForm, TesiUploadForm
+from .forms import (
+    MAX_BYTE_VIDEO,
+    AppelloForm,
+    TesiUploadForm,
+    ValutazioneForm,
+    dati_utente,
+)
 from .notifiche import avvisa_nuovo_appello
 from .xlsx import MAX_BYTE_XLSX, ErroreXlsx, leggi_elenco
 from .models import (
     FORMATI_VIDEO,
     ORDINE_APPELLI,
+    PUNTEGGIO_MAX,
     AppelloDiLaurea,
     StudenteAppelloDiLaurea,
 )
@@ -51,6 +63,20 @@ def is_presidente(user):
 def docente_in_commissione(user, appello):
     """True se il docente fa parte della commissione dell'appello."""
     return appello.commissione.docenti.filter(pk=user.pk).exists()
+
+
+def is_relatore(utente, iscrizione):
+    """True se l'utente e' il relatore (tutor) di quella iscrizione."""
+    return iscrizione.tutor_id == utente.pk
+
+
+def puo_valutare(utente, iscrizione):
+    """Chi puo' correggere titolo, punteggio e giudizio: il solo relatore.
+
+    Non basta essere docente e non basta essere in commissione: la valutazione
+    e' una proposta personale di chi ha seguito la tesi, e solo lui la scrive.
+    """
+    return is_docente(utente) and is_relatore(utente, iscrizione)
 
 
 # --- Pagina di test Shibboleth --------------------------------------------
@@ -120,7 +146,7 @@ def studente_dashboard(request):
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono accedere a questa pagina.")
 
-    iscrizioni = request.user.iscrizioni.select_related("appello").order_by(
+    iscrizioni = request.user.iscrizioni.select_related("appello", "tutor").order_by(
         "appello__data", F("appello__ora").asc(nulls_last=True)
     )
     appelli_iscritti = iscrizioni.values_list("appello_id", flat=True)
@@ -153,6 +179,14 @@ def carica_tesi(request, iscrizione_id):
         StudenteAppelloDiLaurea, pk=iscrizione_id, studente=request.user
     )
 
+    # Nomi dei file GIA' SALVATI sul database, letti prima di legare il form:
+    # su un POST non valido il ModelForm copia comunque i dati inviati dentro
+    # l'istanza, quindi dopo la validazione "iscrizione.file_tesi" sarebbe il
+    # file appena scelto. Leggendoli dopo, la pagina di errore mostrerebbe come
+    # "gia' caricata" una tesi che invece non e' stata salvata.
+    nome_file = os.path.basename(iscrizione.file_tesi.name) if iscrizione.file_tesi else ""
+    nome_video = os.path.basename(iscrizione.file_video.name) if iscrizione.file_video else ""
+
     if request.method == "POST":
         form = TesiUploadForm(request.POST, request.FILES, instance=iscrizione)
         if form.is_valid():
@@ -165,8 +199,6 @@ def carica_tesi(request, iscrizione_id):
     else:
         form = TesiUploadForm(instance=iscrizione)
 
-    nome_file = os.path.basename(iscrizione.file_tesi.name) if iscrizione.file_tesi else ""
-    nome_video = os.path.basename(iscrizione.file_video.name) if iscrizione.file_video else ""
     return render(
         request,
         "appelli/carica_tesi.html",
@@ -183,7 +215,8 @@ def carica_tesi(request, iscrizione_id):
 
 # --- Area docente ----------------------------------------------------------
 
-def _contesto_appelli(utente, puo_creare, titolo):
+def _contesto_appelli(request, puo_creare, titolo):
+    utente = request.user
     """Contesto della pagina appelli, condiviso da docenti e presidente.
 
     Le due pagine mostrano le stesse due tabelle ("i miei appelli" e gli
@@ -202,11 +235,125 @@ def _contesto_appelli(utente, puo_creare, titolo):
 
     miei = elenco(AppelloDiLaurea.objects.filter(commissione__docenti=utente))
     altri = elenco(AppelloDiLaurea.objects.exclude(commissione__docenti=utente))
-    return {
+
+    contesto = {
         "miei_appelli": miei,
         "altri_appelli": altri,
         "puo_creare_appelli": puo_creare,
         "titolo_pagina": titolo,
+    }
+    contesto.update(_tutorati_del_docente(request, utente))
+    return contesto
+
+
+# Filtri della sezione tutorati. Sono anche gli unici parametri che vengono
+# riportati nell'URL dopo un salvataggio: tutto il resto viene scartato.
+PARAMETRI_TUTORATI = ("q",)
+
+
+def _corrisponde(iscrizione, parole):
+    """True se OGNI parola cercata compare in nome, cognome, matricola o titolo.
+
+    Stessa regola della ricerca dei docenti: cosi' "ros mar" trova "Mario
+    Rossi" senza pretendere l'ordine esatto.
+    """
+    campi = " ".join(
+        (
+            iscrizione.studente.first_name,
+            iscrizione.studente.last_name,
+            iscrizione.studente.get_username(),
+            iscrizione.titolo,
+        )
+    ).lower()
+    return all(parola in campi for parola in parole)
+
+
+def _tutorati_correnti(utente):
+    """Iscrizioni di cui l'utente e' relatore, con il modulo gia' agganciato.
+
+    Solo appelli non ancora passati: una tesi discussa non si valuta piu', e
+    tenere in pagina anni di archivio renderebbe la sezione inservibile proprio
+    per cio' a cui serve, cioe' vedere su chi si deve ancora intervenire.
+
+    Costa UNA query, qualunque sia il numero di tutorati: studente e appello
+    arrivano gia' dentro, quindi il template non ne fa una per riga.
+    """
+    righe = list(
+        StudenteAppelloDiLaurea.objects.filter(
+            tutor=utente, appello__data__gte=timezone.localdate()
+        )
+        .select_related("studente", "appello")
+        .order_by(
+            "appello__data",
+            F("appello__ora").asc(nulls_last=True),
+            # appello_id nell'ordinamento non e' un vezzo: due appelli con la
+            # stessa data e ora si alternerebbero nell'elenco e groupby, che
+            # raggruppa solo righe ADIACENTI, li spezzerebbe in piu' gruppi.
+            "appello_id",
+            "studente__last_name",
+            "studente__first_name",
+            "studente__username",
+        )
+    )
+    # Il modulo di modifica e' precompilato con i dati gia' salvati. auto_id
+    # porta l'id dell'iscrizione dentro gli id dei campi: nella pagina i moduli
+    # sono tanti quanti i tutorati, e con gli id predefiniti ("id_titolo",
+    # "id_punteggio_0", ...) ogni <label> punterebbe al campo del PRIMO modulo.
+    for iscrizione in righe:
+        iscrizione.form = ValutazioneForm(
+            instance=iscrizione, auto_id=f"id_%s_{iscrizione.pk}"
+        )
+    return righe
+
+
+def _tutorati_del_docente(request, utente):
+    """Sezione tutorati pronta per il template: gruppi ed eventuali risultati.
+
+    Non ha relazione con gli appelli delle proprie commissioni: si puo' essere
+    relatore di uno studente senza sedere nella commissione che lo esamina,
+    quindi l'elenco si costruisce a parte.
+
+    I gruppi si calcolano SEMPRE, anche durante una ricerca: cosi' annullarla
+    e' immediato, perche' l'elenco completo e' gia' nella pagina e non va
+    richiesto di nuovo al server.
+    """
+    termine = (request.GET.get("q") or "").strip()
+    correnti = _tutorati_correnti(utente)
+
+    commissioni_mie = set(
+        AppelloDiLaurea.objects.filter(commissione__docenti=utente).values_list(
+            "id", flat=True
+        )
+    )
+
+    gruppi = []
+    for appello, righe in groupby(correnti, key=lambda t: t.appello):
+        righe = list(righe)
+        gruppi.append(
+            {
+                "appello": appello,
+                "iscrizioni": righe,
+                "totale": len(righe),
+                # Zero e' un punteggio valido: "da valutare" e' chi ha il campo
+                # ancora vuoto, non chi ha preso zero.
+                "da_valutare": sum(1 for r in righe if not r.valutata),
+                "in_commissione": appello.id in commissioni_mie,
+            }
+        )
+
+    # Durante una ricerca il raggruppamento sparisce: chi cerca una persona non
+    # sa a quale appello sia iscritta, quindi i risultati sono un elenco piatto.
+    trovati = None
+    if termine:
+        parole = termine.lower().split()
+        trovati = [t for t in correnti if _corrisponde(t, parole)]
+
+    return {
+        "tutorati_trovati": trovati,
+        "tutorati_gruppi": gruppi,
+        "tutorati_totali": len(correnti),
+        "ricerca_tutorati": termine,
+        "punteggio_massimo": PUNTEGGIO_MAX,
     }
 
 
@@ -219,7 +366,7 @@ def docente_dashboard(request):
     return render(
         request,
         "appelli/docente_dashboard.html",
-        _contesto_appelli(request.user, puo_creare=False, titolo="Area Docente"),
+        _contesto_appelli(request, puo_creare=False, titolo="Area Docente"),
     )
 
 
@@ -260,6 +407,61 @@ def appello_detail(request, appello_id):
     )
 
 
+def _url_ritorno_tutorati(request, iscrizione):
+    """Dove tornare dopo un salvataggio: stessa pagina, stessi filtri, stessa riga.
+
+    Del "ritorno" ricevuto si tengono SOLO i filtri della sezione e si
+    ricostruisce il percorso con reverse(): cosi' un valore manomesso non puo'
+    trasformare il salvataggio in un rimando verso un sito esterno.
+    """
+    nome = (
+        "appelli:presidente_dashboard"
+        if is_presidente(request.user)
+        else "appelli:docente_dashboard"
+    )
+    coppie = [
+        (chiave, valore)
+        for chiave, valore in parse_qsl(request.POST.get("ritorno", ""))
+        if chiave in PARAMETRI_TUTORATI
+    ]
+    url = reverse(nome)
+    if coppie:
+        url += "?" + urlencode(coppie)
+    # L'ancora riporta alla riga appena salvata invece che in cima all'elenco.
+    return f"{url}#tutorato-{iscrizione.pk}"
+
+
+@login_required
+def salva_valutazione(request, iscrizione_id):
+    """Titolo, punti e giudizio di un proprio tutorato, salvati dal relatore."""
+    iscrizione = get_object_or_404(
+        StudenteAppelloDiLaurea.objects.select_related("studente", "appello"),
+        pk=iscrizione_id,
+    )
+    # Il controllo sta qui e non nel template: nascondere il pulsante non
+    # impedisce a un altro docente di inviare la richiesta a mano.
+    if not puo_valutare(request.user, iscrizione):
+        raise PermissionDenied("Solo il relatore può valutare questo studente.")
+    if request.method != "POST":
+        return redirect(_url_ritorno_tutorati(request, iscrizione))
+
+    form = ValutazioneForm(request.POST, instance=iscrizione)
+    if form.is_valid():
+        form.save()
+        nome = iscrizione.studente.get_full_name() or iscrizione.studente.get_username()
+        if form.changed_data:
+            messages.success(request, f"Valutazione di {nome} salvata.")
+        else:
+            messages.info(request, "Nessuna modifica da salvare.")
+    else:
+        # I campi in gioco sono pochi e il browser impedisce gia' un punteggio
+        # fuori intervallo: qui si finisce quasi solo svuotando il titolo.
+        primo = next(iter(form.errors.values()))[0]
+        messages.error(request, f"Modifica non salvata: {primo}")
+
+    return redirect(_url_ritorno_tutorati(request, iscrizione))
+
+
 # --- Area presidente -------------------------------------------------------
 
 @login_required
@@ -275,7 +477,7 @@ def presidente_dashboard(request):
     return render(
         request,
         "appelli/docente_dashboard.html",
-        _contesto_appelli(request.user, puo_creare=True, titolo="Area Presidente"),
+        _contesto_appelli(request, puo_creare=True, titolo="Area Presidente"),
     )
 
 
@@ -358,10 +560,13 @@ def _richiesta_interna(request):
 def cerca_docenti(request):
     """Cerca docenti per nome, cognome, nome utente o email.
 
-    Risponde in JSON alla tendina di composizione della commissione.
+    Risponde in JSON a due tendine diverse: quella con cui il presidente compone
+    la commissione e quella con cui lo studente sceglie il proprio tutor. In
+    entrambi i casi la domanda e' la stessa ("quali docenti corrispondono a
+    questo testo"), quindi l'endpoint e' uno solo.
     """
-    if not is_presidente(request.user):
-        raise PermissionDenied("Solo il presidente può cercare i docenti.")
+    if not (is_presidente(request.user) or is_studente(request.user)):
+        raise PermissionDenied("Non hai i permessi per cercare i docenti.")
     if not _richiesta_interna(request):
         raise PermissionDenied("Questo endpoint è riservato all'applicazione.")
 
@@ -383,17 +588,46 @@ def cerca_docenti(request):
 
     docenti = docenti.distinct().order_by("last_name", "first_name", "username")
 
-    risultati = [
-        {
-            "id": u.pk,
-            "nome": u.first_name,
-            "cognome": u.last_name,
-            "username": u.get_username(),
-            "email": u.email,
-        }
-        for u in docenti[:MAX_RISULTATI_RICERCA]
-    ]
+    risultati = [dati_utente(u) for u in docenti[:MAX_RISULTATI_RICERCA]]
     return JsonResponse({"risultati": risultati})
+
+
+@login_required
+def cerca_tutorati(request):
+    """Cerca fra i propri tutorati e risponde con le righe gia' impaginate.
+
+    Risponde HTML e non JSON perche' ogni riga porta con se' il modulo di
+    valutazione, con il token CSRF e i valori gia' salvati: ricostruirlo in
+    JavaScript vorrebbe dire riscrivere il template una seconda volta, e tenere
+    allineate a mano due copie della stessa cosa.
+
+    La ricerca vera e' la stessa della pagina (_tutorati_del_docente): qui si
+    riusa, non si riscrive, cosi' con e senza JavaScript i risultati coincidono.
+    """
+    if not is_docente(request.user):
+        raise PermissionDenied("Solo i docenti hanno dei tutorati.")
+    if not _richiesta_interna(request):
+        raise PermissionDenied("Questo endpoint è riservato all'applicazione.")
+
+    termine = (request.GET.get("q") or "").strip()
+    correnti = _tutorati_correnti(request.user)
+    if termine:
+        parole = termine.lower().split()
+        trovati = [t for t in correnti if _corrisponde(t, parole)]
+    else:
+        trovati = []
+
+    html = render_to_string(
+        "appelli/_risultati_tutorati.html",
+        {
+            "tutorati_trovati": trovati,
+            "tutorati_totali": len(correnti),
+            "ricerca_tutorati": termine,
+            "punteggio_massimo": PUNTEGGIO_MAX,
+        },
+        request=request,
+    )
+    return JsonResponse({"html": html, "numero": len(trovati)})
 
 
 @login_required
@@ -439,15 +673,7 @@ def analizza_xlsx(request):
     for indirizzo in email:
         utente = utenti.get(indirizzo)
         if utente:
-            trovati.append(
-                {
-                    "id": utente.pk,
-                    "nome": utente.first_name,
-                    "cognome": utente.last_name,
-                    "username": utente.get_username(),
-                    "email": utente.email,
-                }
-            )
+            trovati.append(dati_utente(utente))
         else:
             mancanti.append(indirizzo)
 
@@ -466,9 +692,11 @@ def analizza_xlsx(request):
 def _iscrizione_scaricabile(request, iscrizione_id):
     """Iscrizione richiesta, se l'utente ha diritto di vederne gli allegati.
 
-    Il permesso e' lo stesso per tesi e video: lo studente proprietario o un
-    docente della commissione di quell'appello. Tenerlo in un'unica funzione
-    evita che i due percorsi di download divergano.
+    Il permesso e' lo stesso per tesi e video: lo studente proprietario, un
+    docente della commissione di quell'appello, oppure il relatore. Il relatore
+    va incluso esplicitamente perche' NON e' detto che sieda in commissione:
+    senza, i link agli allegati dei propri studenti gli darebbero un 403.
+    Tenerlo in un'unica funzione evita che i due percorsi di download divergano.
     """
     iscrizione = get_object_or_404(
         StudenteAppelloDiLaurea.objects.select_related("appello"), pk=iscrizione_id
@@ -478,7 +706,8 @@ def _iscrizione_scaricabile(request, iscrizione_id):
     e_commissario = is_docente(request.user) and docente_in_commissione(
         request.user, iscrizione.appello
     )
-    if not (e_proprietario or e_commissario):
+    e_relatore = is_docente(request.user) and is_relatore(request.user, iscrizione)
+    if not (e_proprietario or e_commissario or e_relatore):
         raise PermissionDenied("Non hai i permessi per scaricare questo file.")
 
     return iscrizione

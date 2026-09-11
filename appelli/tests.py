@@ -10,16 +10,20 @@ Uso:  python manage.py test appelli
 """
 import datetime
 import os
+import re
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.mail.backends.base import BaseEmailBackend
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 
 from .forms import MAX_BYTE_VIDEO
 from .models import AppelloDiLaurea, Commissione, StudenteAppelloDiLaurea
@@ -55,15 +59,23 @@ class BaseSetup(TestCase):
 class RuoliTest(BaseSetup):
     """Smistamento per ruolo e confini fra le aree."""
 
+    # I due casi seguenti seguono la catena (follow=True) invece di aspettarsi
+    # un salto solo: da quando esiste la landing pubblica, "/" rimanda a
+    # "/dashboard/", che a sua volta smista al ruolo. Cio' che conta e' dove si
+    # arriva, non quanti passaggi servono.
     def test_studente_redirezione_home(self):
         self.client.force_login(self.studente)
-        resp = self.client.get(reverse("appelli:home"))
-        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        resp = self.client.get(reverse("appelli:home"), follow=True)
+        self.assertEqual(
+            resp.redirect_chain[-1][0], reverse("appelli:studente_dashboard")
+        )
 
     def test_docente_redirezione_home(self):
         self.client.force_login(self.docente)
-        resp = self.client.get(reverse("appelli:home"))
-        self.assertRedirects(resp, reverse("appelli:docente_dashboard"))
+        resp = self.client.get(reverse("appelli:home"), follow=True)
+        self.assertEqual(
+            resp.redirect_chain[-1][0], reverse("appelli:docente_dashboard")
+        )
 
     def test_docente_non_accede_area_studente(self):
         self.client.force_login(self.docente)
@@ -196,8 +208,12 @@ class CaricamentoTesiTest(BaseSetup):
         return SimpleUploadedFile(nome, b"%PDF-1.7 contenuto", content_type="application/pdf")
 
     def _dati(self, **extra):
-        """POST completo: il titolo e' obbligatorio in ogni salvataggio."""
-        dati = {"titolo": self.TITOLO, "modalita_video": "nessuno"}
+        """POST completo: titolo e tutor sono obbligatori in ogni salvataggio."""
+        dati = {
+            "titolo": self.TITOLO,
+            "tutor": self.docente.pk,
+            "modalita_video": "nessuno",
+        }
         dati.update(extra)
         return dati
 
@@ -548,7 +564,11 @@ class TitoloEVideoTest(BaseSetup):
         return SimpleUploadedFile(nome, byte, content_type="video/mp4")
 
     def _dati(self, **extra):
-        dati = {"titolo": "Titolo iniziale", "modalita_video": "nessuno"}
+        dati = {
+            "titolo": "Titolo iniziale",
+            "tutor": self.docente.pk,
+            "modalita_video": "nessuno",
+        }
         dati.update(extra)
         return dati
 
@@ -992,9 +1012,10 @@ class RicercaDocentiTest(BaseSetup):
         resp = self._cerca("ada")
         self.assertEqual(resp.status_code, 302)   # verso il login
 
-    def test_studente_non_accede(self):
+    def test_studente_accede_per_scegliere_il_tutor(self):
+        """Lo studente cerca fra i docenti: e' cosi' che sceglie il suo tutor."""
         self.client.force_login(self.studente)
-        self.assertEqual(self._cerca("ada").status_code, 403)
+        self.assertEqual(self._cerca("ada").status_code, 200)
 
     def test_docente_semplice_non_accede(self):
         self.client.force_login(self.docente)
@@ -1032,7 +1053,7 @@ class RicercaDocentiTest(BaseSetup):
         risultato = self._cerca("adcigala").json()["risultati"][0]
         self.assertEqual(
             set(risultato),
-            {"id", "nome", "cognome", "username", "email"},
+            {"id", "nome", "cognome", "username", "email", "etichetta"},
         )
         self.assertEqual(risultato["cognome"], "Cigala")
         self.assertEqual(risultato["email"], "ada.cigala@unimore.it")
@@ -1586,3 +1607,260 @@ class AvvisiEmailTest(BaseSetup):
             ).exists()
         )
         self.assertContains(resp, "non sono state inviate")
+
+
+class TutoratiEValutazioneTest(BaseSetup):
+    """Sezione tutorati dell'area docente e valutazione del relatore.
+
+    Lo scenario tiene separati i due ruoli: "relatore" segue gli studenti ma
+    NON siede in commissione, "docente_test" (da BaseSetup) e' in commissione
+    ma non e' relatore di nessuno. E' la combinazione che mette alla prova i
+    permessi, perche' finche' le due cose coincidono non si distinguono.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.relatore = User.objects.create_user("relatore_test", password="pw")
+        self.relatore.groups.add(self.g_docente)
+
+        oggi = timezone.localdate()
+        self.passato = AppelloDiLaurea.objects.create(
+            data=oggi - datetime.timedelta(days=30),
+            corso_di_laurea="Corso Passato",
+            commissione=self.commissione,
+        )
+        # self.appello di BaseSetup e' nel 2030, quindi futuro.
+        self.i_futura = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello,
+            tutor=self.relatore, titolo="Tesi futura",
+        )
+        altro = User.objects.create_user("studente_due", password="pw")
+        altro.groups.add(self.g_studente)
+        altro.last_name = "Quaglia"
+        altro.save()
+        self.i_passata = StudenteAppelloDiLaurea.objects.create(
+            studente=altro, appello=self.passato,
+            tutor=self.relatore, titolo="Tesi passata",
+        )
+        self.url_valuta = reverse(
+            "appelli:salva_valutazione", args=[self.i_futura.id]
+        )
+
+    def _sezione(self, query=""):
+        """Solo la card dei tutorati, con gli spazi normalizzati.
+
+        Ritagliarla e' necessario: lo stesso corso di laurea compare anche
+        nella tabella "Altri appelli", quindi cercare nell'intera pagina darebbe
+        risultati falsi.
+        """
+        self.client.force_login(self.relatore)
+        html = self.client.get(
+            reverse("appelli:docente_dashboard") + query
+        ).content.decode()
+        inizio = html.index("I miei tutorati")
+        fine = html.index("I miei appelli")
+        return re.sub(r"\s+", " ", html[inizio:fine])
+
+    # --- Permessi --------------------------------------------------------
+
+    def test_relatore_fuori_commissione_scarica_la_tesi(self):
+        """Il relatore non e' detto sieda in commissione: deve poter scaricare."""
+        self.i_futura.file_tesi.save(
+            "t.pdf", SimpleUploadedFile("t.pdf", b"%PDF-1.7 x"), save=True
+        )
+        self.addCleanup(self.i_futura.file_tesi.delete, save=False)
+        self.assertFalse(
+            self.appello.commissione.docenti.filter(pk=self.relatore.pk).exists()
+        )
+        self.client.force_login(self.relatore)
+        resp = self.client.get(
+            reverse("appelli:scarica_tesi", args=[self.i_futura.id])
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_commissario_non_relatore_non_valuta(self):
+        """Essere in commissione non basta: la valutazione la scrive il relatore."""
+        self.client.force_login(self.docente)
+        resp = self.client.post(self.url_valuta, {"titolo": "X", "punteggio": "2"})
+        self.assertEqual(resp.status_code, 403)
+        self.i_futura.refresh_from_db()
+        self.assertIsNone(self.i_futura.punteggio)
+
+    def test_studente_non_valuta_se_stesso(self):
+        self.client.force_login(self.studente)
+        resp = self.client.post(self.url_valuta, {"titolo": "X", "punteggio": "2"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_relatore_salva_titolo_punteggio_e_giudizio(self):
+        self.client.force_login(self.relatore)
+        resp = self.client.post(self.url_valuta, {
+            "titolo": "Titolo corretto",
+            "punteggio": "1",
+            "giudizio": "Lavoro solido.",
+            "ritorno": "",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.i_futura.refresh_from_db()
+        self.assertEqual(self.i_futura.titolo, "Titolo corretto")
+        self.assertEqual(self.i_futura.punteggio, 1)
+        self.assertEqual(self.i_futura.giudizio, "Lavoro solido.")
+
+    def test_titolo_non_svuotabile_dal_relatore(self):
+        """Vale la stessa regola dello studente: correggere si', svuotare no."""
+        self.client.force_login(self.relatore)
+        self.client.post(self.url_valuta, {"titolo": "", "punteggio": "1"})
+        self.i_futura.refresh_from_db()
+        self.assertEqual(self.i_futura.titolo, "Tesi futura")
+
+    def test_ritorno_manomesso_non_porta_fuori_dal_sito(self):
+        """Del 'ritorno' si tengono solo i filtri: il percorso lo rifa' reverse()."""
+        self.client.force_login(self.relatore)
+        resp = self.client.post(self.url_valuta, {
+            "titolo": "T", "punteggio": "1",
+            "ritorno": "q=ciao&next=https://esempio.invalido/rubato",
+        })
+        self.assertNotIn("esempio.invalido", resp["Location"])
+        self.assertTrue(resp["Location"].startswith(reverse("appelli:docente_dashboard")))
+        self.assertIn("q=ciao", resp["Location"])
+
+    # --- Il punteggio non esce dall'area docenti -------------------------
+
+    def test_area_studente_non_mostra_punteggio_ne_giudizio(self):
+        self.i_futura.punteggio = 2
+        self.i_futura.giudizio = "GIUDIZIO_RISERVATO"
+        self.i_futura.save()
+        self.client.force_login(self.studente)
+        for url in (
+            reverse("appelli:studente_dashboard"),
+            reverse("appelli:carica_tesi", args=[self.i_futura.id]),
+        ):
+            with self.subTest(url=url):
+                pagina = self.client.get(url).content.decode()
+                self.assertNotIn("GIUDIZIO_RISERVATO", pagina)
+                self.assertNotIn("punteggio", pagina.lower())
+
+    # --- Vincolo sul punteggio -------------------------------------------
+
+    def test_punteggio_fuori_intervallo_rifiutato_dal_modello(self):
+        """Non solo dal form: full_clean e database devono dire di no entrambi."""
+        for valore in (3, -1):
+            with self.subTest(punteggio=valore):
+                iscrizione = StudenteAppelloDiLaurea(
+                    studente=self.studente, appello=self.passato, punteggio=valore
+                )
+                with self.assertRaises(ValidationError):
+                    iscrizione.full_clean()
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    StudenteAppelloDiLaurea.objects.create(
+                        studente=self.studente, appello=self.passato, punteggio=valore
+                    )
+
+    def test_zero_e_un_punteggio_valido_non_un_assenza(self):
+        """Lo zero e' una proposta, non un "non valutato": vanno distinti."""
+        self.i_futura.punteggio = 0
+        self.i_futura.save()
+        self.assertTrue(self.i_futura.valutata)
+        self.assertFalse(self.i_passata.valutata)
+
+        # Un secondo tutorato nello stesso appello, non valutato: e' il
+        # confronto che conta, "0 punti" accanto a "Da valutare".
+        terzo = User.objects.create_user("studente_zero", password="pw")
+        terzo.groups.add(self.g_studente)
+        StudenteAppelloDiLaurea.objects.create(
+            studente=terzo, appello=self.appello, tutor=self.relatore
+        )
+
+        sezione = self._sezione()
+        self.assertIn('punti-valore">0<', sezione)
+        self.assertIn("/2 punti", sezione)
+        self.assertIn("Da valutare", sezione)
+
+    # --- Raggruppamento, filtro e ricerca --------------------------------
+
+    def test_i_tutoraggi_passati_non_compaiono(self):
+        """Una tesi gia' discussa non si valuta piu': fuori dall'elenco.
+
+        Nemmeno passando a mano il vecchio parametro, che non esiste piu': il
+        filtro e' nella query, non in una spunta dell'interfaccia.
+        """
+        for query in ("", "?passati=1"):
+            with self.subTest(query=query):
+                sezione = self._sezione(query)
+                self.assertNotIn("Corso Passato", sezione)
+                self.assertNotIn("Tesi passata", sezione)
+
+    def test_la_ricerca_non_riporta_i_tutoraggi_passati(self):
+        """Cercare non e' una scorciatoia per rivedere cio' che e' escluso."""
+        sezione = self._sezione("?q=quaglia")
+        self.assertNotIn("Tesi passata", sezione)
+        self.assertIn("0 risultati", sezione)
+
+    def test_la_ricerca_trova_per_cognome_e_per_titolo(self):
+        sezione = self._sezione("?q=futura")
+        self.assertIn("Tesi futura", sezione)
+        self.assertIn("1 risultato", sezione)
+
+    # --- Ricerca in tempo reale (endpoint interno) -----------------------
+
+    def _cerca(self, utente, termine, ajax=True):
+        self.client.force_login(utente)
+        intestazioni = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"} if ajax else {}
+        return self.client.get(
+            reverse("appelli:cerca_tutorati"), {"q": termine}, **intestazioni
+        )
+
+    def test_endpoint_restituisce_le_righe_dei_propri_tutorati(self):
+        resp = self._cerca(self.relatore, "futura")
+        self.assertEqual(resp.status_code, 200)
+        dati = resp.json()
+        self.assertEqual(dati["numero"], 1)
+        self.assertIn("Tesi futura", dati["html"])
+        # Le righe arrivano complete del modulo di valutazione: e' la ragione
+        # per cui l'endpoint risponde HTML invece che JSON.
+        self.assertIn("csrfmiddlewaretoken", dati["html"])
+
+    def test_endpoint_mostra_solo_i_propri_tutorati(self):
+        """Il docente in commissione non e' relatore: per lui non c'e' nulla."""
+        dati = self._cerca(self.docente, "futura").json()
+        self.assertEqual(dati["numero"], 0)
+        self.assertNotIn("Tesi futura", dati["html"])
+
+    def test_endpoint_vietato_allo_studente(self):
+        self.assertEqual(self._cerca(self.studente, "futura").status_code, 403)
+
+    def test_endpoint_solo_dall_applicazione(self):
+        """Senza l'intestazione delle richieste interne non risponde."""
+        self.assertEqual(
+            self._cerca(self.relatore, "futura", ajax=False).status_code, 403
+        )
+
+    def test_riepilogo_del_gruppo_conta_i_da_valutare(self):
+        terzo = User.objects.create_user("studente_tre", password="pw")
+        terzo.groups.add(self.g_studente)
+        StudenteAppelloDiLaurea.objects.create(
+            studente=terzo, appello=self.appello, tutor=self.relatore
+        )
+        self.i_futura.punteggio = 2
+        self.i_futura.save()
+
+        sezione = self._sezione()
+        self.assertIn("2 studenti", sezione)
+        self.assertIn("1 da valutare", sezione)
+
+    def test_le_query_non_crescono_con_i_tutorati(self):
+        """Il template non deve interrogare il database una volta per riga."""
+        self.client.force_login(self.relatore)
+        url = reverse("appelli:docente_dashboard")
+        with CaptureQueriesContext(connection) as prima:
+            self.client.get(url)
+
+        for numero in range(10):
+            extra = User.objects.create_user(f"studente_extra_{numero}", password="pw")
+            extra.groups.add(self.g_studente)
+            StudenteAppelloDiLaurea.objects.create(
+                studente=extra, appello=self.appello, tutor=self.relatore
+            )
+
+        with CaptureQueriesContext(connection) as dopo:
+            self.client.get(url)
+        self.assertEqual(len(prima.captured_queries), len(dopo.captured_queries))

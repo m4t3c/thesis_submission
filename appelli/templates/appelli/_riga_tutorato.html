@@ -1,0 +1,178 @@
+{% comment %}
+    Una riga della sezione tutorati, con il modulo di modifica che si apre
+    dentro l'elenco. Incluso sia dai gruppi per appello sia dai risultati di
+    ricerca: la riga e' una sola, cosi' i due elenchi non divergono.
+
+    Si aspetta "iscrizione" nel contesto, con l'attributo .form gia' agganciato
+    dalla view (ValutazioneForm precompilato).
+
+    Aprendo il modulo la riga compatta sparisce (regola .is-aperto in
+    base.html) e al suo posto compare l'intestazione del modulo: le stesse
+    informazioni ci sarebbero due volte, una sopra l'altra.
+{% endcomment %}
+<div class="tutorato" id="tutorato-{{ iscrizione.id }}">
+    <div class="riga-sintesi row g-2 align-items-center p-3">
+
+        {# 1. Chi #}
+        <div class="col-12 col-lg-3" style="min-width: 0;">
+            <div class="nome-studente text-truncate">
+                {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+            </div>
+            <div class="small text-muted text-truncate">
+                {{ iscrizione.studente.email|default:iscrizione.studente.get_username }}
+            </div>
+        </div>
+
+        {# 2. Titolo #}
+        <div class="col-12 col-lg-4 cell-titolo">
+            {% if iscrizione.titolo %}
+                {{ iscrizione.titolo }}
+            {% else %}
+                <span class="text-muted fst-italic">Titolo non indicato</span>
+            {% endif %}
+        </div>
+
+        {# 3. Allegati: l'icona resta anche quando manca, spenta #}
+        <div class="col-auto d-flex gap-2 fs-5">
+            {% if iscrizione.file_tesi %}
+                <a href="{% url 'appelli:scarica_tesi' iscrizione.id %}"
+                   title="Scarica la tesi" aria-label="Scarica la tesi">
+                    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
+            {% else %}
+                <span class="allegato-assente" title="Tesi non ancora caricata"
+                      aria-label="Tesi non ancora caricata">
+                    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></span>
+            {% endif %}
+
+            {% if iscrizione.file_video %}
+                <a href="{% url 'appelli:scarica_video' iscrizione.id %}"
+                   title="Scarica il video" aria-label="Scarica il video">
+                    <i class="bi bi-camera-video" aria-hidden="true"></i></a>
+            {% elif iscrizione.link_video %}
+                <a href="{{ iscrizione.link_video }}" target="_blank" rel="noopener noreferrer"
+                   title="Apri il video" aria-label="Apri il video">
+                    <i class="bi bi-link-45deg" aria-hidden="true"></i></a>
+            {% else %}
+                <span class="allegato-assente" title="Nessun video"
+                      aria-label="Nessun video">
+                    <i class="bi bi-camera-video" aria-hidden="true"></i></span>
+            {% endif %}
+        </div>
+
+        {% comment %}
+            4. Valutazione. Il punteggio assegnato si legge come un voto
+            ("2 /2 punti"), non come un'etichetta: chi e' gia' valutato deve
+            distinguersi a colpo d'occhio da chi aspetta ancora, e uno zero non
+            deve poter essere scambiato per un campo vuoto.
+        {% endcomment %}
+        <div class="col-auto">
+            {% if iscrizione.valutata %}
+                <span class="punti-dati">
+                    <span class="punti-valore">{{ iscrizione.punteggio }}</span>
+                    <span class="punti-scala">/{{ punteggio_massimo }} punti</span>
+                </span>
+            {% else %}
+                <span class="pill-da-valutare">Da valutare</span>
+            {% endif %}
+        </div>
+
+        {# 5. Modifica #}
+        <div class="col-auto ms-auto">
+            <button class="btn btn-sm btn-outline-primary js-apri-modifica" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#modifica-{{ iscrizione.id }}"
+                    aria-expanded="false" aria-controls="modifica-{{ iscrizione.id }}">
+                Modifica
+            </button>
+        </div>
+    </div>
+
+    {# Modulo sul posto: niente pagina di dettaglio, niente andata e ritorno #}
+    <div class="collapse js-modifica" id="modifica-{{ iscrizione.id }}">
+        <form method="post" class="p-3"
+              action="{% url 'appelli:salva_valutazione' iscrizione.id %}">
+            {% csrf_token %}
+            {# Torna alla stessa pagina con gli stessi filtri (vedi la view) #}
+            <input type="hidden" name="ritorno" value="{{ request.GET.urlencode }}">
+
+            {% comment %}
+                Intestazione: sostituisce la riga compatta mentre il modulo e'
+                aperto, quindi deve dire chi si sta valutando e dare accesso
+                agli allegati -- che qui, con piu' spazio, sono per esteso.
+            {% endcomment %}
+            <div class="modulo-testata d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
+                <div class="text-truncate" style="min-width: 0;">
+                    <span class="nome-studente">
+                        {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+                    </span>
+                    <span class="text-muted ms-2">
+                        {{ iscrizione.studente.email|default:iscrizione.studente.get_username }}
+                    </span>
+                </div>
+                <div class="d-flex flex-wrap gap-3">
+                    {% if iscrizione.file_tesi %}
+                        <a class="text-nowrap" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                            <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Tesi.pdf</a>
+                    {% else %}
+                        <span class="text-nowrap allegato-assente">
+                            <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Nessuna tesi</span>
+                    {% endif %}
+                    {% if iscrizione.file_video %}
+                        <a class="text-nowrap" href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                            <i class="bi bi-camera-video me-1" aria-hidden="true"></i>Video</a>
+                    {% elif iscrizione.link_video %}
+                        <a class="text-nowrap" href="{{ iscrizione.link_video }}"
+                           target="_blank" rel="noopener noreferrer">
+                            <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Video</a>
+                    {% else %}
+                        <span class="text-nowrap allegato-assente">
+                            <i class="bi bi-camera-video me-1" aria-hidden="true"></i>Nessun video</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="etichetta-campo" for="{{ iscrizione.form.titolo.id_for_label }}">
+                    Titolo della tesi
+                </label>
+                {{ iscrizione.form.titolo }}
+            </div>
+
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    {% comment %}
+                        I punti sono tre valori, non un numero da digitare: tre
+                        pulsanti si leggono e si premono in un colpo solo. Le
+                        etichette sono fratelli degli input (btn-check), quindi
+                        il gruppo va scritto a mano e non con {{ form.campo }}.
+                    {% endcomment %}
+                    <span class="etichetta-campo" id="punti-{{ iscrizione.id }}">Punteggio</span>
+                    <div class="d-flex gap-2 segmento-punti" role="group"
+                         aria-labelledby="punti-{{ iscrizione.id }}">
+                        {% for scelta in iscrizione.form.punteggio %}
+                            {{ scelta.tag }}
+                            <label class="btn btn-outline-primary" for="{{ scelta.id_for_label }}">
+                                {{ scelta.choice_label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                    <div class="form-text">{{ iscrizione.form.punteggio.help_text }}</div>
+                </div>
+                <div class="col-12 col-md-8">
+                    <label class="etichetta-campo" for="{{ iscrizione.form.giudizio.id_for_label }}">
+                        Giudizio
+                        <span class="etichetta-nota">(facoltativo, non visibile allo studente)</span>
+                    </label>
+                    {{ iscrizione.form.giudizio }}
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end align-items-center gap-3 mt-3">
+                <button type="button" class="btn btn-link text-muted text-decoration-none"
+                        data-bs-toggle="collapse" data-bs-target="#modifica-{{ iscrizione.id }}">
+                    Annulla
+                </button>
+                <button type="submit" class="btn btn-primary">Salva</button>
+            </div>
+        </form>
+    </div>
+</div>

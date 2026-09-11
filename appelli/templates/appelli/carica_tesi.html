@@ -4,8 +4,9 @@
     Pagina con cui lo studente compila la propria iscrizione: titolo, file
     della tesi ed eventuale video. E' l'unica pagina con un caricamento di
     file pesanti, e da li' viene quasi tutto il JavaScript in fondo: barra di
-    avanzamento, controllo della dimensione prima dell'invio e avviso sulle
-    modifiche non salvate.
+    avanzamento, controllo dei campi PRIMA dell'invio (un modulo incompleto non
+    deve far partire il caricamento di un video da centinaia di MB per poi
+    essere rifiutato) e avviso sulle modifiche non salvate.
 {% endcomment %}
 
 {% block title %}La mia tesi{% endblock %}
@@ -24,13 +25,9 @@
     }
     .upload-input::file-selector-button:hover { background: var(--bs-primary); color: #fff; }
     .current-file { background: #fbfbfc; }
-    /* Django rende gli errori di campo come <ul class="errorlist">: qui la si
-       riporta all'aspetto di un normale messaggio di errore Bootstrap. */
-    .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
-    .errorlist li { color: var(--bs-danger-text-emphasis); font-size: .875rem; }
     .video-box { border: 1px solid var(--line); border-radius: .6rem; padding: 1rem; }
-    .errore-dimensione { font-size: .875rem; }
-    /* Premendo "Salva" con un file oltre il limite il box gia' presente viene
+    .errore-campo { font-size: .875rem; }
+    /* Premendo "Salva" con un campo non valido il box gia' presente viene
        richiamato all'attenzione: senza, l'utente non capirebbe perche' il
        pulsante "non fa niente". */
     @keyframes richiamo-errore {
@@ -40,14 +37,14 @@
         60%      { transform: translateX(-4px); }
         80%      { transform: translateX(4px); }
     }
-    .errore-dimensione.evidenzia {
+    .errore-campo.evidenzia {
         animation: richiamo-errore .45s ease;
         box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .35) !important;
     }
     /* Per chi ha chiesto meno animazioni al sistema operativo: niente
        movimento, solo l'alone colorato. */
     @media (prefers-reduced-motion: reduce) {
-        .errore-dimensione.evidenzia { animation: none; }
+        .errore-campo.evidenzia { animation: none; }
     }
     /* Pannello di avanzamento: sostituisce il form durante il caricamento */
     #pannello-avanzamento .progress { height: 1.25rem; }
@@ -68,6 +65,43 @@
     .avanzamento-dettagli .dato:last-child { border-bottom: 0; }
     .avanzamento-dettagli .etichetta { color: var(--muted); }
     .avanzamento-dettagli .valore { font-weight: 600; color: var(--ink); }
+
+    /* Ricerca del tutor: stessa impostazione della ricerca docenti nella
+       creazione appello (tendina sovrapposta al contenuto e riquadro
+       tratteggiato che accoglie la persona scelta). */
+    #risultati-tutor {
+        position: absolute;
+        z-index: 1000;
+        width: 100%;
+        max-height: 22rem;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: .4rem;
+    }
+    #risultati-tutor .list-group-item { cursor: pointer; }
+    .riga-docente-nome { font-weight: 600; }
+    .riga-docente-mail { color: var(--muted); font-size: .875rem; }
+    /* Il bordo tratteggiato comunica "qui dentro finisce quello che
+       selezioni", anche quando e' ancora vuoto. */
+    .box-membri {
+        border: 2px dashed var(--line);
+        border-radius: .6rem;
+        padding: .75rem;
+        background: #fbfbfc;
+    }
+    .box-membri.pieno { border-style: solid; }
+    .membro {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: .5rem;
+        padding: .6rem .75rem;
+    }
+    .membro-icona { color: var(--muted); flex-shrink: 0; }
+    .membro-testo { min-width: 0; flex: 1; }
+    .membro-rimuovi { flex-shrink: 0; }
 </style>
 
 <div class="row justify-content-center">
@@ -88,8 +122,23 @@
                         alle {{ iscrizione.appello.ora|time:"H:i" }}{% endif %}
                 </p>
 
-                <form method="post" enctype="multipart/form-data" id="tesi-form">
+                <form method="post" enctype="multipart/form-data" id="tesi-form" novalidate>
                     {% csrf_token %}
+
+                    {% comment %}
+                        Un invio rifiutato non salva NIENTE, nemmeno i campi
+                        corretti, e gli input file tornano vuoti (il browser non
+                        li ripopola, per sicurezza). Detto qui una volta sola:
+                        senza, si vede solo l'errore sul singolo campo e si
+                        crede che il resto sia stato salvato.
+                    {% endcomment %}
+                    {% if form.errors %}
+                        <div class="alert alert-warning shadow-sm" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                            Nessuna modifica è stata salvata. Correggi quanto segnalato
+                            qui sotto e riseleziona i file: il browser non li conserva.
+                        </div>
+                    {% endif %}
 
                     {# ---------------- Titolo ---------------- #}
                     <div class="mb-4">
@@ -99,16 +148,87 @@
                             </label>
                         </h2>
                         {{ form.titolo }}
-                        {{ form.titolo.errors }}
+                        {% if form.titolo.errors %}
+                            <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.titolo.errors.0 }}
+                            </div>
+                        {% endif %}
                         <div class="form-text" id="{{ form.titolo.auto_id }}_helptext">
                             Puoi modificarlo quando vuoi, ma non può restare vuoto.
                         </div>
                     </div>
 
+                    {# ---------------- Tutor ---------------- #}
+                    <div class="mb-4">
+                        <h2 class="h6 section-title">Tutor</h2>
+
+                        {% with tutor=form.tutor_selezionato %}
+                        {% if form.tutor_bloccato %}
+                            {% comment %}
+                                Gia' scelto: si mostra soltanto. Il campo del form
+                                e' disabilitato, quindi non viene nemmeno disegnato
+                                ne' inviato: non c'e' niente da manomettere.
+                            {% endcomment %}
+                            <div class="current-file border rounded p-3 d-flex align-items-center gap-3">
+                                <i class="bi bi-person-video3 fs-3 text-primary flex-shrink-0" aria-hidden="true"></i>
+                                <div style="min-width: 0;">
+                                    <div class="fw-semibold text-truncate">{{ tutor.etichetta }}</div>
+                                    <div class="small text-muted text-truncate">{{ tutor.email }}</div>
+                                </div>
+                                <span class="badge text-bg-secondary ms-auto flex-shrink-0">
+                                    <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Definitivo
+                                </span>
+                            </div>
+                            <div class="form-text">
+                                Il tutor si sceglie una volta sola: non può più essere modificato.
+                            </div>
+                        {% else %}
+                            {# L'id del docente scelto viaggia in un input nascosto #}
+                            <div id="tutor-hidden">{{ form.tutor }}</div>
+
+                            <div class="position-relative">
+                                <input type="text" id="ricerca-tutor" class="form-control"
+                                       placeholder="Cerca per nome, cognome, nome utente o email"
+                                       autocomplete="off" role="combobox"
+                                       aria-expanded="false" aria-controls="risultati-tutor">
+                                <div id="risultati-tutor" class="list-group shadow" role="listbox" hidden></div>
+                            </div>
+
+                            {% if form.tutor.errors %}
+                                <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                    <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                    {{ form.tutor.errors.0 }}
+                                </div>
+                            {% endif %}
+                            {# Riquadro d'errore proprio: il campo vero e' nascosto, quindi il messaggio non puo' stargli accanto. #}
+                            <div id="errore-tutor" class="errore-campo alert alert-danger shadow-sm mt-2"
+                                 role="alert" hidden></div>
+
+                            <div class="box-membri mt-3" id="box-tutor">
+                                <p class="text-muted text-center mb-0 py-3" id="nessun-tutor">
+                                    <i class="bi bi-person me-1" aria-hidden="true"></i>
+                                    Nessun tutor selezionato
+                                </p>
+                                <div id="tutor-scelto"></div>
+                            </div>
+
+                            {# Ridisegna la scelta quando il form torna con un errore #}
+                            {{ tutor|json_script:"tutor-iniziale" }}
+
+                            <div class="form-text">
+                                Il tutor non deve per forza far parte della commissione
+                                dell'appello. Attenzione: una volta salvato non potrà più
+                                essere modificato.
+                            </div>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+
                     {# ---------------- File della tesi ---------------- #}
                     <h2 class="h6 section-title">File della tesi</h2>
 
-                    {% if iscrizione.file_tesi %}
+                    {% if nome_file %}
                         <div id="current-file" class="current-file border rounded p-3 mb-3">
                             <div class="d-flex align-items-center gap-3" style="min-width: 0;">
                                 <i class="bi bi-file-earmark-pdf fs-3 text-primary flex-shrink-0"></i>
@@ -125,12 +245,17 @@
 
                     <div class="mb-4">
                         <label for="{{ form.file_tesi.id_for_label }}" class="form-label">
-                            {% if iscrizione.file_tesi %}Sostituisci con un nuovo file{% else %}Seleziona il file{% endif %}
+                            {% if nome_file %}Sostituisci con un nuovo file{% else %}Seleziona il file{% endif %}
                         </label>
                         {{ form.file_tesi }}
-                        {{ form.file_tesi.errors }}
+                        {% if form.file_tesi.errors %}
+                            <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.file_tesi.errors.0 }}
+                            </div>
+                        {% endif %}
                         <div class="form-text" id="{{ form.file_tesi.auto_id }}_helptext">
-                            {% if iscrizione.file_tesi %}
+                            {% if nome_file %}
                                 Sono ammessi solo file PDF. Il nuovo file sostituirà quello
                                 attuale: una tesi già caricata può essere sostituita, ma non
                                 rimossa.
@@ -154,7 +279,7 @@
 
                             {% if scelta.data.value == "file" %}
                                 <div class="js-video-pannello ms-4 mt-2 mb-2" data-modalita="file">
-                                    {% if iscrizione.file_video %}
+                                    {% if nome_video %}
                                         <div class="current-file border rounded p-2 mb-2 d-flex align-items-center gap-2">
                                             <i class="bi bi-camera-video text-primary"></i>
                                             <span class="small text-truncate">{{ nome_video }}</span>
@@ -165,7 +290,12 @@
                                         </div>
                                     {% endif %}
                                     {{ form.file_video }}
-                                    {{ form.file_video.errors }}
+                                    {% if form.file_video.errors %}
+                                        <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                            {{ form.file_video.errors.0 }}
+                                        </div>
+                                    {% endif %}
                                     <div class="form-text">
                                         Formati ammessi: {{ formati_video }}. Dimensione massima {{ max_video }}.
                                     </div>
@@ -173,16 +303,23 @@
                             {% elif scelta.data.value == "link" %}
                                 <div class="js-video-pannello ms-4 mt-2 mb-2" data-modalita="link">
                                     {{ form.link_video }}
-                                    {{ form.link_video.errors }}
+                                    {% if form.link_video.errors %}
+                                        <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                            {{ form.link_video.errors.0 }}
+                                        </div>
+                                    {% endif %}
                                     <div class="form-text">
                                         Indirizzo di un video.
                                     </div>
                                 </div>
                             {% endif %}
                         {% endfor %}
-                        {{ form.modalita_video.errors }}
-                        {% if form.non_field_errors %}
-                            <div class="text-danger small mt-2">{{ form.non_field_errors }}</div>
+                        {% if form.modalita_video.errors or form.non_field_errors %}
+                            <div class="alert alert-danger shadow-sm mt-2 mb-0" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.modalita_video.errors.0|default:form.non_field_errors.0 }}
+                            </div>
                         {% endif %}
                     </div>
 
@@ -333,7 +470,14 @@
         // vale per titolo, file e link senza doverli elencare a mano.
         function istantanea() {
             var parti = [modalitaScelta()];
+            // Il tutor viaggia in un input nascosto: va guardato a parte,
+            // altrimenti sceglierlo non risulterebbe una modifica.
+            var campoTutor = form.querySelector('input[name="tutor"]');
+            parti.push('tutor=' + (campoTutor ? campoTutor.value : ''));
             form.querySelectorAll('input[type="text"], input[type="url"]').forEach(function (i) {
+                // La casella di ricerca non e' un dato del modulo: conta il
+                // docente scelto, non quello che si e' digitato per trovarlo.
+                if (i.id === 'ricerca-tutor') return;
                 parti.push(i.name + '=' + i.value);
             });
             form.querySelectorAll('input[type="file"]').forEach(function (i) {
@@ -440,24 +584,44 @@
             etichettaVelocita.textContent = '—';
         }
 
-        // --- Controllo della dimensione PRIMA di iniziare il caricamento ---
-        // Il limite e' applicato anche lato server (clean_file_video), che
-        // resta l'autorita': questo controllo serve a non far attendere
-        // all'utente un caricamento intero per poi rifiutarlo. Il browser
-        // conosce la dimensione del file appena viene scelto, quindi puo'
-        // dirlo subito.
-        function erroreDimensione(input, messaggio) {
-            var box = input.parentNode.querySelector('.errore-dimensione');
+        // --- Controlli PRIMA di inviare il form ----------------------------
+        // Gli stessi controlli esistono lato server, che resta l'autorita':
+        // qui servono a non far partire una richiesta destinata a essere
+        // rifiutata. Senza, l'utente carica per intero titolo, PDF ed
+        // eventuale video (anche centinaia di MB), aspetta, e si ritrova il
+        // form indietro con un errore e NIENTE salvato.
+        var inputTitolo = form.querySelector('[name="titolo"]');
+        var inputTesi = form.querySelector('[name="file_tesi"]');
+        var inputVideo = form.querySelector('[name="file_video"]');
+        var inputLink = form.querySelector('[name="link_video"]');
+        // Cosa c'e' gia' sull'iscrizione: se la tesi (o il video) e' gia'
+        // stata caricata, non sceglierne una nuova significa "lasciala
+        // com'e'", non "campo vuoto".
+        var TESI_SALVATA = {% if nome_file %}true{% else %}false{% endif %};
+        var VIDEO_SALVATO = {% if nome_video %}true{% else %}false{% endif %};
+        // Prima del primo "Salva" non si segnala che un campo e' vuoto: lo si
+        // farebbe mentre l'utente lo sta ancora compilando.
+        var giaInviato = false;
+
+        function erroreCampo(elemento, messaggio) {
+            var contenitore = elemento.parentNode;
+            // L'errore arrivato dal server riguarda l'invio precedente: appena
+            // il controllo lato client si esprime sullo stesso campo, va tolto
+            // di mezzo, altrimenti restano due riquadri rossi in colonna.
+            var vecchio = contenitore.querySelector('.errore-server');
+            if (vecchio) vecchio.remove();
+
+            var box = contenitore.querySelector('.errore-campo');
             if (!messaggio) {
                 if (box) box.remove();
-                input.classList.remove('file-troppo-grande');
+                elemento.classList.remove('is-invalid');
                 return;
             }
             if (!box) {
                 box = document.createElement('div');
-                box.className = 'errore-dimensione alert alert-danger shadow-sm mt-2';
+                box.className = 'errore-campo alert alert-danger shadow-sm mt-2';
                 box.setAttribute('role', 'alert');
-                input.insertAdjacentElement('afterend', box);
+                elemento.insertAdjacentElement('afterend', box);
             }
             // Si ricostruisce il contenuto con nodi DOM invece di innerHTML.
             box.textContent = '';
@@ -466,31 +630,169 @@
             icona.setAttribute('aria-hidden', 'true');
             box.appendChild(icona);
             box.appendChild(document.createTextNode(messaggio));
-            input.classList.add('file-troppo-grande');
+            elemento.classList.add('is-invalid');
+        }
+
+        function estensioneAmmessa(input) {
+            // I formati ammessi sono quelli che il campo stesso dichiara
+            // (attributo accept, scritto dal form): cosi' non ne esiste una
+            // seconda copia qui, da tenere allineata a mano.
+            if (!input.files || !input.files[0]) return true;
+            var estensioni = (input.getAttribute('accept') || '').split(',')
+                .map(function (voce) { return voce.trim().toLowerCase(); })
+                .filter(function (voce) { return voce.charAt(0) === '.'; });
+            if (!estensioni.length) return true;
+            var nome = input.files[0].name.toLowerCase();
+            return estensioni.some(function (est) {
+                return nome.slice(-est.length) === est;
+            });
         }
 
         function dimensioneAmmessa(input) {
             var max = parseInt(input.getAttribute('data-max-byte') || '0', 10);
-            if (!max || !input.files || !input.files[0]) {
-                erroreDimensione(input, '');
-                return true;
-            }
-            var file = input.files[0];
-            if (file.size <= max) {
-                erroreDimensione(input, '');
-                return true;
-            }
-            erroreDimensione(
-                input,
-                'Il file scelto occupa ' + mb(file.size) + ', oltre il limite di ' +
-                mb(max) + '. Scegline uno più piccolo, oppure indica il link a ' +
-                'un video già pubblicato online.'
-            );
-            return false;
+            if (!max || !input.files || !input.files[0]) return true;
+            return input.files[0].size <= max;
         }
 
-        function evidenziaErrori() {
-            var box = form.querySelector('.errore-dimensione');
+        function linkValido(valore) {
+            // Stessa regola del server (URLField di Django): schema http o
+            // https, sottinteso quando manca, e un nome di dominio vero.
+            if (/\s/.test(valore)) return false;
+            var testo = /^[a-z][a-z0-9+.-]*:\/\//i.test(valore)
+                ? valore : 'https://' + valore;
+            var url;
+            try {
+                url = new URL(testo);
+            } catch (e) {
+                return false;
+            }
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+            return url.hostname === 'localhost' || url.hostname.indexOf('.') > 0;
+        }
+
+        // Ogni controllo restituisce il messaggio da mostrare, o '' se il
+        // campo va bene.
+        function erroreTitolo() {
+            if (!inputTitolo) return '';
+            if (!inputTitolo.value.trim()) return 'Il titolo della tesi è obbligatorio.';
+            return '';
+        }
+
+        function erroreTesi() {
+            if (!inputTesi) return '';
+            if (!inputTesi.files || !inputTesi.files[0]) {
+                return TESI_SALVATA ? '' : 'Scegli il file PDF della tesi.';
+            }
+            if (!estensioneAmmessa(inputTesi)) {
+                return 'La tesi deve essere un file PDF.';
+            }
+            return '';
+        }
+
+        function erroreVideoFile() {
+            if (!inputVideo) return '';
+            var file = inputVideo.files && inputVideo.files[0];
+            if (!file) {
+                return VIDEO_SALVATO ? '' : 'Scegli il file video da caricare, ' +
+                    'oppure seleziona un\'altra opzione.';
+            }
+            if (!estensioneAmmessa(inputVideo)) {
+                return 'Formato del video non ammesso. Formati accettati: {{ formati_video }}.';
+            }
+            if (!dimensioneAmmessa(inputVideo)) {
+                return 'Il file scelto occupa ' + mb(file.size) + ', oltre il limite di ' +
+                    mb(parseInt(inputVideo.getAttribute('data-max-byte'), 10)) +
+                    '. Scegline uno più piccolo, oppure indica il link a ' +
+                    'un video già pubblicato online.';
+            }
+            return '';
+        }
+
+        function erroreLink() {
+            if (!inputLink) return '';
+            var valore = inputLink.value.trim();
+            if (!valore) {
+                return 'Inserisci il link al video, oppure seleziona un\'altra opzione.';
+            }
+            if (!linkValido(valore)) {
+                return 'Il link non sembra un indirizzo valido: deve essere del tipo ' +
+                    'https://www.esempio.it/video.';
+            }
+            return '';
+        }
+
+        // Il tutor ha un riquadro d'errore proprio: il campo vero e' nascosto,
+        // quindi il messaggio non puo' stargli accanto come per gli altri.
+        // Quando il tutor e' gia' stato salvato la ricerca non viene nemmeno
+        // disegnata, e allora non c'e' niente da controllare.
+        var boxErroreTutor = document.getElementById('errore-tutor');
+
+        function tutorScelto() {
+            // Si rilegge ogni volta: l'input nascosto viene ricreato a ogni
+            // ridisegno della selezione, quindi un riferimento tenuto da parte
+            // punterebbe a un elemento non piu' nel documento.
+            var campo = form.querySelector('input[name="tutor"]');
+            return !!(campo && campo.value);
+        }
+
+        function erroreTutor() {
+            if (!document.getElementById('ricerca-tutor')) return '';
+            return tutorScelto() ? '' : 'Scegli il docente che ti farà da tutor.';
+        }
+
+        function mostraErroreTutor(messaggio) {
+            if (!boxErroreTutor) return;
+            // Come in erroreCampo: l'errore arrivato dal server riguarda
+            // l'invio precedente e va tolto appena il controllo lato client si
+            // esprime, altrimenti restano due riquadri rossi in colonna.
+            var vecchio = boxErroreTutor.parentNode.querySelector('.errore-server');
+            if (vecchio) vecchio.remove();
+
+            boxErroreTutor.textContent = '';
+            if (!messaggio) {
+                boxErroreTutor.hidden = true;
+                return;
+            }
+            var icona = document.createElement('i');
+            icona.className = 'bi bi-exclamation-triangle-fill me-1';
+            icona.setAttribute('aria-hidden', 'true');
+            boxErroreTutor.appendChild(icona);
+            boxErroreTutor.appendChild(document.createTextNode(messaggio));
+            boxErroreTutor.hidden = false;
+        }
+
+        // Controlla tutti i campi in gioco, mostra gli errori e restituisce il
+        // RIQUADRO del primo errore (null se e' tutto a posto): e' quello da
+        // richiamare all'attenzione. Del video si controlla solo la modalita'
+        // scelta: gli altri pannelli non vengono nemmeno inviati.
+        // L'ordine dell'elenco segue quello dei campi nella pagina, cosi' si
+        // scorre al primo problema che l'utente incontra leggendo.
+        function validaModulo() {
+            var modalita = modalitaScelta();
+            var controlli = [
+                {campo: inputTitolo, messaggio: erroreTitolo()},
+                {tutor: true,        messaggio: erroreTutor()},
+                {campo: inputTesi,   messaggio: erroreTesi()},
+                {campo: inputVideo,  messaggio: modalita === 'file' ? erroreVideoFile() : ''},
+                {campo: inputLink,   messaggio: modalita === 'link' ? erroreLink() : ''}
+            ];
+            var primo = null;
+            controlli.forEach(function (c) {
+                var box;
+                if (c.tutor) {
+                    mostraErroreTutor(c.messaggio);
+                    box = boxErroreTutor;
+                } else {
+                    if (!c.campo) return;
+                    erroreCampo(c.campo, c.messaggio);
+                    box = c.campo.parentNode.querySelector('.errore-campo');
+                }
+                if (c.messaggio && !primo) primo = box;
+            });
+            return primo;
+        }
+
+        function evidenziaErrore(box) {
             if (!box) return;
             // Togliere e rimettere la classe (con una lettura forzata del
             // layout in mezzo) fa ripartire l'animazione anche al secondo
@@ -501,25 +803,216 @@
             box.scrollIntoView({block: 'center', behavior: 'smooth'});
         }
 
-        function tuttiIFileSonoAmmessi() {
-            var ok = true;
-            form.querySelectorAll('input[type="file"][data-max-byte]').forEach(function (i) {
-                if (!dimensioneAmmessa(i)) ok = false;
-            });
-            return ok;
+        // Dopo il primo tentativo i messaggi si aggiornano mentre si corregge:
+        // l'errore sparisce appena il campo diventa valido.
+        function ricontrolla() {
+            if (giaInviato) validaModulo();
         }
-
-        // Avviso immediato, appena il file viene scelto.
-        form.querySelectorAll('input[type="file"][data-max-byte]').forEach(function (i) {
-            i.addEventListener('change', function () { dimensioneAmmessa(i); });
+        if (inputTitolo) inputTitolo.addEventListener('input', ricontrolla);
+        if (inputLink) inputLink.addEventListener('input', ricontrolla);
+        radios.forEach(function (r) {
+            r.addEventListener('change', function () {
+                // Cambiando modalita' gli errori dell'altra non c'entrano piu'.
+                if (inputVideo) erroreCampo(inputVideo, '');
+                if (inputLink) erroreCampo(inputLink, '');
+                ricontrolla();
+            });
         });
 
+        // Su un file scelto l'avviso e' immediato, anche prima del primo
+        // "Salva": formato e dimensione si conoscono subito, e far aspettare
+        // il salvataggio per dirlo fa perdere tempo. Il solo "campo
+        // obbligatorio" resta invece rimandato all'invio.
+        if (inputTesi) {
+            inputTesi.addEventListener('change', function () {
+                if (inputTesi.files && inputTesi.files[0]) erroreCampo(inputTesi, erroreTesi());
+                else ricontrolla();
+            });
+        }
+        if (inputVideo) {
+            inputVideo.addEventListener('change', function () {
+                if (inputVideo.files && inputVideo.files[0]) erroreCampo(inputVideo, erroreVideoFile());
+                else ricontrolla();
+            });
+        }
+
+        // --- Ricerca del tutor ---------------------------------------------
+        // Stessa meccanica della ricerca docenti nella creazione appello, ma
+        // con una persona sola: sceglierne un'altra sostituisce la precedente.
+        // Se il tutor e' gia' salvato la casella di ricerca non viene disegnata
+        // e tutto questo blocco non parte.
+        (function () {
+            var input = document.getElementById('ricerca-tutor');
+            if (!input) return;
+
+            var URL_RICERCA = "{% url 'appelli:cerca_docenti' %}";
+            var elencoRisultati = document.getElementById('risultati-tutor');
+            var contenitoreScelto = document.getElementById('tutor-scelto');
+            var contenitoreHidden = document.getElementById('tutor-hidden');
+            var vuoto = document.getElementById('nessun-tutor');
+            var box = document.getElementById('box-tutor');
+            var attesa = null;            // timer del debounce
+            var richiestaRicerca = null;  // ricerca in corso, da annullare
+            var scelto = null;
+
+            function nome(d) { return d.etichetta || d.username; }
+
+            function chiudiRisultati() {
+                elencoRisultati.hidden = true;
+                elencoRisultati.textContent = '';
+                input.setAttribute('aria-expanded', 'false');
+            }
+
+            function disegnaScelto() {
+                contenitoreScelto.textContent = '';
+                // L'input nascosto viene ricreato da zero: cosi' "nessun tutor"
+                // significa davvero nessun campo inviato, e il server se ne
+                // accorge invece di ricevere un valore vuoto.
+                contenitoreHidden.textContent = '';
+
+                if (scelto) {
+                    var riga = document.createElement('div');
+                    riga.className = 'membro';
+
+                    var icona = document.createElement('i');
+                    icona.className = 'bi bi-person-video3 membro-icona';
+                    icona.setAttribute('aria-hidden', 'true');
+
+                    var testo = document.createElement('div');
+                    testo.className = 'membro-testo';
+                    var r1 = document.createElement('div');
+                    r1.className = 'riga-docente-nome text-truncate';
+                    r1.textContent = nome(scelto);
+                    var r2 = document.createElement('div');
+                    r2.className = 'riga-docente-mail text-truncate';
+                    r2.textContent = scelto.email || '';
+                    testo.appendChild(r1);
+                    testo.appendChild(r2);
+
+                    var togli = document.createElement('button');
+                    togli.type = 'button';
+                    togli.className = 'btn btn-sm btn-danger membro-rimuovi';
+                    togli.setAttribute('aria-label', 'Togli ' + nome(scelto));
+                    togli.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+                    togli.addEventListener('click', function () {
+                        scelto = null;
+                        disegnaScelto();
+                    });
+
+                    riga.appendChild(icona);
+                    riga.appendChild(testo);
+                    riga.appendChild(togli);
+                    contenitoreScelto.appendChild(riga);
+
+                    var hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'tutor';
+                    hidden.value = scelto.id;
+                    contenitoreHidden.appendChild(hidden);
+                }
+
+                vuoto.hidden = !!scelto;
+                box.classList.toggle('pieno', !!scelto);
+                // L'avviso "manca il tutor" sparisce appena se ne sceglie uno.
+                ricontrolla();
+            }
+
+            function scegli(d) {
+                scelto = d;
+                disegnaScelto();
+                input.value = '';
+                chiudiRisultati();
+                input.focus();
+            }
+
+            function disegnaRisultati(risultati) {
+                elencoRisultati.textContent = '';
+                if (!risultati.length) {
+                    var vuotoEl = document.createElement('div');
+                    vuotoEl.className = 'list-group-item text-muted';
+                    vuotoEl.textContent = 'Nessun docente trovato.';
+                    elencoRisultati.appendChild(vuotoEl);
+                }
+                risultati.forEach(function (d) {
+                    var voce = document.createElement('button');
+                    voce.type = 'button';
+                    voce.className = 'list-group-item list-group-item-action';
+                    voce.setAttribute('role', 'option');
+
+                    var r1 = document.createElement('div');
+                    r1.className = 'riga-docente-nome';
+                    r1.textContent = nome(d);
+                    var r2 = document.createElement('div');
+                    r2.className = 'riga-docente-mail';
+                    r2.textContent = d.email || '';
+                    voce.appendChild(r1);
+                    voce.appendChild(r2);
+
+                    voce.addEventListener('click', function () { scegli(d); });
+                    elencoRisultati.appendChild(voce);
+                });
+                elencoRisultati.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+            }
+
+            function cerca(termine) {
+                if (richiestaRicerca) richiestaRicerca.abort();
+                richiestaRicerca = new AbortController();
+                fetch(URL_RICERCA + '?q=' + encodeURIComponent(termine), {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                    credentials: 'same-origin',
+                    signal: richiestaRicerca.signal
+                })
+                .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+                .then(function (dati) {
+                    // Chi e' gia' scelto non va riproposto.
+                    disegnaRisultati(dati.risultati.filter(function (d) {
+                        return !scelto || d.id !== scelto.id;
+                    }));
+                })
+                .catch(function (e) { if (e.name !== 'AbortError') chiudiRisultati(); });
+            }
+
+            // Si aspetta una breve pausa nella digitazione: senza, ogni tasto
+            // premuto produrrebbe una query al database.
+            input.addEventListener('input', function () {
+                clearTimeout(attesa);
+                var termine = input.value.trim();
+                if (termine.length < 2) { chiudiRisultati(); return; }
+                attesa = setTimeout(function () { cerca(termine); }, 250);
+            });
+
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') chiudiRisultati();
+                // Invio nella casella di ricerca non deve inviare tutto il form.
+                if (e.key === 'Enter') e.preventDefault();
+            });
+
+            document.addEventListener('click', function (e) {
+                if (!elencoRisultati.contains(e.target) && e.target !== input) chiudiRisultati();
+            });
+
+            var seme = document.getElementById('tutor-iniziale');
+            if (seme) {
+                try { scelto = JSON.parse(seme.textContent) || null; }
+                catch (e) { scelto = null; }
+            }
+            disegnaScelto();
+        })();
+
+        // Lo stato di partenza va riletto DOPO aver disegnato il tutor: il
+        // disegno ricrea l'input nascosto, e un'istantanea presa prima
+        // segnalerebbe una modifica che l'utente non ha fatto.
+        iniziale = istantanea();
+
         form.addEventListener('submit', function (e) {
+            giaInviato = true;
             // Vale per entrambe le strade (con e senza barra di avanzamento):
-            // un file oltre il limite non deve partire in nessun caso.
-            if (!tuttiIFileSonoAmmessi()) {
+            // un modulo incompleto non deve partire in nessun caso.
+            var primoErrore = validaModulo();
+            if (primoErrore) {
                 e.preventDefault();
-                evidenziaErrori();
+                evidenziaErrore(primoErrore);
                 return;
             }
             if (!supportoProgresso) return;          // invio classico

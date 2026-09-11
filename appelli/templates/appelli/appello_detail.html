@@ -26,7 +26,7 @@
 
 {# Unico punto in cui la commissione compare, e come persone non come id #}
 <div class="card shadow-sm mb-4">
-    <div class="card-header">Commissione</div>
+    <div class="card-header testata-blu">Commissione</div>
     <div class="card-body">
         <div class="row g-2">
             {% for docente in appello.commissione.docenti.all %}
@@ -64,7 +64,7 @@
 
 {# ---------------- Studenti iscritti e loro allegati ---------------- #}
 <div class="card shadow-sm">
-    <div class="card-header">Studenti iscritti</div>
+    <div class="card-header testata-blu">Studenti iscritti</div>
     <div class="card-body p-0">
         {% if iscrizioni %}
             <div class="table-responsive">

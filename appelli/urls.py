@@ -29,6 +29,14 @@ urlpatterns = [
     path("api/elenco-xlsx/", views.analizza_xlsx, name="analizza_xlsx"),
     # Area docente
     path("docente/", views.docente_dashboard, name="docente_dashboard"),
+    # Ricerca fra i propri tutorati: risponde con le righe gia' impaginate
+    path("api/tutorati/", views.cerca_tutorati, name="cerca_tutorati"),
+    # Valutazione di un proprio tutorato (solo il relatore)
+    path(
+        "tutorati/<int:iscrizione_id>/valutazione/",
+        views.salva_valutazione,
+        name="salva_valutazione",
+    ),
     path("appelli/<int:appello_id>/", views.appello_detail, name="appello_detail"),
     # Download protetto
     path(

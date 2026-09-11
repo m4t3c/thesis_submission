@@ -24,9 +24,9 @@ class IscrizioneInline(admin.TabularInline):
     # Data di iscrizione: la assegna il database (auto_now_add), quindi e'
     # visibile ma non modificabile.
     readonly_fields = ("data_iscrizione",)
-    # Con qualche migliaio di studenti una tendina completa sarebbe
+    # Con qualche migliaio di utenti una tendina completa sarebbe
     # inutilizzabile: si cerca per nome.
-    autocomplete_fields = ("studente",)
+    autocomplete_fields = ("studente", "tutor")
 
 
 @admin.register(Commissione)
@@ -64,13 +64,20 @@ class AppelloDiLaureaAdmin(admin.ModelAdmin):
 class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
     """Iscrizioni, con lo stato degli allegati a colpo d'occhio."""
 
-    list_display = ("studente", "appello", "titolo", "data_iscrizione", "ha_tesi", "ha_video")
+    list_display = (
+        "studente", "appello", "tutor", "titolo", "data_iscrizione",
+        "ha_tesi", "ha_video", "punteggio",
+    )
     list_filter = ("appello__corso_di_laurea",)
     # __str__ dell'appello include la commissione: senza questo si farebbe una
     # query in piu' per ogni riga dell'elenco.
-    list_select_related = ("studente", "appello", "appello__commissione")
+    list_select_related = ("studente", "tutor", "appello", "appello__commissione")
     readonly_fields = ("data_iscrizione",)
-    autocomplete_fields = ("studente", "appello")
+    # Il tutor NON e' modificabile dallo studente una volta scelto: qui invece
+    # si', perche' l'admin e' proprio lo strumento con cui la segreteria
+    # corregge i casi che l'applicazione non prevede (tutor sbagliato, docente
+    # che lascia l'ateneo).
+    autocomplete_fields = ("studente", "tutor", "appello")
     search_fields = ("studente__username", "studente__email", "titolo")
 
     # Le due colonne seguenti mostrano se l'allegato c'e', non quale sia: nel
@@ -84,3 +91,9 @@ class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Video")
     def ha_video(self, obj):
         return obj.ha_video
+
+    # Punteggio e giudizio si modificano anche da qui: l'admin e' lo strumento
+    # con cui la segreteria corregge i casi che l'applicazione non prevede
+    # (relatore che non c'e' piu', valutazione inserita sullo studente
+    # sbagliato). Nelle pagine dell'applicazione, invece, li scrive il solo
+    # relatore.

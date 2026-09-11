@@ -16,17 +16,118 @@
 <div style="display: flex; justify-content: space-between;" class="mb-4">
     <h1 class="h3 section-title" style="margin-top: auto; margin-bottom: auto;">{{ titolo_pagina }}</h1>
 
-{% if puo_creare_appelli %}
-        <a class="btn btn-primary btn-lg py-3" href="/appelli/nuovo/">
+    {% if puo_creare_appelli %}
+        <a class="btn btn-outline-primary btn-crea-appello btn-lg py-3"
+           href="{% url 'appelli:crea_appello' %}">
             <i class="bi bi-plus-circle me-2"></i>Crea un nuovo appello
         </a>
+    {% endif %}
+</div>
+
+{% comment %}
+    I miei tutorati: gli studenti di cui il docente e' relatore, degli appelli
+    non ancora passati. Sta in cima perche' e' l'unica sezione su cui deve
+    AGIRE; le altre due si consultano.
+
+    Raggruppati per appello e richiudibili: aperto solo il primo, cioe'
+    l'appello piu' vicino. Il riepilogo nell'intestazione e' cio' che rende
+    utile un gruppo chiuso -- senza, per sapere dove intervenire bisognerebbe
+    aprirli tutti.
+
+    La ricerca aggiorna l'elenco mentre si scrive (vedi lo script in fondo) e
+    sostituisce i gruppi con un elenco piatto. I gruppi restano comunque nella
+    pagina, solo nascosti: annullare la ricerca e' cosi' immediato e non costa
+    un'altra richiesta al server.
+{% endcomment %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header testata-blu d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <span>
+            I miei tutorati
+            {% if tutorati_totali %}<span class="conteggio">· {{ tutorati_totali }}</span>{% endif %}
+        </span>
+
+        {% comment %}
+            Resta un form vero: senza JavaScript si cerca premendo Invio e la
+            pagina risponde con gli stessi risultati. Lo script in fondo ci si
+            innesta sopra, non lo sostituisce.
+        {% endcomment %}
+        <form method="get" class="d-flex align-items-center" id="form-ricerca-tutorati">
+            <div class="campo-ricerca">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" name="q" value="{{ ricerca_tutorati }}"
+                       id="ricerca-tutorati" class="form-control"
+                       autocomplete="off"
+                       aria-label="Cerca fra i tuoi tutorati"
+                       aria-controls="risultati-tutorati"
+                       placeholder="Cerca studente o titolo...">
+                {# Mostrato dallo script: senza JS il campo si svuota a mano #}
+                <button type="button" class="azzera-ricerca" id="azzera-ricerca"
+                        aria-label="Annulla la ricerca" hidden>
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </div>
+            {# Senza un submit nel form, alcuni browser non inviano con Invio #}
+            <button type="submit" class="visually-hidden">Cerca</button>
+        </form>
     </div>
-{% endif %}
+
+    <div class="card-body p-0">
+        {% comment %}
+            Due contenitori, uno solo visibile per volta: i risultati quando si
+            cerca, i gruppi altrimenti. Lo script scambia l'uno con l'altro
+            senza ricaricare la pagina.
+        {% endcomment %}
+        <div id="risultati-tutorati" {% if not ricerca_tutorati %}hidden{% endif %}>
+            {% if ricerca_tutorati %}
+                {% include "appelli/_risultati_tutorati.html" %}
+            {% endif %}
+        </div>
+
+        <div id="elenco-tutorati" {% if ricerca_tutorati %}hidden{% endif %}>
+            {% for gruppo in tutorati_gruppi %}
+                <div class="border-bottom">
+                    <button class="gruppo-testata d-flex flex-wrap justify-content-between align-items-center gap-2 p-3"
+                            type="button" data-bs-toggle="collapse"
+                            data-bs-target="#gruppo-{{ gruppo.appello.id }}"
+                            aria-controls="gruppo-{{ gruppo.appello.id }}"
+                            aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}">
+                        <span class="d-flex align-items-center gap-2">
+                            <i class="bi bi-chevron-right freccia" aria-hidden="true"></i>
+                            <span class="gruppo-data">{{ gruppo.appello.data|date:"d/m/Y" }}</span>
+                            <span class="gruppo-corso">{{ gruppo.appello.corso_di_laurea }}</span>
+                        </span>
+                        {% comment %}
+                            Riepilogo: e' quello che rende leggibile un gruppo
+                            chiuso. Tutto in grigio tranne cio' su cui c'e' da
+                            intervenire, che e' l'unica cosa da notare da lontano.
+                        {% endcomment %}
+                        <span class="gruppo-riepilogo">
+                            {{ gruppo.totale }} student{{ gruppo.totale|pluralize:"e,i" }}
+                            {% if gruppo.da_valutare %}
+                                · <span class="da-valutare">{{ gruppo.da_valutare }} da valutare</span>
+                            {% else %}
+                                · tutti valutati
+                            {% endif %}
+                            {% if gruppo.in_commissione %} · sei anche in commissione{% endif %}
+                        </span>
+                    </button>
+                    <div class="collapse {% if forloop.first %}show{% endif %}"
+                         id="gruppo-{{ gruppo.appello.id }}">
+                        {% for iscrizione in gruppo.iscrizioni %}
+                            {% include "appelli/_riga_tutorato.html" %}
+                        {% endfor %}
+                    </div>
+                </div>
+            {% empty %}
+                <p class="text-muted mb-0 p-3">Non sei relatore di nessuno studente.</p>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 
 {# ---------------- Appelli delle proprie commissioni ---------------- #}
 <div class="card shadow-sm mb-4">
-    <div class="card-header">I miei appelli</div>
+    <div class="card-header testata-blu">I miei appelli</div>
     <div class="card-body p-0">
         {% if miei_appelli %}
             <div class="table-responsive">
@@ -70,7 +171,7 @@
 
 {# ---------------- Altri appelli: sola consultazione, senza dettaglio ---------------- #}
 <div class="card shadow-sm">
-    <div class="card-header">Altri appelli</div>
+    <div class="card-header testata-blu">Altri appelli</div>
     <div class="card-body p-0">
         {% if altri_appelli %}
             <div class="table-responsive">
@@ -104,4 +205,139 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+{% comment %}
+    DOMContentLoaded non e' una precauzione di rito: bootstrap.bundle.js e'
+    caricato in fondo a base.html, cioe' DOPO questo blocco. Eseguendo subito,
+    "bootstrap" non esisterebbe ancora.
+{% endcomment %}
+document.addEventListener('DOMContentLoaded', function () {
+    var URL_RICERCA = "{% url 'appelli:cerca_tutorati' %}";
+    var input = document.getElementById('ricerca-tutorati');
+    var azzera = document.getElementById('azzera-ricerca');
+    var risultati = document.getElementById('risultati-tutorati');
+    var elenco = document.getElementById('elenco-tutorati');
+    var attesa = null;     // timer del debounce
+    var richiesta = null;  // ricerca in corso, da annullare se ne parte un'altra
+
+    // --- Modulo di valutazione ------------------------------------------
+    // Gli ascoltatori stanno sul documento e non sui singoli moduli: dopo una
+    // ricerca le righe sono NUOVE, e ascoltatori agganciati all'avvio non le
+    // conoscerebbero. Gli eventi di Bootstrap risalgono, quindi la delega vale
+    // anche per le righe arrivate dopo.
+    //
+    // NON si usa data-bs-parent per l'esclusivita': chiuderebbe anche i
+    // gruppi, che sono collapse pure loro.
+    document.addEventListener('show.bs.collapse', function (e) {
+        var modulo = e.target;
+        if (!modulo.classList.contains('js-modifica')) return;
+        document.querySelectorAll('.js-modifica.show').forEach(function (altro) {
+            if (altro !== modulo) bootstrap.Collapse.getOrCreateInstance(altro).hide();
+        });
+        var riga = modulo.closest('.tutorato');
+        if (riga) riga.classList.add('is-aperto');
+    });
+    document.addEventListener('hide.bs.collapse', function (e) {
+        var modulo = e.target;
+        if (!modulo.classList.contains('js-modifica')) return;
+        var riga = modulo.closest('.tutorato');
+        if (riga) riga.classList.remove('is-aperto');
+    });
+
+    // --- Ricerca mentre si scrive ---------------------------------------
+    if (input) {
+        // I gruppi restano nella pagina: tornare all'elenco completo e'
+        // scoprirli di nuovo, non richiederli al server.
+        var mostraElenco = function () {
+            risultati.hidden = true;
+            risultati.textContent = '';
+            elenco.hidden = false;
+        };
+
+        var annulla = function () {
+            if (richiesta) { richiesta.abort(); richiesta = null; }
+            clearTimeout(attesa);
+            input.value = '';
+            azzera.hidden = true;
+            mostraElenco();
+            // L'URL torna pulito senza ricaricare: altrimenti un aggiornamento
+            // della pagina (o il salvataggio di una valutazione) riporterebbe
+            // una ricerca che sullo schermo era gia' stata annullata.
+            history.replaceState(null, '', window.location.pathname);
+            input.focus();
+        };
+
+        var cerca = function (termine) {
+            if (richiesta) richiesta.abort();
+            richiesta = new AbortController();
+            fetch(URL_RICERCA + '?q=' + encodeURIComponent(termine), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                credentials: 'same-origin',
+                signal: richiesta.signal
+            })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+            .then(function (dati) {
+                // Il contenuto arriva dal nostro template, gia' messo in salvo
+                // da Django: non e' testo dell'utente rimesso in pagina.
+                risultati.innerHTML = dati.html;
+                risultati.hidden = false;
+                elenco.hidden = true;
+                // Anche l'URL segue la ricerca: ricaricando, o tornando dopo
+                // aver salvato, si ritrovano gli stessi risultati.
+                history.replaceState(null, '', '?q=' + encodeURIComponent(termine));
+            })
+            .catch(function (e) { if (e.name !== 'AbortError') mostraElenco(); });
+        };
+
+        input.addEventListener('input', function () {
+            clearTimeout(attesa);
+            var termine = input.value.trim();
+            if (termine.length < 2) {
+                // Sotto le due lettere i risultati sarebbero troppi per essere
+                // utili: e' la stessa soglia della ricerca dei docenti.
+                mostraElenco();
+            } else {
+                // Si aspetta una breve pausa nella digitazione: senza, ogni
+                // tasto premuto produrrebbe una query al database.
+                attesa = setTimeout(function () { cerca(termine); }, 250);
+            }
+            azzera.hidden = termine.length === 0;
+        });
+
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { annulla(); return; }
+            // La ricerca e' gia' partita da sola: inviare il form mostrerebbe
+            // lo stesso risultato, solo dopo un giro completo di pagina.
+            if (e.key === 'Enter') e.preventDefault();
+        });
+
+        azzera.addEventListener('click', annulla);
+        // Il collegamento dentro i risultati e' un vero link, e senza
+        // JavaScript ricarica la pagina: qui lo si intercetta per evitarlo.
+        risultati.addEventListener('click', function (e) {
+            if (!e.target.closest('.js-annulla-ricerca')) return;
+            e.preventDefault();
+            annulla();
+        });
+
+        // Pagina aperta con una ricerca gia' nell'URL (o tornata da un
+        // salvataggio): il campo e' pieno, quindi la crocetta deve esserci.
+        if (input.value.trim()) azzera.hidden = false;
+    }
+
+    // Dopo un salvataggio si torna con l'ancora della riga. Se quella riga sta
+    // in un gruppo chiuso va aperto, altrimenti si atterrerebbe su un punto
+    // della pagina che non mostra nulla.
+    if (!location.hash) return;
+    var bersaglio = null;
+    try { bersaglio = document.querySelector(location.hash); } catch (e) { return; }
+    if (!bersaglio) return;
+    var gruppo = bersaglio.closest('.collapse');
+    if (gruppo && !gruppo.classList.contains('show')) {
+        bootstrap.Collapse.getOrCreateInstance(gruppo).show();
+    }
+    bersaglio.scrollIntoView({block: 'center'});
+});
+</script>
 {% endblock %}

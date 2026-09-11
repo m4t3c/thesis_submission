@@ -1,10 +1,10 @@
 {% extends "appelli/base.html" %}
 
 {% comment %}
-    Pagina iniziale dello studente, divisa in due tabelle: le iscrizioni gia'
-    fatte (con lo stato di titolo, tesi e video) e gli appelli a cui puo'
-    ancora iscriversi. La commissione non compare mai: allo studente si mostra
-    solo etichetta_pubblica (corso, data ed eventuale orario).
+    Pagina iniziale dello studente, in due parti: le iscrizioni gia' fatte,
+    una card ciascuna, e la tabella degli appelli a cui puo' ancora iscriversi.
+    La commissione non compare mai: allo studente si mostrano solo corso, data
+    ed eventuale orario.
 {% endcomment %}
 
 {% block title %}Area Studente{% endblock %}
@@ -12,80 +12,79 @@
 {% block content %}
 <h1 class="h3 section-title mb-4">Area Studente</h1>
 
-{# ---------------- Le mie iscrizioni ---------------- #}
-<div class="card shadow-sm mb-4">
-    <div class="card-header">Le mie iscrizioni</div>
-    <div class="card-body p-0">
-        {% if iscrizioni %}
-            <div class="table-responsive">
-                <table class="table table-stack table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Corso di laurea</th>
-                            <th>Data appello</th>
-                            <th>Orario</th>
-                            <th>Titolo</th>
-                            <th>Tesi</th>
-                            <th>Video</th>
-                            <th class="text-end">Azioni</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for iscrizione in iscrizioni %}
-                            <tr>
-                                <td class="fw-semibold" data-label="Corso di laurea">{{ iscrizione.appello.corso_di_laurea }}</td>
-                                <td class="nowrap" data-label="Data appello">{{ iscrizione.appello.data|date:"d/m/Y" }}</td>
-                                <td class="nowrap" data-label="Orario">
-                                    {% if iscrizione.appello.ora %}{{ iscrizione.appello.ora|time:"H:i" }}{% else %}
-                                        <span class="text-muted small">da definire</span>
-                                    {% endif %}
-                                </td>
-                                <td class="cell-titolo" data-label="Titolo">
-                                    {% if iscrizione.titolo %}{{ iscrizione.titolo }}{% else %}
-                                        <span class="text-muted small">non indicato</span>
-                                    {% endif %}
-                                </td>
-                                <td data-label="Tesi">
-                                    {% if iscrizione.file_tesi %}
-                                        <a class="nowrap" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                            <i class="bi bi-file-earmark-pdf text-primary me-1"></i>Scarica</a>
-                                    {% else %}
-                                        <span class="text-muted small">nessun file</span>
-                                    {% endif %}
-                                </td>
-                                <td data-label="Video">
-                                    {% if iscrizione.file_video %}
-                                        <a class="nowrap" href="{% url 'appelli:scarica_video' iscrizione.id %}">
-                                            <i class="bi bi-camera-video text-primary me-1"></i>Scarica</a>
-                                    {% elif iscrizione.link_video %}
-                                        <a class="nowrap" href="{{ iscrizione.link_video }}"
-                                           target="_blank" rel="noopener noreferrer">
-                                            <i class="bi bi-link me-1"></i>Apri link</a>
-                                    {% else %}
-                                        <span class="text-muted small">nessuno</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-end cell-actions" data-label="Azioni">
-                                    {# Unica azione possibile: l'iscrizione non e' annullabile dallo studente #}
-                                    <a class="btn btn-sm btn-outline-primary text-nowrap"
-                                       href="{% url 'appelli:carica_tesi' iscrizione.id %}">
-                                        {% if iscrizione.file_tesi %}Modifica{% else %}Completa{% endif %}
-                                    </a>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+{% comment %}
+    Le mie iscrizioni: una card per iscrizione, non piu' una tabella. Con sette
+    colonne (corso, data, orario, titolo, tutor, tesi, video) la tabella era
+    illeggibile gia' su schermo medio; qui il dato principale e' il titolo, e
+    il resto gli sta intorno. Non serve un contenitore con intestazione: ogni
+    card e' gia' un riquadro.
+{% endcomment %}
+<h2 class="h5 mb-3">Le mie iscrizioni</h2>
+{% if iscrizioni %}
+    <div class="d-flex flex-column gap-3 mb-4">
+    {% for iscrizione in iscrizioni %}
+        {% with appello=iscrizione.appello %}
+        <div class="card shadow-sm appello-card">
+            {# Grigio finche' manca qualcosa, blu a consegna completa #}
+            <div class="appello-data {% if iscrizione.mancanti %}is-incompleto{% endif %}">
+                <span class="dow">{{ appello.data|date:"D" }}</span>
+                <span class="giorno">{{ appello.data|date:"j" }}</span>
+                <span class="mese">{{ appello.data|date:"M Y" }}</span>
+                {% if appello.ora %}
+                    <span class="ora">{{ appello.ora|time:"H:i" }}</span>
+                {% else %}
+                    <span class="small ora">ora da definire</span>
+                {% endif %}
             </div>
-        {% else %}
-            <p class="text-muted mb-0 p-3">Non sei ancora iscritto a nessun appello.</p>
-        {% endif %}
+            <div class="flex-grow-1 p-3" style="min-width: 0;">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <span class="appello-corso">{{ appello.corso_di_laurea }}</span>
+                    <a class="btn btn-sm text-nowrap {% if iscrizione.file_tesi %}btn-outline-primary{% else %}btn-primary{% endif %}"
+                       href="{% url 'appelli:carica_tesi' iscrizione.id %}">
+                        {% if iscrizione.file_tesi %}<i class="bi bi-pencil me-1"></i>Modifica{% else %}Completa{% endif %}
+                    </a>
+                </div>
+                {% if iscrizione.titolo %}
+                    <p class="appello-titolo mb-2">{{ iscrizione.titolo }}</p>
+                {% else %}
+                    <p class="appello-titolo mb-2 text-muted fst-italic fw-normal">Titolo non indicato</p>
+                {% endif %}
+                <div class="appello-meta">
+                    <span class="text-muted text-nowrap">
+                        <i class="bi bi-person-video3 me-1"></i>Tutor
+                        {% if iscrizione.tutor %}
+                            <span class="text-body fw-semibold">{{ iscrizione.tutor.get_full_name|default:iscrizione.tutor.get_username }}</span>
+                        {% else %}da definire{% endif %}
+                    </span>
+                    {% if iscrizione.file_tesi %}
+                        <a class="text-nowrap" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>Tesi.pdf</a>
+                    {% endif %}
+                    {% if iscrizione.file_video %}
+                        <a class="text-nowrap" href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                            <i class="bi bi-camera-video me-1"></i>Video</a>
+                    {% elif iscrizione.link_video %}
+                        <a class="text-nowrap" href="{{ iscrizione.link_video }}" target="_blank" rel="noopener noreferrer">
+                            <i class="bi bi-link-45deg me-1"></i>Video</a>
+                    {% endif %}
+                    {% if iscrizione.mancanti %}
+                        <span class="badge-manca text-nowrap">
+                            <i class="bi bi-exclamation-circle me-1"></i>Mancano
+                            {{ iscrizione.mancanti|join:" e " }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endwith %}
+    {% endfor %}
     </div>
-</div>
+{% else %}
+    <p class="text-muted mb-4">Non sei ancora iscritto a nessun appello.</p>
+{% endif %}
 
 {# ---------------- Appelli disponibili ---------------- #}
 <div class="card shadow-sm">
-    <div class="card-header">Appelli disponibili</div>
+    <div class="card-header testata-blu d-flex flex-wrap justify-content-between align-items-center gap-3">Appelli disponibili</div>
     <div class="card-body p-0">
         {% if appelli_disponibili %}
             <div class="table-responsive">

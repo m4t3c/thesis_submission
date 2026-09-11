@@ -6,7 +6,11 @@ commissione, un docente "partecipa" a una commissione, uno studente si
 esplicita).
 """
 from django.conf import settings
-from django.core.validators import FileExtensionValidator
+from django.core.validators import (
+    FileExtensionValidator,
+    MaxValueValidator,
+    MinValueValidator,
+)
 from django.db import models
 from django.db.models import F
 
@@ -127,6 +131,13 @@ class AppelloDiLaurea(models.Model):
         return f"{self.etichetta_pubblica} (commissione {self.commissione})"
 
 
+# Punti che il relatore propone di aggiungere al voto di laurea. NON e' il
+# voto finale: e' un contributo, e lo zero e' un valore legittimo (proposta
+# di non aggiungere nulla), diverso da "non ancora valutato" che si
+# rappresenta con NULL.
+PUNTEGGIO_MIN = 0
+PUNTEGGIO_MAX = 2
+
 # Estensioni video accettate per il caricamento diretto.
 FORMATI_VIDEO = ["mp4", "mov", "m4v", "webm", "mkv", "avi"]
 
@@ -180,6 +191,29 @@ class StudenteAppelloDiLaurea(models.Model):
         on_delete=models.CASCADE,
         related_name="iscrizioni",
     )
+    # Docente che segue lo studente per questa tesi. NON deve necessariamente
+    # far parte della commissione dell'appello: il tutoraggio lega uno studente
+    # a un docente, ed e' indipendente da chi poi lo esamina.
+    #
+    # null=True per la stessa ragione di "titolo": le iscrizioni gia' esistenti
+    # e quelle create dall'import xlsx nascono senza tutor. L'obbligo vive nel
+    # form dello studente, che e' l'unico punto in cui il tutor si sceglie.
+    #
+    # PROTECT e non SET_NULL: il tutor non e' piu' modificabile una volta
+    # scelto, quindi azzerarlo in silenzio cancellando un docente lascerebbe
+    # l'iscrizione in uno stato che l'applicazione non sa piu' ricostruire.
+    tutor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        # Le iscrizioni di cui il docente e' tutor: docente.tutorati.all().
+        # "iscrizioni" e' gia' preso dal lato studente.
+        related_name="tutorati",
+        limit_choices_to={"groups__name": "docente"},
+        null=True,
+        blank=True,
+        verbose_name="Tutor",
+        help_text="Docente che segue lo studente per questa tesi.",
+    )
     data_iscrizione = models.DateTimeField(auto_now_add=True)
     file_tesi = models.FileField(
         upload_to=percorso_file_tesi,
@@ -219,6 +253,28 @@ class StudenteAppelloDiLaurea(models.Model):
         help_text="Indirizzo di un video gia' pubblicato online (facoltativo).",
     )
 
+    # --- Valutazione del relatore -------------------------------------
+    # Materiale INTERNO ai docenti: non compare in nessuna pagina dell'area
+    # studente. Lo inserisce il solo relatore (vedi puo_valutare in views.py).
+    punteggio = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[
+            MinValueValidator(PUNTEGGIO_MIN),
+            MaxValueValidator(PUNTEGGIO_MAX),
+        ],
+        verbose_name="Punti proposti",
+        help_text=(
+            f"Punti che il relatore propone di aggiungere al voto di laurea "
+            f"(da {PUNTEGGIO_MIN} a {PUNTEGGIO_MAX}). Vuoto = non ancora valutato."
+        ),
+    )
+    giudizio = models.TextField(
+        blank=True,
+        verbose_name="Giudizio",
+        help_text="Giudizio del relatore. Non visibile allo studente.",
+    )
+
     class Meta:
         verbose_name = "Iscrizione"
         verbose_name_plural = "Iscrizioni"
@@ -235,7 +291,43 @@ class StudenteAppelloDiLaurea(models.Model):
                 condition=models.Q(file_video="") | models.Q(link_video=""),
                 name="video_file_o_link_non_entrambi",
             ),
+            # Il limite vale anche fuori dai form: un objects.create(punteggio=3)
+            # deve fallire, non finire in silenzio nel database.
+            models.CheckConstraint(
+                condition=models.Q(punteggio__isnull=True)
+                | models.Q(
+                    punteggio__gte=PUNTEGGIO_MIN, punteggio__lte=PUNTEGGIO_MAX
+                ),
+                name="punteggio_nell_intervallo_ammesso",
+            ),
         ]
+
+    @property
+    def valutata(self):
+        """True se il relatore ha gia' proposto un punteggio.
+
+        Non basta "if iscrizione.punteggio": zero e' un punteggio valido, e
+        confonderlo con l'assenza di valutazione e' proprio l'errore che
+        l'interfaccia deve evitare.
+        """
+        return self.punteggio is not None
+
+    @property
+    def mancanti(self):
+        """Cosa manca ancora allo studente perche' la consegna sia completa.
+
+        Il video NON entra nell'elenco: il modello lo dichiara facoltativo, e
+        segnalarlo come mancante farebbe sembrare incompleta una consegna che
+        invece e' a posto. Nemmeno il tutor: il form dello studente lo esige
+        insieme a titolo e tesi, quindi non puo' mancare quando ci sono gli
+        altri due.
+        """
+        voci = []
+        if not self.titolo:
+            voci.append("titolo")
+        if not self.file_tesi:
+            voci.append("file tesi")
+        return voci
 
     @property
     def ha_video(self):
