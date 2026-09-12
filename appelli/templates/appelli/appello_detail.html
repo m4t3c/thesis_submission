@@ -60,6 +60,46 @@
         background: #fbfbfc;
         height: 100%;
     }
+
+    /* Intestazioni di gruppo dentro la tabella: si leggono come etichette,
+       non come righe di dati, quindi maiuscoletto spaziato e corpo piccolo. */
+    .riga-gruppo td {
+        text-transform: uppercase; letter-spacing: .06em;
+        font-size: .8125rem; font-weight: 700; color: var(--muted);
+        background: #fafbfc; padding-top: .45rem; padding-bottom: .45rem;
+    }
+    .riga-gruppo .conteggio { font-weight: 400; opacity: .75; }
+    /* Il proprio gruppo e' l'unico colorato: il colore qui vuol dire
+       "riguarda te", ed e' cio' che si cerca aprendo la pagina. */
+    .riga-gruppo-mia td { color: var(--brand); background: var(--brand-velo); }
+
+    /* Striscia blu a sinistra, sulla testata e su ogni riga del gruppo.
+       box-shadow e non border-left: il bordo allargherebbe la cella e
+       disallineerebbe le colonne rispetto alle righe degli altri studenti. */
+    .riga-gruppo-mia td:first-child,
+    .riga-mia td:first-child { box-shadow: inset 4px 0 0 var(--brand); }
+    /* table-hover riscrive lo sfondo della cella al passaggio del cursore:
+       senza questo la striscia resterebbe coperta. */
+    .table-hover > tbody > tr.riga-mia:hover > td:first-child {
+        box-shadow: inset 4px 0 0 var(--brand);
+    }
+
+    @media (max-width: 991.98px) {
+        /* In modalita' "schede" ogni riga e' un riquadro: l'intestazione di
+           gruppo non deve diventarlo, o sembrerebbe uno studente senza nome. */
+        .table-stack .riga-gruppo {
+            background: transparent; border: 0; border-radius: 0;
+            margin: 1rem 0 .25rem; padding: 0;
+        }
+        .table-stack .riga-gruppo td {
+            display: block; text-align: left; padding: 0;
+            background: transparent; box-shadow: none;
+        }
+        .table-stack .riga-gruppo td::before { display: none; }
+        /* Sulla scheda la striscia va su tutto il riquadro, non su una cella */
+        .table-stack .riga-mia { box-shadow: inset 4px 0 0 var(--brand); }
+        .table-stack .riga-mia td:first-child { box-shadow: none; }
+    }
 </style>
 
 {# ---------------- Studenti iscritti e loro allegati ---------------- #}
@@ -78,43 +118,34 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for iscrizione in iscrizioni %}
-                            <tr>
-                                <td class="fw-semibold" data-label="Studente">
-                                    {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
-                                </td>
-                                <td class="cell-titolo" data-label="Titolo">
-                                    {% if iscrizione.titolo %}{{ iscrizione.titolo }}{% else %}
-                                        <span class="text-muted small">non indicato</span>
-                                    {% endif %}
-                                </td>
-                                <td data-label="Video">
-                                    {% if iscrizione.file_video %}
-                                        <a class="btn btn-sm btn-soft-primary"
-                                           href="{% url 'appelli:scarica_video' iscrizione.id %}">
-                                           <i class="bi bi-camera-video me-1"></i>Scarica video
-                                        </a>
-                                    {% elif iscrizione.link_video %}
-                                        <a class="btn btn-sm btn-soft-primary"
-                                           href="{{ iscrizione.link_video }}"
-                                           target="_blank" rel="noopener noreferrer">
-                                            <i class="bi bi-link me-1"></i>Apri link
-                                        </a>
-                                    {% else %}
-                                        <span class="text-muted small">nessuno</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-end" data-label="Tesi">
-                                    {% if iscrizione.file_tesi %}
-                                        <a class="btn btn-sm btn-soft-primary"
-                                           href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                           <i class="bi bi-file-earmark-pdf me-1"></i>Scarica tesi
-                                        </a>
-                                    {% else %}
-                                        <span class="text-muted small">Non ancora caricata</span>
-                                    {% endif %}
+                        {% comment %}
+                            Se non si e' relatore di nessuno, niente
+                            intestazioni: un solo gruppo che dice "altri
+                            studenti" sarebbe un'etichetta senza contrasto.
+                        {% endcomment %}
+                        {% if iscritti_miei %}
+                            <tr class="riga-gruppo riga-gruppo-mia">
+                                <td colspan="4">
+                                    Di cui sei tutor
+                                    <span class="conteggio">· {{ iscritti_miei|length }}</span>
                                 </td>
                             </tr>
+                            {% for iscrizione in iscritti_miei %}
+                                {% include "appelli/_riga_iscritto.html" with mia=1 %}
+                            {% endfor %}
+
+                            {% if iscritti_altri %}
+                                <tr class="riga-gruppo">
+                                    <td colspan="4">
+                                        Altri studenti
+                                        <span class="conteggio">· {{ iscritti_altri|length }}</span>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endif %}
+
+                        {% for iscrizione in iscritti_altri %}
+                            {% include "appelli/_riga_iscritto.html" %}
                         {% endfor %}
                     </tbody>
                 </table>

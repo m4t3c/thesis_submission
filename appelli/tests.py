@@ -100,14 +100,29 @@ class IscrizioneManualeRimossaTest(BaseSetup):
                 self.assertEqual(self.client.post(percorso).status_code, 404)
         self.assertFalse(StudenteAppelloDiLaurea.objects.exists())
 
-    def test_dashboard_senza_pulsante_iscriviti(self):
+    def test_dashboard_senza_azione_di_iscrizione(self):
+        """L'elenco resta visibile, ma senza nessun modo di iscriversi.
+
+        Si guarda il MECCANISMO dentro la tabella (un form da inviare, un
+        pulsante da premere), non la parola "Iscriviti": quella puo'
+        ricomparire in un testo qualunque - per esempio nel rimando a esse3 -
+        senza che il pulsante sia tornato, e un test che la cerca fallirebbe
+        per un motivo che non c'entra con cio' che deve difendere.
+        """
         self.client.force_login(self.studente)
         testo = self.client.get(
             reverse("appelli:studente_dashboard")
         ).content.decode()
-        self.assertNotIn("Iscriviti", testo)
+
         # L'elenco degli appelli disponibili resta comunque visibile
         self.assertIn("Appelli disponibili", testo)
+
+        inizio = testo.index("Appelli disponibili")
+        fine = testo.find("</table>", inizio)
+        self.assertNotEqual(fine, -1, "la tabella degli appelli disponibili non c'e'")
+        tabella = testo[inizio:fine]
+        self.assertNotIn("<form", tabella)
+        self.assertNotIn("<button", tabella)
 
 
 class DisiscrizioneRimossaTest(BaseSetup):
@@ -873,6 +888,8 @@ class PresidenteTest(BaseSetup):
             "data": "2031-06-01",
             "ora": "10:00",
             "docenti": [self.docente.pk, self.presidente.pk],
+            # Obbligatori: senza, il form si rifiuta di creare l'appello.
+            "studenti": [self.studente.pk],
         }
         dati.update(extra)
         return self.client.post(reverse("appelli:crea_appello"), dati)
@@ -1107,6 +1124,7 @@ class CommissioneSenzaNomeTest(BaseSetup):
             "data": "2032-03-03",
             "ora": "09:00",
             "docenti": [nuovo.pk],
+            "studenti": [self.studente.pk],
         })
         appello = AppelloDiLaurea.objects.get(corso_di_laurea="Matematica")
         self.assertEqual(appello.commissione.nome, "")
@@ -1488,16 +1506,8 @@ class CreazioneAppelloConStudentiTest(BaseSetup):
         )
         self.assertEqual(iscritti, {self.studente.pk, self.altro_studente.pk})
 
-    def test_appello_senza_studenti_consentito(self):
-        """L'elenco puo' mancare: l'appello si crea comunque."""
-        resp = self._crea([])
-        self.assertRedirects(
-            resp,
-            reverse("appelli:presidente_dashboard"),
-            fetch_redirect_response=False,
-        )
-        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Ingegneria Informatica")
-        self.assertEqual(appello.iscrizioni.count(), 0)
+    # L'elenco vuoto NON e' piu' ammesso: la regola, con i suoi casi, sta in
+    # RegoleNuoveAppelloTest insieme a quella sulla data.
 
     def test_un_docente_non_puo_essere_iscritto(self):
         """Il campo accetta solo utenti del gruppo studente."""
@@ -1517,6 +1527,7 @@ class BackendPostaRotto(BaseEmailBackend):
         raise OSError("server di posta irraggiungibile")
 
 
+@override_settings(AVVISI_IN_BACKGROUND=False)
 class AvvisiEmailTest(BaseSetup):
     """Email mandate alla creazione di un appello."""
 
@@ -1600,13 +1611,185 @@ class AvvisiEmailTest(BaseSetup):
 
     @override_settings(EMAIL_BACKEND="appelli.tests.BackendPostaRotto")
     def test_posta_guasta_non_fa_perdere_l_appello(self):
-        resp = self._crea()
+        """Un server di posta irraggiungibile non deve far fallire nulla.
+
+        L'errore non arriva piu' a schermo (quando l'invio e' in sottofondo la
+        risposta e' gia' partita): resta nei log, ed e' li' che va cercato.
+        """
+        with self.assertLogs("appelli.notifiche", level="ERROR") as registro:
+            resp = self._crea()
+        self.assertEqual(resp.status_code, 200)
         self.assertTrue(
             AppelloDiLaurea.objects.filter(
                 corso_di_laurea="Ingegneria Informatica"
             ).exists()
         )
-        self.assertContains(resp, "non sono state inviate")
+        self.assertIn("non riuscito", "\n".join(registro.output))
+
+    def test_in_esercizio_l_invio_non_blocca_la_richiesta(self):
+        """Con le impostazioni vere la consegna viene affidata a un thread.
+
+        Contare i thread vivi non funzionerebbe: con il backend dei test la
+        spedizione finisce prima del controllo. Si verifica invece che il
+        thread venga creato e che dentro la richiesta non parta nulla.
+        """
+        from unittest import mock
+
+        from appelli import notifiche
+
+        with override_settings(AVVISI_IN_BACKGROUND=True):
+            with mock.patch("appelli.notifiche.threading.Thread") as finto_thread:
+                self._crea()
+
+        self.assertTrue(finto_thread.called)
+        self.assertIs(finto_thread.call_args.kwargs["target"], notifiche._spedisci)
+        self.assertEqual(len(mail.outbox), 0)
+
+
+@override_settings(AVVISI_IN_BACKGROUND=False)
+class AvvisoTutorTest(BaseSetup):
+    """Email mandata al docente che uno studente sceglie come tutor.
+
+    Lo scenario tiene due docenti diversi apposta: "esterno_test" e' tutor ma
+    NON siede nella commissione (il caso normale, perche' il tutoraggio non
+    passa dalla commissione) e "docente_test" invece si'. E' l'unica cosa che
+    cambia il link contenuto nell'email.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.studente.first_name = "Mario"
+        self.studente.last_name = "Rossi"
+        self.studente.email = "111111@studenti.unimore.it"
+        self.studente.save()
+
+        self.docente.email = "docente@unimore.it"
+        self.docente.save(update_fields=["email"])
+
+        self.esterno = User.objects.create_user(
+            "esterno_test", password="pw", email="esterno@unimore.it"
+        )
+        self.esterno.groups.add(self.g_docente)
+
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        self.url = reverse("appelli:carica_tesi", args=[self.iscrizione.pk])
+        self.client.force_login(self.studente)
+
+    def tearDown(self):
+        self.iscrizione.refresh_from_db()
+        if self.iscrizione.file_tesi:
+            self.iscrizione.file_tesi.delete(save=False)
+
+    TITOLO = "Un titolo di tesi"
+
+    def _salva(self, tutor=None, **extra):
+        """Salvataggio completo del modulo della tesi: titolo, tutor e PDF."""
+        dati = {
+            "titolo": self.TITOLO,
+            "tutor": (tutor or self.esterno).pk,
+            "modalita_video": "nessuno",
+            "file_tesi": SimpleUploadedFile(
+                "tesi.pdf", b"%PDF-1.7 contenuto", content_type="application/pdf"
+            ),
+        }
+        dati.update(extra)
+        return self.client.post(self.url, dati)
+
+    def _avviso(self):
+        self.assertEqual(len(mail.outbox), 1)
+        return mail.outbox[0]
+
+    def test_il_docente_scelto_riceve_l_avviso(self):
+        """Una sola email, e va al tutor: lo studente non va avvisato di nulla."""
+        resp = self._salva()
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        avviso = self._avviso()
+        self.assertEqual(avviso.to, ["esterno@unimore.it"])
+
+    def test_avviso_nomina_lo_studente_con_nome_cognome_ed_email(self):
+        """E' il contenuto utile: chi e' e a che indirizzo gli si risponde."""
+        self._salva()
+        corpo = self._avviso().body
+        self.assertIn("Mario Rossi", corpo)
+        self.assertIn("111111@studenti.unimore.it", corpo)
+
+    def test_avviso_nomina_l_appello(self):
+        self._salva()
+        self.assertIn(self.appello.etichetta_pubblica, self._avviso().body)
+
+    def test_tutor_fuori_commissione_riceve_il_link_all_area_docente(self):
+        """appello_detail gli risponderebbe 403: il link deve portarlo dove
+        quel tutorato lo vede davvero, cioe' sulla sua riga in area docente."""
+        self._salva()
+        corpo = self._avviso().body
+        self.assertIn(
+            "http://testserver"
+            + reverse("appelli:docente_dashboard")
+            + f"#tutorato-{self.iscrizione.pk}",
+            corpo,
+        )
+        self.assertNotIn(
+            reverse("appelli:appello_detail", args=[self.appello.pk]), corpo
+        )
+
+    def test_tutor_in_commissione_riceve_il_link_al_dettaglio_appello(self):
+        """Chi e' in commissione puo' aprire la pagina dell'appello: si da'
+        quella, che e' la piu' completa."""
+        self._salva(tutor=self.docente)
+        self.assertIn(
+            "http://testserver"
+            + reverse("appelli:appello_detail", args=[self.appello.pk]),
+            self._avviso().body,
+        )
+
+    def test_un_solo_avviso_anche_salvando_altre_volte(self):
+        """Il tutor si sceglie una volta sola: i salvataggi successivi di
+        titolo, tesi o video non devono rimandare lo stesso avviso."""
+        self._salva()
+        mail.outbox = []
+        self._salva(titolo="Titolo corretto")
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Titolo corretto")
+        self.assertEqual(mail.outbox, [])
+
+    def test_nessun_avviso_se_il_modulo_viene_rifiutato(self):
+        """Senza titolo il form non e' valido: nessun tutor salvato, quindi
+        nessuno da avvisare. Altrimenti si annuncerebbe una nomina inesistente."""
+        resp = self._salva(titolo="")
+        self.assertEqual(resp.status_code, 200)
+        self.iscrizione.refresh_from_db()
+        self.assertIsNone(self.iscrizione.tutor_id)
+        self.assertEqual(mail.outbox, [])
+
+    def test_tutor_senza_indirizzo_finisce_nel_log(self):
+        """Allo studente non si dice niente (non potrebbe farci nulla), ma la
+        cosa non deve sparire in silenzio."""
+        self.esterno.email = ""
+        self.esterno.save(update_fields=["email"])
+        with self.assertLogs("appelli.notifiche", level="WARNING") as registro:
+            resp = self._salva()
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.tutor_id, self.esterno.pk)
+        self.assertEqual(mail.outbox, [])
+        self.assertIn("Nessun indirizzo email per il tutor", "\n".join(registro.output))
+
+    def test_in_esercizio_l_invio_non_blocca_lo_studente(self):
+        """Come per gli avvisi di un nuovo appello: la consegna va in un thread
+        e la pagina dello studente non aspetta la posta."""
+        from unittest import mock
+
+        from appelli import notifiche
+
+        with override_settings(AVVISI_IN_BACKGROUND=True):
+            with mock.patch("appelli.notifiche.threading.Thread") as finto_thread:
+                self._salva()
+
+        self.assertTrue(finto_thread.called)
+        self.assertIs(finto_thread.call_args.kwargs["target"], notifiche._spedisci)
+        self.assertEqual(mail.outbox, [])
 
 
 class TutoratiEValutazioneTest(BaseSetup):
@@ -1708,7 +1891,9 @@ class TutoratiEValutazioneTest(BaseSetup):
     def test_titolo_non_svuotabile_dal_relatore(self):
         """Vale la stessa regola dello studente: correggere si', svuotare no."""
         self.client.force_login(self.relatore)
-        self.client.post(self.url_valuta, {"titolo": "", "punteggio": "1"})
+        self.client.post(self.url_valuta, {
+            "titolo": "", "punteggio": "1", "giudizio": "Va bene.",
+        })
         self.i_futura.refresh_from_db()
         self.assertEqual(self.i_futura.titolo, "Tesi futura")
 
@@ -1716,7 +1901,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         """Del 'ritorno' si tengono solo i filtri: il percorso lo rifa' reverse()."""
         self.client.force_login(self.relatore)
         resp = self.client.post(self.url_valuta, {
-            "titolo": "T", "punteggio": "1",
+            "titolo": "T", "punteggio": "1", "giudizio": "Va bene.",
             "ritorno": "q=ciao&next=https://esempio.invalido/rubato",
         })
         self.assertNotIn("esempio.invalido", resp["Location"])
@@ -1864,3 +2049,279 @@ class TutoratiEValutazioneTest(BaseSetup):
         with CaptureQueriesContext(connection) as dopo:
             self.client.get(url)
         self.assertEqual(len(prima.captured_queries), len(dopo.captured_queries))
+
+
+class RegoleNuoveAppelloTest(BaseSetup):
+    """Data non nel passato e almeno uno studente, alla creazione di un appello."""
+
+    def setUp(self):
+        super().setUp()
+        self.presidente = User.objects.create_user("pres_regole", password="pw")
+        self.presidente.groups.add(
+            self.g_docente, Group.objects.get(name="presidente")
+        )
+        self.client.force_login(self.presidente)
+
+    def _dati(self, **extra):
+        dati = {
+            "corso_di_laurea": "Ingegneria Informatica",
+            "data": (datetime.date.today() + datetime.timedelta(days=30)).isoformat(),
+            "ora": "10:00",
+            "docenti": [self.docente.pk],
+            "studenti": [self.studente.pk],
+        }
+        dati.update(extra)
+        return dati
+
+    # --- Almeno uno studente ---------------------------------------------
+
+    def test_senza_studenti_l_appello_non_nasce(self):
+        dati = self._dati()
+        del dati["studenti"]
+        prima = AppelloDiLaurea.objects.count()
+        resp = self.client.post(reverse("appelli:crea_appello"), dati)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(AppelloDiLaurea.objects.count(), prima)
+        self.assertContains(resp, "un appello senza studenti")
+
+    def test_l_errore_sugli_studenti_e_in_un_box_di_avviso(self):
+        dati = self._dati()
+        del dati["studenti"]
+        resp = self.client.post(reverse("appelli:crea_appello"), dati)
+        self.assertContains(resp, "alert alert-danger")
+
+    def test_con_studenti_l_appello_nasce(self):
+        resp = self.client.post(reverse("appelli:crea_appello"), self._dati())
+        self.assertEqual(resp.status_code, 302)
+        appello = AppelloDiLaurea.objects.get(corso_di_laurea="Ingegneria Informatica")
+        self.assertEqual(appello.iscrizioni.count(), 1)
+
+    # --- Data non nel passato --------------------------------------------
+
+    def test_data_passata_rifiutata(self):
+        """Il limite del calendario e' solo un suggerimento: conta il server."""
+        ieri = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        prima = AppelloDiLaurea.objects.count()
+        resp = self.client.post(
+            reverse("appelli:crea_appello"), self._dati(data=ieri)
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(AppelloDiLaurea.objects.count(), prima)
+        self.assertContains(resp, "non può essere nel passato")
+
+    def test_oggi_e_ammesso(self):
+        oggi = datetime.date.today().isoformat()
+        resp = self.client.post(
+            reverse("appelli:crea_appello"), self._dati(data=oggi)
+        )
+        self.assertEqual(resp.status_code, 302)
+
+    def test_il_calendario_parte_da_oggi(self):
+        """L'attributo "min" evita all'utente di scegliere una data rifiutata."""
+        resp = self.client.get(reverse("appelli:crea_appello"))
+        self.assertContains(resp, 'min="%s"' % datetime.date.today().isoformat())
+
+
+class ValutazioneObbligatoriaTest(BaseSetup):
+    """Punteggio e giudizio vanno insieme: o tutti e due, o nessuno dei due."""
+
+    def setUp(self):
+        super().setUp()
+        self.relatore = User.objects.create_user("rel_obbl", password="pw")
+        self.relatore.groups.add(self.g_docente)
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello,
+            tutor=self.relatore, titolo="Una tesi",
+        )
+        self.url = reverse("appelli:salva_valutazione", args=[self.iscrizione.id])
+        self.client.force_login(self.relatore)
+
+    def test_punteggio_senza_giudizio_non_salva(self):
+        self.client.post(self.url, {"titolo": "Una tesi", "punteggio": "2"})
+        self.iscrizione.refresh_from_db()
+        self.assertIsNone(self.iscrizione.punteggio)
+
+    def test_giudizio_senza_punteggio_non_salva(self):
+        self.client.post(self.url, {"titolo": "Una tesi", "giudizio": "Ottimo."})
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.giudizio, "")
+
+    def test_con_entrambi_salva(self):
+        self.client.post(self.url, {
+            "titolo": "Una tesi", "punteggio": "2", "giudizio": "Ottimo.",
+        })
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.punteggio, 2)
+        self.assertEqual(self.iscrizione.giudizio, "Ottimo.")
+
+    def test_senza_nessuno_dei_due_si_salva_lo_stesso(self):
+        """Il solo titolo resta correggibile su chi non e' ancora valutato."""
+        resp = self.client.post(
+            self.url, {"titolo": "Titolo corretto"}, follow=True
+        )
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Titolo corretto")
+        self.assertIsNone(self.iscrizione.punteggio)
+        self.assertNotIn("Modifica non salvata", resp.content.decode())
+
+    # --- Niente deve andare perso ----------------------------------------
+
+    def test_l_errore_non_fa_perdere_quello_che_era_stato_scritto(self):
+        """La pagina si ridisegna con dentro il testo: non si riparte da zero."""
+        resp = self.client.post(self.url, {
+            "titolo": "Una tesi", "giudizio": "Un giudizio lungo da riscrivere.",
+        })
+        self.assertEqual(resp.status_code, 200)   # ridisegnata, non rimandata
+        self.assertContains(resp, "Un giudizio lungo da riscrivere.")
+
+    def test_il_pannello_torna_aperto_sulla_riga_sbagliata(self):
+        resp = self.client.post(self.url, {
+            "titolo": "Una tesi", "giudizio": "Solo il giudizio.",
+        })
+        # Gli spazi si normalizzano: nel template l'attributo id sta a capo.
+        html = re.sub(r"\s+", " ", resp.content.decode())
+        self.assertIn(
+            'class="collapse js-modifica show" id="modifica-%d"' % self.iscrizione.id,
+            html,
+        )
+
+    def test_la_ricerca_in_corso_non_si_perde(self):
+        """I filtri arrivano dal campo "ritorno": la POST non ha querystring."""
+        resp = self.client.post(self.url, {
+            "titolo": "Una tesi", "giudizio": "Solo il giudizio.",
+            "ritorno": "q=" + self.studente.username,
+        })
+        self.assertEqual(resp.context["ricerca_tutorati"], self.studente.username)
+
+    def test_un_filtro_inventato_viene_scartato(self):
+        """Del "ritorno" si tiene solo cio' che e' un filtro noto."""
+        resp = self.client.post(self.url, {
+            "titolo": "Una tesi", "giudizio": "Solo il giudizio.",
+            "ritorno": "q=ciao&next=https://esempio.invalido/rubato",
+        })
+        self.assertEqual(resp.context["ricerca_tutorati"], "ciao")
+        self.assertNotContains(resp, "esempio.invalido")
+
+    def test_il_motivo_dice_quale_meta_manca(self):
+        resp = self.client.post(
+            self.url, {"titolo": "Una tesi", "punteggio": "2"}, follow=True
+        )
+        self.assertIn("scrivi anche il giudizio", resp.content.decode())
+
+        resp = self.client.post(
+            self.url, {"titolo": "Una tesi", "giudizio": "Ottimo."}, follow=True
+        )
+        self.assertIn("scegli anche il punteggio", resp.content.decode())
+
+
+class MancanzeAreaStudenteTest(BaseSetup):
+    """Ogni dato mancante ha il suo riquadro, dove il dato dovrebbe stare."""
+
+    def setUp(self):
+        super().setUp()
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        self.client.force_login(self.studente)
+
+    def _pagina(self):
+        return self.client.get(
+            reverse("appelli:studente_dashboard")
+        ).content.decode()
+
+    def test_tre_riquadri_quando_manca_tutto(self):
+        pagina = self._pagina()
+        for atteso in ("Titolo mancante", "Tutor mancante",
+                       "Tesi mancante"):
+            with self.subTest(riquadro=atteso):
+                self.assertIn(atteso, pagina)
+        # class="badge-manca e non "badge-manca": la seconda forma conterebbe
+        # anche la regola CSS che sta nel <style> della pagina.
+        self.assertEqual(pagina.count('class="badge-manca'), 3)
+
+    def test_il_riquadro_sparisce_quando_il_dato_c_e(self):
+        self.iscrizione.titolo = "Un titolo"
+        self.iscrizione.tutor = self.docente
+        self.iscrizione.save()
+        pagina = self._pagina()
+        self.assertNotIn("Titolo mancante", pagina)
+        self.assertNotIn("Tutor mancante", pagina)
+        # La tesi manca ancora: il suo riquadro resta
+        self.assertIn("Tesi mancante", pagina)
+
+    def test_il_tutor_conta_fra_le_mancanze(self):
+        """Altrimenti una card potrebbe dirsi completa e mostrare "Manca il tutor"."""
+        self.iscrizione.titolo = "Un titolo"
+        self.iscrizione.file_tesi.save(
+            "t.pdf", SimpleUploadedFile("t.pdf", b"%PDF-1.7 x"), save=True
+        )
+        self.addCleanup(self.iscrizione.file_tesi.delete, save=False)
+        self.assertEqual(self.iscrizione.mancanti, ["tutor"])
+        self.assertIn("is-incompleto", self._pagina())
+
+
+class DettaglioIscrittiRaggruppatiTest(BaseSetup):
+    """Nel dettaglio dell'appello i propri laureandi stanno in cima, distinti."""
+
+    def setUp(self):
+        super().setUp()
+        self.altro_docente = User.objects.create_user("doc_altro", password="pw")
+        self.altro_docente.groups.add(self.g_docente)
+
+        # Cognomi scelti apposta: in ordine alfabetico sarebbe Bianchi, Rossi,
+        # Verdi, quindi se il raggruppamento non ci fosse Rossi (il proprio)
+        # finirebbe in mezzo agli altri.
+        self.mio = self._iscrivi("Mario", "Rossi", tutor=self.docente)
+        self.suo1 = self._iscrivi("Anna", "Bianchi", tutor=self.altro_docente)
+        self.suo2 = self._iscrivi("Luca", "Verdi", tutor=self.altro_docente)
+
+        self.url = reverse("appelli:appello_detail", args=[self.appello.id])
+        self.client.force_login(self.docente)
+
+    def _iscrivi(self, nome, cognome, tutor):
+        studente = User.objects.create_user(
+            "%s_%s" % (nome.lower(), cognome.lower()), password="pw"
+        )
+        studente.first_name, studente.last_name = nome, cognome
+        studente.save()
+        studente.groups.add(self.g_studente)
+        return StudenteAppelloDiLaurea.objects.create(
+            studente=studente, appello=self.appello, tutor=tutor
+        )
+
+    def test_i_due_gruppi_contengono_le_persone_giuste(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(list(resp.context["iscritti_miei"]), [self.mio])
+        self.assertEqual(
+            list(resp.context["iscritti_altri"]), [self.suo1, self.suo2]
+        )
+
+    def test_i_propri_laureandi_sono_in_cima(self):
+        """Anche se il cognome li metterebbe in mezzo agli altri."""
+        html = self.client.get(self.url).content.decode()
+        self.assertLess(html.index("Mario Rossi"), html.index("Anna Bianchi"))
+
+    def test_le_righe_dei_propri_sono_contrassegnate(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertEqual(html.count('class="riga-mia"'), 1)
+        self.assertIn("Di cui sei tutor", html)
+        self.assertIn("Altri studenti", html)
+
+    def test_senza_propri_laureandi_niente_intestazioni(self):
+        """Un solo gruppo non ha bisogno di essere annunciato.
+
+        Serve un commissario che non segua NESSUNO: altro_docente non va bene,
+        perche' di suo e' relatore di due dei tre iscritti.
+        """
+        estraneo = User.objects.create_user("doc_estraneo", password="pw")
+        estraneo.groups.add(self.g_docente)
+        self.commissione.docenti.add(estraneo)
+        self.client.force_login(estraneo)
+        html = self.client.get(self.url).content.decode()
+        self.assertNotIn("Di cui sei tutor", html)
+        self.assertNotIn("Altri studenti", html)
+        self.assertNotIn('class="riga-mia"', html)
+
+    def test_dentro_un_gruppo_l_ordine_e_alfabetico(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertLess(html.index("Anna Bianchi"), html.index("Luca Verdi"))

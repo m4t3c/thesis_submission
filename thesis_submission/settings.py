@@ -239,18 +239,25 @@ if EMAIL_HOST:
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-EMAIL_PORT = int(os.environ.get("DJANGO_EMAIL_PORT", "587"))
+EMAIL_PORT = int(os.environ.get("DJANGO_EMAIL_PORT") or "587")
 EMAIL_HOST_USER = os.environ.get("DJANGO_EMAIL_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("DJANGO_EMAIL_USE_TLS", "1") == "1"
 
+# Gli avvisi di un nuovo appello partono in un thread separato, cosi' la
+# pagina del presidente non aspetta la posta (mezzo secondo di handshake piu'
+# una frazione per destinatario: con molti laureandi si sente). I test lo
+# spengono per poter controllare i messaggi subito dopo la creazione.
+AVVISI_IN_BACKGROUND = os.environ.get("DJANGO_AVVISI_IN_BACKGROUND", "1") == "1"
+
 # Secondi di attesa massima verso il server di posta. Senza limite, un SMTP
 # che non risponde terrebbe bloccato il worker che sta creando l'appello.
-EMAIL_TIMEOUT = int(os.environ.get("DJANGO_EMAIL_TIMEOUT", "10"))
+EMAIL_TIMEOUT = int(os.environ.get("DJANGO_EMAIL_TIMEOUT") or "10")
 
 # Mittente usato quando il messaggio non ne indica uno.
-DEFAULT_FROM_EMAIL = os.environ.get(
-    "DJANGO_DEFAULT_FROM_EMAIL", "Consegna Tesi <noreply@ing.unimore.it>"
+DEFAULT_FROM_EMAIL = (
+    os.environ.get("DJANGO_DEFAULT_FROM_EMAIL")
+    or "Consegna Tesi <tesi.ing@unimore.it>"
 )
 
 # Tipo di chiave primaria assegnato ai modelli che non ne dichiarano una.

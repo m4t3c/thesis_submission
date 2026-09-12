@@ -46,6 +46,22 @@ services:
       DJANGO_ALLOWED_HOSTS: "*"
       DJANGO_DEBUG: "1"
       SHIB_ENABLED: "0" # in locale NON c'è Shibboleth
+      # --- Posta -------------------------------------------------------
+      # Vuote per impostazione predefinita: senza DJANGO_EMAIL_HOST Django usa
+      # il backend "console" e le email finiscono nei log invece di partire,
+      # che in sviluppo e' quello che si vuole.
+      # Per provare l'invio VERO basta scriverle nel .env locale.
+      #
+      # ATTENZIONE: da quel momento le email partono davvero, e gli utenti di
+      # crea_dati_demo hanno indirizzi di persone reali. Prima di creare un
+      # appello di prova conviene dirottarli sul proprio indirizzo:
+      #   docker compose exec -T web python manage.py shell -c "
+      #   from django.contrib.auth import get_user_model
+      #   get_user_model().objects.exclude(email='').update(email='tuo@indirizzo')"
+      DJANGO_EMAIL_HOST: "${DJANGO_EMAIL_HOST:-}"
+      DJANGO_EMAIL_USER: "${DJANGO_EMAIL_USER:-}"
+      DJANGO_EMAIL_PASSWORD: "${DJANGO_EMAIL_PASSWORD:-}"
+      DJANGO_DEFAULT_FROM_EMAIL: "${DJANGO_DEFAULT_FROM_EMAIL:-}"
     volumes:
       - ./media:/app/media # le tesi caricate persistono nella cartella locale
     ports:

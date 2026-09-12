@@ -28,7 +28,7 @@ from .forms import (
     ValutazioneForm,
     dati_utente,
 )
-from .notifiche import avvisa_nuovo_appello
+from .notifiche import avvisa_nomina_tutor, avvisa_nuovo_appello
 from .xlsx import MAX_BYTE_XLSX, ErroreXlsx, leggi_elenco
 from .models import (
     FORMATI_VIDEO,
@@ -191,6 +191,12 @@ def carica_tesi(request, iscrizione_id):
         form = TesiUploadForm(request.POST, request.FILES, instance=iscrizione)
         if form.is_valid():
             form.save()
+            # Il tutor si sceglie UNA VOLTA SOLA (il form lo disabilita
+            # appena c'e'), quindi "tutor" compare in changed_data solo al
+            # momento della scelta: l'avviso parte una volta e non a ogni
+            # salvataggio successivo di titolo, tesi o video.
+            if "tutor" in form.changed_data and iscrizione.tutor_id:
+                avvisa_nomina_tutor(request, iscrizione)
             if form.changed_data:
                 messages.success(request, "Dati della tesi salvati correttamente.")
             else:
@@ -215,7 +221,7 @@ def carica_tesi(request, iscrizione_id):
 
 # --- Area docente ----------------------------------------------------------
 
-def _contesto_appelli(request, puo_creare, titolo):
+def _contesto_appelli(request, puo_creare, titolo, filtri=None):
     utente = request.user
     """Contesto della pagina appelli, condiviso da docenti e presidente.
 
@@ -242,7 +248,7 @@ def _contesto_appelli(request, puo_creare, titolo):
         "puo_creare_appelli": puo_creare,
         "titolo_pagina": titolo,
     }
-    contesto.update(_tutorati_del_docente(request, utente))
+    contesto.update(_tutorati_del_docente(request, utente, filtri))
     return contesto
 
 
@@ -306,7 +312,7 @@ def _tutorati_correnti(utente):
     return righe
 
 
-def _tutorati_del_docente(request, utente):
+def _tutorati_del_docente(request, utente, filtri=None):
     """Sezione tutorati pronta per il template: gruppi ed eventuali risultati.
 
     Non ha relazione con gli appelli delle proprie commissioni: si puo' essere
@@ -317,7 +323,14 @@ def _tutorati_del_docente(request, utente):
     e' immediato, perche' l'elenco completo e' gia' nella pagina e non va
     richiesto di nuovo al server.
     """
-    termine = (request.GET.get("q") or "").strip()
+    if filtri is None:
+        termine = (request.GET.get("q") or "").strip()
+    else:
+        # Filtri espliciti: arrivano dal campo "ritorno" di una POST, dove la
+        # querystring non c'e'. Si tiene solo cio' che e' un filtro noto, come
+        # fa _url_ritorno_tutorati: il valore viene dal browser.
+        voci = dict((c, v) for c, v in filtri if c in PARAMETRI_TUTORATI)
+        termine = (voci.get("q") or "").strip()
     correnti = _tutorati_correnti(utente)
 
     commissioni_mie = set(
@@ -389,13 +402,27 @@ def appello_detail(request, appello_id):
     if not docente_in_commissione(request.user, appello):
         raise PermissionDenied("Non fai parte della commissione di questo appello.")
 
-    iscrizioni = appello.iscrizioni.select_related("studente")
+    # Ordinate per cognome: l'ordine predefinito del modello e' quello di
+    # iscrizione, che in un elenco da leggere non dice niente a nessuno.
+    iscrizioni = list(
+        appello.iscrizioni.select_related("studente", "tutor").order_by(
+            "studente__last_name", "studente__first_name", "studente__username"
+        )
+    )
+    # I propri laureandi vengono prima e restano distinti: chi apre questa
+    # pagina cerca quasi sempre loro, e in un appello numeroso scorrere tutto
+    # l'elenco per ritrovarli e' il lavoro che la pagina deve risparmiare.
+    miei = [i for i in iscrizioni if i.tutor_id == request.user.pk]
+    altri = [i for i in iscrizioni if i.tutor_id != request.user.pk]
+
     return render(
         request,
         "appelli/appello_detail.html",
         {
             "appello": appello,
             "iscrizioni": iscrizioni,
+            "iscritti_miei": miei,
+            "iscritti_altri": altri,
             # Un presidente e' anche docente: senza questo, "Torna indietro" lo
             # riporterebbe sempre nell'area docente, cioe' non da dove veniva.
             "url_ritorno": (
@@ -445,7 +472,12 @@ def salva_valutazione(request, iscrizione_id):
     if request.method != "POST":
         return redirect(_url_ritorno_tutorati(request, iscrizione))
 
-    form = ValutazioneForm(request.POST, instance=iscrizione)
+    # auto_id come quello dei moduli della pagina: se il modulo torna a video
+    # con gli errori, gli id dei campi devono restare quelli, o le <label>
+    # punterebbero altrove.
+    form = ValutazioneForm(
+        request.POST, instance=iscrizione, auto_id=f"id_%s_{iscrizione.pk}"
+    )
     if form.is_valid():
         form.save()
         nome = iscrizione.studente.get_full_name() or iscrizione.studente.get_username()
@@ -453,13 +485,37 @@ def salva_valutazione(request, iscrizione_id):
             messages.success(request, f"Valutazione di {nome} salvata.")
         else:
             messages.info(request, "Nessuna modifica da salvare.")
-    else:
-        # I campi in gioco sono pochi e il browser impedisce gia' un punteggio
-        # fuori intervallo: qui si finisce quasi solo svuotando il titolo.
-        primo = next(iter(form.errors.values()))[0]
-        messages.error(request, f"Modifica non salvata: {primo}")
+        return redirect(_url_ritorno_tutorati(request, iscrizione))
 
-    return redirect(_url_ritorno_tutorati(request, iscrizione))
+    # Errore: si RIDISEGNA la pagina con dentro questo modulo, invece di
+    # rimandare alla dashboard. Con il rimando il pannello si sarebbe richiuso
+    # e quanto scritto sarebbe andato perso: chi aveva compilato solo il
+    # giudizio avrebbe dovuto riscriverlo daccapo.
+    return _pagina_con_valutazione_da_correggere(request, iscrizione, form)
+
+
+def _pagina_con_valutazione_da_correggere(request, iscrizione, form):
+    """Dashboard del docente con un modulo di valutazione aperto sugli errori."""
+    contesto = _contesto_appelli(
+        request,
+        puo_creare=is_presidente(request.user),
+        titolo="Area Presidente" if is_presidente(request.user) else "Area Docente",
+        filtri=parse_qsl(request.POST.get("ritorno", "")),
+    )
+    # Le righe dei gruppi e quelle dei risultati di ricerca sono gli STESSI
+    # oggetti: basta sostituire il modulo qui perche' valga in entrambi gli
+    # elenchi.
+    for gruppo in contesto["tutorati_gruppi"]:
+        for riga in gruppo["iscrizioni"]:
+            if riga.pk == iscrizione.pk:
+                riga.form = form
+                # Anche il gruppo va aperto: di suo resta chiuso (tranne il
+                # primo), e il modulo riaperto dentro un gruppo chiuso non si
+                # vedrebbe. L'utente avrebbe davanti una pagina in apparenza
+                # identica a prima, senza spiegazioni.
+                gruppo["contiene_errore"] = True
+    contesto["valutazione_aperta"] = iscrizione.pk
+    return render(request, "appelli/docente_dashboard.html", contesto)
 
 
 # --- Area presidente -------------------------------------------------------
@@ -499,20 +555,14 @@ def crea_appello(request):
             messages.success(
                 request, f"Appello «{appello.etichetta_pubblica}» creato."
             )
-            # Gli avvisi partono dopo il salvataggio, e un loro errore non
-            # annulla l'appello: quello che conta e' gia' nel database. Il
-            # presidente deve pero' sapere chi NON e' stato avvisato,
-            # altrimenti darebbe per scontato che tutti abbiano ricevuto la
-            # comunicazione.
-            _, senza_email, errore = avvisa_nuovo_appello(request, appello)
-            if errore:
-                messages.warning(
-                    request,
-                    "Le email di avviso non sono state inviate (problema con "
-                    "il server di posta). L'appello è stato creato lo stesso: "
-                    "avvisa tu gli interessati.",
-                )
-            elif senza_email:
+            # Gli avvisi partono dopo il salvataggio e la consegna al
+            # server di posta avviene in sottofondo, quindi qui non si sa
+            # ancora se andra' a buon fine (un guasto finisce nei log). Si sa
+            # invece subito chi non ha un indirizzo in anagrafica, e quello va
+            # detto: altrimenti il presidente darebbe per scontato che tutti
+            # abbiano ricevuto la comunicazione.
+            senza_email = avvisa_nuovo_appello(request, appello)
+            if senza_email:
                 messages.warning(
                     request,
                     "Nessun indirizzo email per: "

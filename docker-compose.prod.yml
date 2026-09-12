@@ -60,16 +60,22 @@ services:
       # SP o del sito, aggiorna qui.
       DJANGO_LOGOUT_REDIRECT_URL: "https://services-host.ing.unimore.it/Shibboleth.sso/Logout?return=https://tesi.ing.unimore.it/"
       # --- Posta -------------------------------------------------------
-      # Finche' DJANGO_EMAIL_HOST resta vuoto NESSUNA email parte davvero:
-      # Django usa il backend "console" e i messaggi finiscono solo nei log
-      # (docker compose logs web). Per attivare l'invio vero servono i dati
-      # del server SMTP di ateneo; toglierli dal commento e valorizzarli.
-      # DJANGO_EMAIL_HOST: "smtp.unimore.it"
-      # DJANGO_EMAIL_PORT: "587"
-      # DJANGO_EMAIL_USER: "${EMAIL_USER}"
-      # DJANGO_EMAIL_PASSWORD: "${EMAIL_PASSWORD}"
-      # DJANGO_EMAIL_USE_TLS: "1"
-      # DJANGO_DEFAULT_FROM_EMAIL: "Consegna Tesi <noreply@ing.unimore.it>"
+      # I valori veri stanno nel file .env della macchina, che NON e' in git:
+      # una password per le app di Google permette di spedire a nome
+      # dell'ateneo, quindi non va versionata.
+      #
+      # Se DJANGO_EMAIL_HOST manca dal .env queste restano vuote e Django
+      # torna da solo al backend "console": nessuna email parte, finisce
+      # tutto nei log. E' la rete di sicurezza che tiene in piedi un deploy
+      # fatto su una macchina dove il .env non e' ancora stato aggiornato.
+      #
+      # Porta e TLS non sono qui: i valori predefiniti in settings.py (587 e
+      # STARTTLS) sono gia' quelli giusti per smtp.gmail.com.
+      DJANGO_EMAIL_HOST: "${DJANGO_EMAIL_HOST:-}"
+      DJANGO_EMAIL_USER: "${DJANGO_EMAIL_USER:-}"
+      DJANGO_EMAIL_PASSWORD: "${DJANGO_EMAIL_PASSWORD:-}"
+      # Mittente mostrato a chi riceve: l'alias, non l'account che fa il login.
+      DJANGO_DEFAULT_FROM_EMAIL: "${DJANGO_DEFAULT_FROM_EMAIL:-}"
     volumes:
       - media_data:/app/media          # le tesi caricate persistono
     networks:

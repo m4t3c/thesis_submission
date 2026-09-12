@@ -1,0 +1,15 @@
+Gentile {{ nome }},
+
+{{ studente }} ({{ email_studente }}) ti ha indicato come tutor per la propria
+tesi, relativa all'appello di laurea:
+
+    {{ appello }}
+{% if titolo %}
+Titolo della tesi: {{ titolo }}
+{% endif %}
+Trovi lo studente, e la sua tesi quando l'avrà caricata, a questo indirizzo:
+
+    {{ url }}
+
+Questo messaggio è stato inviato automaticamente: non rispondere a questo
+indirizzo.

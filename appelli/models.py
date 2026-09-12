@@ -318,15 +318,20 @@ class StudenteAppelloDiLaurea(models.Model):
 
         Il video NON entra nell'elenco: il modello lo dichiara facoltativo, e
         segnalarlo come mancante farebbe sembrare incompleta una consegna che
-        invece e' a posto. Nemmeno il tutor: il form dello studente lo esige
-        insieme a titolo e tesi, quindi non puo' mancare quando ci sono gli
-        altri due.
+        invece e' a posto.
+
+        Il tutor si': la pagina dello studente lo segnala fra le mancanze, e
+        se non contasse anche qui si arriverebbe all'assurdo di una card con
+        il riquadro rosso "Manca il tutor" e insieme il blocco data blu, che
+        vuol dire "consegna completa".
         """
         voci = []
         if not self.titolo:
             voci.append("titolo")
         if not self.file_tesi:
             voci.append("file tesi")
+        if not self.tutor_id:
+            voci.append("tutor")
         return voci
 
     @property

@@ -5,6 +5,8 @@ sul contenuto dei file caricati e le regole valide solo per l'utente finale
 (campi obbligatori nel form ma facoltativi nel database, perche' le righe gia'
 esistenti e quelle create dall'import automatico non li hanno).
 """
+from datetime import date
+
 from django import forms
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import UploadedFile
@@ -360,11 +362,17 @@ class AppelloForm(forms.ModelForm):
         },
     )
 
+    # Obbligatori: un appello senza laureandi non ha ragione di esistere, e
+    # crearlo vuoto significherebbe accorgersene solo piu' tardi, quando la
+    # pagina del presidente mostra un appello che non serve a nessuno.
     studenti = forms.ModelMultipleChoiceField(
         queryset=User.objects.none(),          # popolato in __init__
-        required=False,
         label="Studenti da iscrivere",
         widget=forms.MultipleHiddenInput,
+        error_messages={
+            "required": "Carica l'elenco dei laureandi: un appello senza "
+                        "studenti da iscrivere non può essere creato.",
+        },
     )
 
     class Meta:
@@ -395,6 +403,24 @@ class AppelloForm(forms.ModelForm):
         # L'orario e' facoltativo nel modello, ma un appello creato qui ha
         # senso che ce l'abbia: si chiede sempre.
         self.fields["ora"].required = True
+        # Il calendario del browser non propone le date passate. Va calcolato
+        # qui e non nella definizione del widget: li' verrebbe valutato una
+        # volta sola all'avvio, e dal giorno dopo il limite sarebbe vecchio.
+        self.fields["data"].widget.attrs["min"] = date.today().isoformat()
+
+    def clean_data(self):
+        """Nessun appello nel passato.
+
+        L'attributo "min" del campo e' solo un suggerimento al browser: chi
+        invia la richiesta a mano non lo incontra nemmeno, quindi la regola va
+        ripetuta qui, dove non si puo' aggirare.
+        """
+        data = self.cleaned_data["data"]
+        if data < date.today():
+            raise forms.ValidationError(
+                "La data dell'appello non può essere nel passato."
+            )
+        return data
 
     def docenti_selezionati(self):
         """Docenti attualmente scelti, come dati pronti per il template.
@@ -527,10 +553,10 @@ class ValutazioneForm(forms.ModelForm):
     # perche' quello dedotto dal modello sarebbe un IntegerField, che non ha
     # le scelte da cui i pulsanti nascono.
     #
-    # required=False: chi non e' ancora stato valutato non ha nessun pulsante
-    # premuto, e il salvataggio deve restare possibile (si corregge il titolo
-    # senza per forza dare un voto). empty_value=None fa si' che l'assenza
-    # arrivi al modello come NULL, cioe' "non ancora valutato", e non come 0.
+    # Facoltativo di per se': si puo' salvare il solo titolo senza valutare.
+    # Diventa obbligatorio quando c'e' il giudizio, e viceversa: vedi clean().
+    # empty_value=None fa si' che l'assenza arrivi al modello come NULL, cioe'
+    # "non ancora valutato", e non come 0, che e' un punteggio valido.
     punteggio = forms.TypedChoiceField(
         choices=[(v, v) for v in range(PUNTEGGIO_MIN, PUNTEGGIO_MAX + 1)],
         coerce=int,
@@ -569,10 +595,36 @@ class ValutazioneForm(forms.ModelForm):
         # nell'istanza il titolo appena inviato.
         self.titolo_iniziale = self.instance.titolo if self.instance.pk else ""
 
+    def clean(self):
+        """Punteggio e giudizio: o tutti e due, o nessuno dei due.
+
+        Il numero dice quanto vale la tesi, il giudizio dice perche': mezza
+        valutazione lascerebbe la commissione con un voto senza motivo, o con
+        un commento che non si sa dove collochi lo studente. Restano pero'
+        entrambi facoltativi finche' sono vuoti tutti e due, perche' il
+        relatore deve poter correggere il solo titolo di uno studente che non
+        ha ancora valutato.
+        """
+        dati = super().clean()
+        punteggio = dati.get("punteggio")
+        giudizio = (dati.get("giudizio") or "").strip()
+
+        if punteggio is not None and not giudizio:
+            self.add_error(
+                "giudizio",
+                "Hai scelto un punteggio: scrivi anche il giudizio che lo motiva.",
+            )
+        elif punteggio is None and giudizio:
+            self.add_error(
+                "punteggio",
+                "Hai scritto un giudizio: scegli anche il punteggio da proporre.",
+            )
+        return dati
+
     def clean_titolo(self):
         titolo = (self.cleaned_data.get("titolo") or "").strip()
         if not titolo and self.titolo_iniziale:
             raise forms.ValidationError(
-                "Il titolo non puo' essere svuotato: correggilo, semmai."
+                "Il titolo non puo' essere vuoto."
             )
         return titolo

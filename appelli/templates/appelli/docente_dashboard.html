@@ -90,7 +90,7 @@
                             type="button" data-bs-toggle="collapse"
                             data-bs-target="#gruppo-{{ gruppo.appello.id }}"
                             aria-controls="gruppo-{{ gruppo.appello.id }}"
-                            aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}">
+                            aria-expanded="{% if forloop.first or gruppo.contiene_errore %}true{% else %}false{% endif %}">
                         <span class="d-flex align-items-center gap-2">
                             <i class="bi bi-chevron-right freccia" aria-hidden="true"></i>
                             <span class="gruppo-data">{{ gruppo.appello.data|date:"d/m/Y" }}</span>
@@ -111,7 +111,7 @@
                             {% if gruppo.in_commissione %} · sei anche in commissione{% endif %}
                         </span>
                     </button>
-                    <div class="collapse {% if forloop.first %}show{% endif %}"
+                    <div class="collapse {% if forloop.first or gruppo.contiene_errore %}show{% endif %}"
                          id="gruppo-{{ gruppo.appello.id }}">
                         {% for iscrizione in gruppo.iscrizioni %}
                             {% include "appelli/_riga_tutorato.html" %}
@@ -206,6 +206,34 @@
     </div>
 </div>
 
+{% comment %}
+    Popup: uscita dal modulo di valutazione con modifiche non salvate. Uno
+    solo per tutta la pagina, non uno per riga: le righe sono tante e possono
+    arrivare anche dopo, dalla ricerca.
+{% endcomment %}
+<div class="modal fade" id="modaleValutazione" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifiche non salvate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Hai delle modifiche non ancora salvate. Vuoi salvarle prima di uscire?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
+                <button type="button" class="btn btn-outline-danger" id="btn-esci-senza-salvare">
+                    Esci senza salvare
+                </button>
+                <button type="button" class="btn btn-primary" id="btn-salva-esci-valutazione">
+                    Salva ed esci
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 {% comment %}
     DOMContentLoaded non e' una precauzione di rito: bootstrap.bundle.js e'
@@ -237,6 +265,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var riga = modulo.closest('.tutorato');
         if (riga) riga.classList.add('is-aperto');
+        // Fotografia dei valori all'apertura: e' il metro con cui si decide
+        // se all'uscita c'e' qualcosa da salvare.
+        var form = modulo.querySelector('form');
+        if (form) form.dataset.iniziale = istantanea(form);
     });
     document.addEventListener('hide.bs.collapse', function (e) {
         var modulo = e.target;
@@ -244,6 +276,128 @@ document.addEventListener('DOMContentLoaded', function () {
         var riga = modulo.closest('.tutorato');
         if (riga) riga.classList.remove('is-aperto');
     });
+
+    // --- Fumetti di spiegazione -----------------------------------------
+    // Un solo oggetto per tutta la pagina, con "selector": Bootstrap aggancia
+    // da se' gli elementi che compaiono dopo (le righe dei risultati di
+    // ricerca), cosa che inizializzarli uno per uno all'avvio non farebbe.
+    if (window.bootstrap) {
+        new bootstrap.Tooltip(document.body, {
+            selector: '[data-bs-toggle="tooltip"]',
+        });
+    }
+
+    // Dopo un salvataggio rifiutato la pagina si ridisegna con il modulo
+    // aperto: va portato davanti agli occhi, altrimenti si atterra in cima
+    // all'elenco e sembra non sia successo niente. La classe la mette il
+    // server solo in quel caso.
+    var daCorreggere = document.querySelector('.tutorato.is-aperto');
+    if (daCorreggere) daCorreggere.scrollIntoView({block: 'center'});
+
+    // --- Punteggio e giudizio vanno insieme -------------------------------
+    // La regola vive sul server (ValutazioneForm.clean), che resta l'unico
+    // controllo che conta. Qui si evita il viaggio: senza, per una meta'
+    // dimenticata la pagina si ricaricherebbe e chi aveva scritto il giudizio
+    // se lo ritroverebbe cancellato.
+    var MESSAGGI_COPPIA = {
+        giudizio: 'Hai scelto un punteggio: scrivi anche il giudizio che lo motiva.',
+        punteggio: 'Hai scritto un giudizio: scegli anche il punteggio da proporre.',
+    };
+
+    function pulisciErroreCoppia(form) {
+        form.querySelectorAll('.js-errore-coppia').forEach(function (n) { n.remove(); });
+    }
+
+    function mostraErroreCoppia(form, campo) {
+        pulisciErroreCoppia(form);
+        var avviso = document.createElement('div');
+        avviso.className = 'text-danger small mt-1 js-errore-coppia';
+        avviso.textContent = MESSAGGI_COPPIA[campo];
+        var dopo = campo === 'giudizio'
+            ? form.querySelector('textarea[name="giudizio"]')
+            : form.querySelector('.segmento-punti');
+        if (!dopo) return;
+        dopo.parentNode.insertBefore(avviso, dopo.nextSibling);
+        (campo === 'giudizio' ? dopo : dopo.querySelector('label')).focus();
+    }
+
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form.closest || !form.closest('.js-modifica')) return;
+        var giudizio = form.querySelector('textarea[name="giudizio"]');
+        var punteggio = form.querySelector('input[name="punteggio"]:checked');
+        var conGiudizio = !!(giudizio && giudizio.value.trim());
+        var conPunteggio = !!punteggio;
+        if (conGiudizio === conPunteggio) {   // o tutti e due, o nessuno
+            pulisciErroreCoppia(form);
+            return;
+        }
+        e.preventDefault();
+        mostraErroreCoppia(form, conPunteggio ? 'giudizio' : 'punteggio');
+    });
+
+    // --- Uscita con modifiche non salvate --------------------------------
+    var modale = document.getElementById('modaleValutazione');
+    var moduloInSospeso = null;
+
+    // Il token CSRF e' escluso: cambia a ogni pagina ma non e' un dato che
+    // l'utente ha modificato, e includerlo non cambierebbe nulla al confronto.
+    function istantanea(form) {
+        var pezzi = [];
+        new FormData(form).forEach(function (valore, nome) {
+            if (nome !== 'csrfmiddlewaretoken') pezzi.push(nome + '=' + valore);
+        });
+        return pezzi.join('&');
+    }
+
+    function chiudiModulo(modulo, ripristina) {
+        var form = modulo.querySelector('form');
+        // reset() riporta i campi ai valori resi dal server, cioe' a quelli
+        // salvati nel database: e' esattamente "esci senza salvare".
+        if (form && ripristina) form.reset();
+        bootstrap.Collapse.getOrCreateInstance(modulo).hide();
+    }
+
+    document.addEventListener('click', function (e) {
+        var bottone = e.target.closest('.js-annulla-valutazione');
+        if (!bottone) return;
+        var modulo = document.querySelector(bottone.dataset.bsTarget);
+        if (!modulo) return;
+        var form = modulo.querySelector('form');
+
+        // Niente da perdere (o niente Bootstrap): si chiude e basta.
+        if (!form || !modale || !window.bootstrap ||
+            istantanea(form) === form.dataset.iniziale) {
+            chiudiModulo(modulo, true);
+            return;
+        }
+        moduloInSospeso = modulo;
+        bootstrap.Modal.getOrCreateInstance(modale).show();
+    });
+
+    var btnEsci = document.getElementById('btn-esci-senza-salvare');
+    if (btnEsci) {
+        btnEsci.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(modale).hide();
+            if (!moduloInSospeso) return;
+            chiudiModulo(moduloInSospeso, true);
+            moduloInSospeso = null;
+        });
+    }
+
+    var btnSalvaEsci = document.getElementById('btn-salva-esci-valutazione');
+    if (btnSalvaEsci) {
+        btnSalvaEsci.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(modale).hide();
+            if (!moduloInSospeso) return;
+            var form = moduloInSospeso.querySelector('form');
+            moduloInSospeso = null;
+            if (!form) return;
+            // requestSubmit e non submit: fa scattare la validazione del
+            // browser sui campi obbligatori, invece di scavalcarla.
+            if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+        });
+    }
 
     // --- Ricerca mentre si scrive ---------------------------------------
     if (input) {

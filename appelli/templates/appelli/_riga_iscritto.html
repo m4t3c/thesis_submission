@@ -1,0 +1,44 @@
+{% comment %}
+    Una riga della tabella degli iscritti a un appello. Sta in un file a parte
+    perche' l'elenco e' diviso in due gruppi (i propri laureandi e gli altri):
+    una riga sola garantisce che i due gruppi restino identici col tempo.
+
+    Si aspetta "iscrizione" nel contesto e, se la riga appartiene ai propri
+    laureandi, "mia" a vero.
+{% endcomment %}
+<tr {% if mia %}class="riga-mia"{% endif %}>
+    <td class="fw-semibold" data-label="Studente">
+        {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+    </td>
+    <td class="cell-titolo" data-label="Titolo">
+        {% if iscrizione.titolo %}{{ iscrizione.titolo }}{% else %}
+            <span class="text-muted small">non indicato</span>
+        {% endif %}
+    </td>
+    <td data-label="Video">
+        {% if iscrizione.file_video %}
+            <a class="btn btn-sm btn-soft-primary"
+               href="{% url 'appelli:scarica_video' iscrizione.id %}">
+               <i class="bi bi-camera-video me-1"></i>Scarica video
+            </a>
+        {% elif iscrizione.link_video %}
+            <a class="btn btn-sm btn-soft-primary"
+               href="{{ iscrizione.link_video }}"
+               target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-link me-1"></i>Apri link
+            </a>
+        {% else %}
+            <span class="text-muted small">nessuno</span>
+        {% endif %}
+    </td>
+    <td class="text-end" data-label="Tesi">
+        {% if iscrizione.file_tesi %}
+            <a class="btn btn-sm btn-soft-primary"
+               href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+               <i class="bi bi-file-earmark-pdf me-1"></i>Scarica tesi
+            </a>
+        {% else %}
+            <span class="text-muted small">Non ancora caricata</span>
+        {% endif %}
+    </td>
+</tr>

@@ -114,7 +114,7 @@
         <div class="card shadow-sm">
             <div class="card-body">
                 <h1 class="h4 section-title mb-1">
-                    <i class="bi bi-mortarboard text-primary me-1"></i>La mia tesi
+                    <i class="bi bi-mortarboard text-primary me-1"></i> La mia tesi
                 </h1>
                 <p class="text-muted">
                     {{ iscrizione.appello.corso_di_laurea }} — appello del
@@ -143,7 +143,7 @@
                     {# ---------------- Titolo ---------------- #}
                     <div class="mb-4">
                         <h2 class="h6 section-title">
-                            <label for="{{ form.titolo.id_for_label }}" class="form-label">
+                            <label for="{{ form.titolo.id_for_label }}">
                                 Titolo della tesi
                             </label>
                         </h2>
@@ -175,10 +175,10 @@
                                 <div style="min-width: 0;">
                                     <div class="fw-semibold text-truncate">{{ tutor.etichetta }}</div>
                                     <div class="small text-muted text-truncate">{{ tutor.email }}</div>
+                                    <span class="badge text-bg-secondary ms-auto flex-shrink-0">
+                                        <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Definitivo
+                                    </span>
                                 </div>
-                                <span class="badge text-bg-secondary ms-auto flex-shrink-0">
-                                    <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Definitivo
-                                </span>
                             </div>
                             <div class="form-text">
                                 Il tutor si sceglie una volta sola: non può più essere modificato.
@@ -207,7 +207,7 @@
 
                             <div class="box-membri mt-3" id="box-tutor">
                                 <p class="text-muted text-center mb-0 py-3" id="nessun-tutor">
-                                    <i class="bi bi-person me-1" aria-hidden="true"></i>
+                                    <i class="bi bi-person-video3 me-1" aria-hidden="true"></i>
                                     Nessun tutor selezionato
                                 </p>
                                 <div id="tutor-scelto"></div>
@@ -217,8 +217,9 @@
                             {{ tutor|json_script:"tutor-iniziale" }}
 
                             <div class="form-text">
-                                Il tutor non deve per forza far parte della commissione
-                                dell'appello. Attenzione: una volta salvato non potrà più
+                                <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                                Attenzione: questa azione è <span class="fw-bold">irreversebile</span>.
+                                Una volta salvato non potrà più
                                 essere modificato.
                             </div>
                         {% endif %}

@@ -132,7 +132,13 @@
                             </p>
                             <div id="studenti-scelti"></div>
                         </div>
-                        {{ form.studenti.errors }}
+                        {# Stesso riquadro d'errore dei membri della commissione #}
+                        {% if form.studenti.errors %}
+                            <div class="alert alert-danger shadow-sm mt-3" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.studenti.errors.0 }}
+                            </div>
+                        {% endif %}
                     </div>
 
                     </fieldset>
@@ -531,7 +537,7 @@
     // durante il trascinamento, prima che il file venga rilasciato.
     var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var ETICHETTA_VUOTA = etichettaFile.textContent;
-    var NON_SUPPORTATO = 'File non supportato. L\u2019unico tipo di file accettato è un file xlsx.';
+    var NON_SUPPORTATO = 'File non supportato. L\u2019unico tipo di file accettato è un file .xlsx';
     var UN_SOLO_FILE = 'Trascina un solo file xlsx per volta.';
 
     function estensioneOk(nome) {
@@ -698,7 +704,7 @@
         btnCarica.addEventListener('click', function () {
             var file = (inputFile.files && inputFile.files[0]) || inputFile._file;
             if (!file) {
-                messaggio('Scegli prima un file .xlsx.', 'warning');
+                messaggio('Scegli prima un file .xlsx', 'warning');
                 return;
             }
             var dati = new FormData();

@@ -195,12 +195,19 @@
         /* ---------- Card dell'area studente ----------
            Sostituisce la tabella a sette colonne: una card per iscrizione, con
            il blocco data a sinistra come in un calendario. */
-        /* flex-direction: row NON e' ridondante: Bootstrap imposta
-           .card { flex-direction: column }, quindi senza questa riga il blocco
-           data finirebbe sopra al testo anche su schermo largo. */
-        .appello-card { display: flex; flex-direction: row; overflow: hidden; }
+        /* Griglia e non flex: su telefono le stesse parti cambiano posto
+           (il corso entra nella fascia blu, il pulsante va in fondo a tutta
+           larghezza) e con le aree basta ridisegnare lo schema. */
+        .appello-card {
+            display: grid; overflow: hidden;
+            grid-template-columns: 112px minmax(0, 1fr) auto;
+            grid-template-areas:
+                "data corso  azione"
+                "data titolo titolo"
+                "data titolo titolo";
+        }
         .appello-data {
-            flex: 0 0 112px; background: var(--brand); color: #fff;
+            grid-area: data; background: var(--brand); color: #fff;
             padding: 1.1rem .75rem; display: flex; flex-direction: column;
             align-items: center; justify-content: center; text-align: center; line-height: 1.1;
         }
@@ -208,20 +215,28 @@
            studente ha caricato tutto, cosi' il colore della card si legge da
            lontano come stato di avanzamento. Dipende dai dati dello studente,
            NON dall'orario dell'appello. */
-        .appello-data.is-incompleto { background: var(--surface); color: var(--ink); }
+        .appello-card.is-incompleto .appello-data { background: var(--surface); color: var(--ink); }
         .appello-data .giorno { font-size: 2.25rem; font-weight: 700; }
         .appello-data .dow { font-size: .69rem; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
         .appello-data .mese { font-size: .81rem; letter-spacing: .04em; }
+        .appello-data .data-estesa { display: none; }   /* solo su telefono */
         .appello-data .ora {
             margin-top: .5rem; font-size: .81rem; font-weight: 600;
             background: rgba(255, 255, 255, .2); padding: .12rem .5rem; border-radius: 999px;
         }
         /* Sul blocco grigio l'alone bianco non si vedrebbe. */
-        .appello-data.is-incompleto .ora { background: rgba(0, 0, 0, .08); }
+        .appello-card.is-incompleto .appello-data .ora { background: rgba(0, 0, 0, .08); }
         .appello-corso {
+            grid-area: corso; padding: 1rem 1rem 0;
             font-size: .81rem; font-weight: 600; color: var(--brand);
             text-transform: uppercase; letter-spacing: .06em;
         }
+        .appello-corpo { grid-area: titolo; padding: .25rem 1rem 1rem; min-width: 0; }
+        .appello-azione { grid-area: azione; padding: 1rem 1rem 0; }
+        .parola-iscrizione { display: none; }
+        /* L'etichetta sopra il titolo serve sul telefono, dove il titolo non
+           ha piu' il corso sopra a fargli da appiglio. */
+        .etichetta-titolo { display: none; }
         .appello-titolo {
             font-size: 1.125rem; font-weight: 600; line-height: 1.35;
             overflow-wrap: anywhere; text-wrap: pretty;
@@ -230,6 +245,13 @@
             display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.15rem;
             padding-top: .4rem; border-top: 1px solid var(--line); font-size: .875rem;
         }
+        /* display: contents fa sparire il contenitore dal disegno: le due voci
+           restano in fila con le altre. Su telefono torna una griglia vera e
+           le due diventano schede affiancate. */
+        .voci-scheda { display: contents; }
+        .voce { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; }
+        .voce-etichetta { color: var(--muted); display: inline-flex; align-items: center; gap: .35rem; }
+        .voce-valore { font-weight: 600; overflow-wrap: anywhere; }
         /* ---------- Sezione tutorati (area docente) ----------
            Le pillole della valutazione usano il colore principale, non il
            rosso: "da valutare" e' uno stato normale di avanzamento, non un
@@ -240,6 +262,9 @@
             border: 1px solid var(--brand-tenue-bordo);
             padding: .2rem .7rem; border-radius: 999px;
             font-size: .875rem; white-space: nowrap;
+            /* Non e' un pulsante e non si puo' premere: il cursore "help"
+               annuncia che sotto c'e' una spiegazione, non un'azione. */
+            cursor: help;
         }
         /* I punti proposti si leggono come un voto ("2 /2 punti"): il numero
            e' grande, la scala accanto resta un'annotazione. Cosi' uno studente
@@ -261,6 +286,21 @@
         /* Col modulo aperto la riga compatta sparisce: l'intestazione del
            modulo dice gia' le stesse cose, con piu' spazio. */
         .tutorato.is-aperto .riga-sintesi { display: none; }
+        /* L'ultima riga tocca il bordo inferiore della card. Il suo sfondo
+           (azzurro quando il modulo e' aperto) e la striscia blu a sinistra
+           hanno spigoli vivi, che sporgono dagli angoli tondi del contenitore.
+           Il raggio e' quello interno della card - la stessa variabile che usa
+           .card - cosi' i due bordi restano concentrici. Vale sia per l'elenco
+           raggruppato sia per i risultati di ricerca, che sono l'ultima cosa
+           dentro la card tanto quanto l'altro. */
+        #elenco-tutorati > div:last-child .tutorato:last-child,
+        #risultati-tutorati .tutorato:last-child {
+            border-bottom-left-radius: var(--bs-card-inner-border-radius);
+            border-bottom-right-radius: var(--bs-card-inner-border-radius);
+        }
+        /* Il gruppo in fondo non ha niente sotto da cui separarsi: la sua
+           riga di chiusura correrebbe dritta sotto gli angoli appena stondati. */
+        #elenco-tutorati > div:last-child { border-bottom: 0 !important; }
 
         /* Campo di ricerca con la lente dentro: un pulsante "Cerca" accanto
            direbbe solo cio' che la lente dice gia', visto che l'elenco si
@@ -321,18 +361,53 @@
             padding: .12rem .55rem; border-radius: 999px;
         }
         @media (max-width: 575.98px) {
-            .appello-card { flex-direction: column; }
-            .appello-data {
-                flex-basis: auto; flex-direction: row; gap: .4rem;
-                justify-content: flex-start; padding: .6rem 1rem;
+            /* Una colonna sola, nell'ordine in cui si legge: data, corso,
+               titolo e dati, pulsante. */
+            .appello-card {
+                grid-template-columns: 1fr;
+                grid-template-areas: "data" "corso" "titolo" "azione";
             }
-            /* In riga la data si legge come una scritta sola ("14 Ott 2026"):
-               giorno e mese prendono lo stesso corpo, il giorno della settimana
-               sparisce perche' non ci sta, e l'orario va a fondo riga. */
+            /* La data diventa una riga sola, con il mese per esteso: in
+               larghezza c'e' posto, e "14 ottobre 2026" si legge meglio della
+               colonnina del calendario. */
+            .appello-data {
+                flex-direction: row; align-items: baseline; gap: .5rem;
+                justify-content: flex-start; padding: .9rem 1rem .35rem;
+            }
+            .appello-data .dow,
             .appello-data .giorno,
-            .appello-data .mese { font-size: 1.05rem; font-weight: 700; }
-            .appello-data .dow { display: none; }
-            .appello-data .ora { margin-top: 0; margin-left: auto; }
+            .appello-data .mese { display: none; }
+            .appello-data .data-estesa { display: inline; font-size: 1.5rem; font-weight: 700; }
+            .appello-data .ora { margin-top: 0; background: none; padding: .12rem .5rem; font-size: 1rem; }
+            /* Il corso continua la fascia blu: e' un blocco separato solo per
+               poterlo spostare, ma si deve leggere come una cosa sola. */
+            .appello-corso {
+                background: var(--brand); color: rgba(255, 255, 255, .85);
+                padding: 0 1rem .9rem; font-size: .95rem;
+                text-transform: none; letter-spacing: 0;
+            }
+            .appello-card.is-incompleto .appello-corso {
+                background: var(--surface); color: var(--muted);
+            }
+            .appello-corpo { padding: 1rem; }
+            .etichetta-titolo {
+                display: block; margin-bottom: .15rem;
+                text-transform: uppercase; letter-spacing: .05em;
+                font-size: .75rem; font-weight: 600; color: var(--muted);
+            }
+            .appello-titolo { font-size: 1.25rem; }
+            /* Il video resta una riga; tesi e tutor diventano due schede
+               affiancate, etichetta sopra e valore sotto. */
+            .appello-meta { flex-direction: column; align-items: stretch; gap: .75rem; }
+            .voci-scheda { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+            .voci-scheda .voce {
+                flex-direction: column; align-items: flex-start; gap: .2rem;
+                border: 1px solid var(--line); border-radius: .5rem;
+                padding: .5rem .65rem; background: #fbfbfc;
+            }
+            .appello-azione { padding: 0 1rem 1rem; }
+            .appello-azione .btn { width: 100%; }
+            .parola-iscrizione { display: inline; }
         }
 
         /* ---------- Tabelle "a schede" ----------

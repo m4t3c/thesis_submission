@@ -24,62 +24,114 @@
     <div class="d-flex flex-column gap-3 mb-4">
     {% for iscrizione in iscrizioni %}
         {% with appello=iscrizione.appello %}
-        <div class="card shadow-sm appello-card">
-            {# Grigio finche' manca qualcosa, blu a consegna completa #}
-            <div class="appello-data {% if iscrizione.mancanti %}is-incompleto{% endif %}">
+        {% comment %}
+            Struttura PIATTA (data, corso, corpo, azione tutti figli della
+            card) perche' su schermo largo e su telefono l'ordine cambia: il
+            corso sta accanto al titolo sul desktop, dentro la fascia blu sul
+            telefono. Con una griglia bastano le aree per spostarlo; annidando
+            i blocchi servirebbe scrivere due volte lo stesso contenuto.
+        {% endcomment %}
+        <div class="card shadow-sm appello-card {% if iscrizione.mancanti %}is-incompleto{% endif %}">
+            <div class="appello-data">
                 <span class="dow">{{ appello.data|date:"D" }}</span>
                 <span class="giorno">{{ appello.data|date:"j" }}</span>
                 <span class="mese">{{ appello.data|date:"M Y" }}</span>
+                {# Solo su telefono, dove c'e' spazio per il mese per esteso #}
+                <span class="data-estesa">{{ appello.data|date:"j" }} {{ appello.data|date:"F"|lower }} {{ appello.data|date:"Y" }}</span>
                 {% if appello.ora %}
                     <span class="ora">{{ appello.ora|time:"H:i" }}</span>
                 {% else %}
                     <span class="small ora">ora da definire</span>
                 {% endif %}
             </div>
-            <div class="flex-grow-1 p-3" style="min-width: 0;">
-                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                    <span class="appello-corso">{{ appello.corso_di_laurea }}</span>
-                    <a class="btn btn-sm text-nowrap {% if iscrizione.file_tesi %}btn-outline-primary{% else %}btn-primary{% endif %}"
-                       href="{% url 'appelli:carica_tesi' iscrizione.id %}">
-                        {% if iscrizione.file_tesi %}<i class="bi bi-pencil me-1"></i>Modifica{% else %}Completa{% endif %}
-                    </a>
-                </div>
+
+            <div class="appello-corso">{{ appello.corso_di_laurea }}</div>
+
+            <div class="appello-corpo">
+                {% comment %}
+                    Cio' che manca si segnala dove dovrebbe stare, non in un
+                    riepilogo in fondo: chi legge cerca il titolo, il tutor o la
+                    tesi in un punto preciso della card, ed e' li' che deve
+                    trovare il motivo per cui non li vede.
+                {% endcomment %}
+                <span class="etichetta-titolo">Titolo della tesi</span>
                 {% if iscrizione.titolo %}
                     <p class="appello-titolo mb-2">{{ iscrizione.titolo }}</p>
                 {% else %}
-                    <p class="appello-titolo mb-2 text-muted fst-italic fw-normal">Titolo non indicato</p>
+                    <p class="mb-2">
+                        <span class="badge-manca">
+                            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Titolo mancante
+                        </span>
+                    </p>
                 {% endif %}
+
                 <div class="appello-meta">
-                    <span class="text-muted text-nowrap">
-                        <i class="bi bi-person-video3 me-1"></i>Tutor
-                        {% if iscrizione.tutor %}
-                            <span class="text-body fw-semibold">{{ iscrizione.tutor.get_full_name|default:iscrizione.tutor.get_username }}</span>
-                        {% else %}da definire{% endif %}
-                    </span>
-                    {% if iscrizione.file_tesi %}
-                        <a class="text-nowrap" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                            <i class="bi bi-file-earmark-pdf me-1"></i>Tesi.pdf</a>
-                    {% endif %}
-                    {% if iscrizione.file_video %}
-                        <a class="text-nowrap" href="{% url 'appelli:scarica_video' iscrizione.id %}">
-                            <i class="bi bi-camera-video me-1"></i>Video</a>
-                    {% elif iscrizione.link_video %}
-                        <a class="text-nowrap" href="{{ iscrizione.link_video }}" target="_blank" rel="noopener noreferrer">
-                            <i class="bi bi-link-45deg me-1"></i>Video</a>
-                    {% endif %}
-                    {% if iscrizione.mancanti %}
-                        <span class="badge-manca text-nowrap">
-                            <i class="bi bi-exclamation-circle me-1"></i>Mancano
-                            {{ iscrizione.mancanti|join:" e " }}</span>
+                    {# Ordine: prima chi segue la tesi, poi la tesi, poi il video #}
+                    <div class="voci-scheda">
+                        <div class="voce">
+                            <span class="voce-etichetta">
+                                <i class="bi bi-person-video3" aria-hidden="true"></i>Tutor
+                            </span>
+                            {% if iscrizione.tutor %}
+                                <span class="voce-valore">{{ iscrizione.tutor.get_full_name|default:iscrizione.tutor.get_username }}</span>
+                            {% else %}
+                                <span class="badge-manca">
+                                    <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Tutor mancante
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="voce">
+                            <span class="voce-etichetta">
+                                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Tesi
+                            </span>
+                            {% if iscrizione.file_tesi %}
+                                <a class="voce-valore" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">Scarica</a>
+                            {% else %}
+                                <span class="badge-manca">
+                                    <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Tesi mancante
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% comment %}
+                        Il video e' facoltativo: se non c'e' non si dice nulla,
+                        altrimenti ogni card porterebbe in giro la traccia di
+                        qualcosa che nessuno ha promesso di consegnare. Quando
+                        c'e', sul telefono finisce sotto le due schede perche'
+                        segue nell'ordine di lettura.
+                    {% endcomment %}
+                    {% if iscrizione.ha_video %}
+                        <div class="voce voce-video">
+                            <span class="voce-etichetta">
+                                <i class="bi bi-camera-video" aria-hidden="true"></i>Video
+                            </span>
+                            {% if iscrizione.file_video %}
+                                <a class="voce-valore" href="{% url 'appelli:scarica_video' iscrizione.id %}">Scarica</a>
+                            {% else %}
+                                <a class="voce-valore" href="{{ iscrizione.link_video }}"
+                                   target="_blank" rel="noopener noreferrer">Apri</a>
+                            {% endif %}
+                        </div>
                     {% endif %}
                 </div>
+            </div>
+
+            <div class="appello-azione">
+                <a class="btn text-nowrap {% if iscrizione.file_tesi %}btn-outline-primary{% else %}btn-primary{% endif %}"
+                   href="{% url 'appelli:carica_tesi' iscrizione.id %}">
+                    {% if iscrizione.file_tesi %}<i class="bi bi-pencil me-1"></i>Modifica{% else %}Completa{% endif %}
+                    <span class="parola-iscrizione">iscrizione</span>
+                </a>
             </div>
         </div>
         {% endwith %}
     {% endfor %}
     </div>
 {% else %}
-    <p class="text-muted mb-4">Non sei ancora iscritto a nessun appello.</p>
+    <p class="text-muted mb-4">Non sei ancora iscritto a nessun appello. Iscriviti all'appello di laurea su
+        <a href="https://www.esse3.unimore.it/auth/studente/Graduation/Bacheca.do?menu_opened_cod=menu_link-navbox_studenti_Area_Studente" target="blank">esse3</a> e, una volta che il presidente l'avrà
+        creato, vedrai i dati in questa pagina.</p>
 {% endif %}
 
 {# ---------------- Appelli disponibili ---------------- #}
