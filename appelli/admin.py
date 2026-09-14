@@ -62,7 +62,14 @@ class AppelloDiLaureaAdmin(admin.ModelAdmin):
 
 @admin.register(StudenteAppelloDiLaurea)
 class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
-    """Iscrizioni, con lo stato degli allegati a colpo d'occhio."""
+    """Iscrizioni, con lo stato degli allegati a colpo d'occhio.
+
+    Punteggio e giudizio si modificano anche da qui: l'admin e' lo strumento
+    con cui la segreteria corregge i casi che l'applicazione non prevede
+    (relatore che non c'e' piu', valutazione inserita sullo studente
+    sbagliato). Nelle pagine dell'applicazione, invece, li scrive il solo
+    relatore.
+    """
 
     list_display = (
         "studente", "appello", "tutor", "titolo", "data_iscrizione",
@@ -91,9 +98,3 @@ class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Video")
     def ha_video(self, obj):
         return obj.ha_video
-
-    # Punteggio e giudizio si modificano anche da qui: l'admin e' lo strumento
-    # con cui la segreteria corregge i casi che l'applicazione non prevede
-    # (relatore che non c'e' piu', valutazione inserita sullo studente
-    # sbagliato). Nelle pagine dell'applicazione, invece, li scrive il solo
-    # relatore.

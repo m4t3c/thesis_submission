@@ -260,13 +260,22 @@ def carica_tesi(request, iscrizione_id):
 # --- Area docente ----------------------------------------------------------
 
 def _contesto_appelli(request, puo_creare, titolo, filtri=None):
-    utente = request.user
     """Contesto della pagina appelli, condiviso da docenti e presidente.
 
     Le due pagine mostrano le stesse due tabelle ("i miei appelli" e gli
     altri): al presidente si aggiunge soltanto il pulsante di creazione. Un
     unico contesto evita che le due viste divergano col tempo.
+
+    Args:
+        request: richiesta corrente; da qui si leggono utente e querystring.
+        puo_creare: se mostrare il pulsante di creazione di un appello.
+        titolo: intestazione della pagina.
+        filtri: coppie (chiave, valore) da usare al posto della querystring.
+            Serve quando la pagina si ridisegna dopo una POST, in cui i
+            filtri viaggiano nel campo "ritorno" e non nell'URL.
     """
+    utente = request.user
+
     def elenco(queryset):
         # order_by esplicito: con annotate() il Meta.ordering non viene
         # applicato (vedi ORDINE_APPELLI in models.py).
@@ -689,8 +698,11 @@ def cerca_tutorati(request):
     JavaScript vorrebbe dire riscrivere il template una seconda volta, e tenere
     allineate a mano due copie della stessa cosa.
 
-    La ricerca vera e' la stessa della pagina (_tutorati_del_docente): qui si
-    riusa, non si riscrive, cosi' con e senza JavaScript i risultati coincidono.
+    Il criterio di ricerca e' lo stesso della pagina: si riusano
+    _tutorati_correnti e _corrisponde, gli stessi pezzi su cui si regge
+    _tutorati_del_docente, cosi' con e senza JavaScript i risultati
+    coincidono. Non si chiama direttamente _tutorati_del_docente perche'
+    calcolerebbe anche i gruppi per appello, che questa risposta non usa.
     """
     if not is_docente(request.user):
         raise PermissionDenied("Solo i docenti hanno dei tutorati.")
@@ -752,6 +764,11 @@ def analizza_xlsx(request):
 
     # Gli studenti si riconoscono dall'email: chi non e' gia' nel database non
     # puo' essere iscritto, e va segnalato al presidente invece di sparire.
+    # leggi_elenco restituisce gli indirizzi in minuscolo, mentre in anagrafica
+    # possono comparire con delle maiuscole: il filtro
+    # email__in le trova grazie alla collation di MySQL, che non distingue
+    # maiuscole e minuscole, ma il dizionario va indicizzato in minuscolo
+    # altrimenti il confronto qui sotto le scarterebbe.
     utenti = {
         u.email.lower(): u
         for u in User.objects.filter(groups__name="studente", email__in=email)

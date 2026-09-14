@@ -23,13 +23,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Lista di controllo prima di andare in produzione:
 # https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# ATTENZIONE: la chiave usata in produzione deve restare segreta.
-SECRET_KEY = 'django-insecure-it$+&lqha5r_ic+=+pc3%#e5lpr2a$ywdf)fyg5_kfg!phem6b'
-
 # ATTENZIONE: in produzione DEBUG deve restare disattivo (le pagine di errore
 # di Django espongono codice e impostazioni). Il valore predefinito e' quindi
 # "spento": per accenderlo serve un DJANGO_DEBUG=1 esplicito.
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+
+# La chiave firma sessioni, token CSRF e link di reset password: chi la conosce
+# puo' falsificarli, quindi non sta in git ma nel file .env (vedi .env.example).
+# In sviluppo, se manca, se ne usa una di comodo; in produzione l'avvio si
+# ferma, invece di partire con una chiave nota a tutti.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if not DEBUG:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY non impostata.")
+    SECRET_KEY = "django-insecure-solo-per-sviluppo"
 
 # Nomi di host da cui l'applicazione accetta richieste, separati da virgola.
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")

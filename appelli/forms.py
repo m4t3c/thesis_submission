@@ -255,8 +255,11 @@ class TesiUploadForm(forms.ModelForm):
         return file
 
     def clean_titolo(self):
-        # Uno spazio non e' un titolo: normalizzando qui si evita che il
-        # controllo di obbligatorieta' si aggiri con un carattere vuoto.
+        """Titolo senza spazi ai bordi, mai vuoto.
+
+        Uno spazio non e' un titolo: normalizzando qui si evita che il
+        controllo di obbligatorieta' si aggiri con un carattere vuoto.
+        """
         titolo = (self.cleaned_data.get("titolo") or "").strip()
         if not titolo:
             raise forms.ValidationError("Il titolo della tesi è obbligatorio.")
@@ -435,6 +438,8 @@ class AppelloForm(forms.ModelForm):
             valori = self.data.getlist(self.add_prefix("docenti"))
         if not valori:
             return []
+        # Nei dati inviati ci sono solo id (stringhe), ma "initial" puo' essere
+        # stato passato da codice con gli User stessi: si accettano entrambi.
         ids = [v.pk if hasattr(v, "pk") else v for v in valori]
         return [
             dati_utente(u)
@@ -527,6 +532,12 @@ def commissione_esistente_con(docenti):
 
     Riusarla evita di riempire il database di commissioni identiche ogni volta
     che il presidente ripete gli stessi nomi. Restituisce None se non c'e'.
+
+    Il confronto avviene in Python e non in SQL: "esattamente questi docenti"
+    e' un'uguaglianza fra insiemi, che con l'ORM richiederebbe di combinare un
+    conteggio dei membri con un filtro per ciascun docente, molto meno
+    leggibile. Il costo e' lineare nel numero di commissioni: trascurabile
+    finche' restano poche, da spostare nel database se diventassero migliaia.
     """
     voluti = {d.pk for d in docenti}
     for commissione in Commissione.objects.prefetch_related("docenti"):
@@ -622,6 +633,11 @@ class ValutazioneForm(forms.ModelForm):
         return dati
 
     def clean_titolo(self):
+        """Il titolo si puo' correggere ma non svuotare, se prima c'era.
+
+        Il riferimento e' titolo_iniziale, fissato in __init__ (vedi li' il
+        perche'), non il valore corrente dell'istanza.
+        """
         titolo = (self.cleaned_data.get("titolo") or "").strip()
         if not titolo and self.titolo_iniziale:
             raise forms.ValidationError(

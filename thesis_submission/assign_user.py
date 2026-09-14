@@ -88,6 +88,9 @@ def ruoli_affiliation(meta):
         # request.META contiene anche oggetti non testuali (wsgi.input, ...).
         if not isinstance(valore, str):
             continue
+        # Un attributo multivalore arriva in un solo header, con i valori
+        # separati da ";" oppure "," a seconda di SP e proxy: si riconducono
+        # tutti al primo separatore per poter fare un unico split.
         for separatore in SEPARATORI[1:]:
             valore = valore.replace(separatore, SEPARATORI[0])
         for pezzo in valore.split(SEPARATORI[0]):
@@ -115,7 +118,15 @@ def gruppo_per_affiliation(meta):
 
 
 class AssignUserMiddleware(PersistentRemoteUserMiddleware):
-    """Prende l'identità dall'attributo Shibboleth 'uid' invece di REMOTE_USER."""
+    """Prende l'identità dall'attributo Shibboleth 'uid' invece di REMOTE_USER.
+
+    Si estende la variante "Persistent" e non RemoteUserMiddleware: gli header
+    X-Shib-* arrivano solo sui percorsi protetti dal SP. Con il middleware
+    base, la prima richiesta senza header (la home pubblica, per esempio)
+    chiuderebbe la sessione Django, e l'utente risulterebbe disconnesso
+    appena uscito dall'area protetta.
+    """
+
     header = ATTR_USERNAME
 
 
@@ -123,10 +134,16 @@ class AssignUserBackend(RemoteUserBackend):
     """Crea/aggiorna lo User Django a ogni login, dagli attributi Shibboleth."""
 
     def configure_user(self, request, user, created=True):
-        """Allinea anagrafica e gruppo dell'utente a quanto dice il SP."""
+        """Allinea anagrafica e gruppo dell'utente a quanto dice il SP.
+
+        Da Django 4.1 RemoteUserBackend chiama questo metodo a OGNI accesso
+        (con ``created`` che distingue il primo), non solo alla creazione: e'
+        cio' che permette di seguire i cambi di ruolo senza intervento manuale.
+        """
         meta = request.META
 
-        # Dati anagrafici
+        # Un attributo non rilasciato in questa sessione non deve cancellare
+        # il dato gia' noto: per questo il valore precedente fa da riserva.
         user.first_name = meta.get(ATTR_GIVENNAME, "") or user.first_name
         user.last_name = meta.get(ATTR_SURNAME, "") or user.last_name
         user.email = meta.get(ATTR_MAIL, "") or user.email

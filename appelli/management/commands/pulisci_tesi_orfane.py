@@ -13,6 +13,11 @@ Uso:
 Di default lavora in modalita' anteprima (dry-run): elenca cosa verrebbe
 cancellato senza toccare nulla. Aggiungi --apply per eseguire la cancellazione.
 Rimuove anche le cartelle rimaste vuote sotto tesi/.
+
+ATTENZIONE: l'elenco dei file referenziati e' una fotografia presa PRIMA di
+scorrere il disco. Un caricamento completato fra i due momenti produce un file
+che risulta orfano pur essendo appena stato salvato: con --apply va lanciato
+quando nessuno sta caricando tesi (per esempio in manutenzione).
 """
 import os
 

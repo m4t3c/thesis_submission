@@ -31,7 +31,22 @@ class ErroreXlsx(Exception):
 
 
 def _indice_colonna(intestazioni, frammenti, escludi=()):
-    """Posizione della prima colonna il cui nome contiene uno dei frammenti."""
+    """Posizione della prima colonna il cui nome contiene uno dei frammenti.
+
+    Si scorrono prima i frammenti e poi le colonne, non il contrario: cosi'
+    l'ordine dei frammenti esprime una preferenza, e una corrispondenza con il
+    primo frammento vince anche se sta in una colonna piu' a destra.
+
+    Args:
+        intestazioni: nomi delle colonne, nell'ordine del foglio.
+        frammenti: testi cercati (in minuscolo), dal piu' al meno preferito.
+        escludi: indici di colonne gia' assegnate. Serve per frammenti che
+            sono contenuti in altri: "nome" corrisponde anche a "cognome", e
+            senza escludere quella colonna la si prenderebbe due volte.
+
+    Returns:
+        L'indice della colonna, oppure None se nessuna corrisponde.
+    """
     for frammento in frammenti:
         for i, nome in enumerate(intestazioni):
             if i in escludi:
@@ -93,6 +108,8 @@ def leggi_elenco(file_caricato):
         valore_email = _testo(riga, i_email)
         if valore_email and "@" in valore_email:
             email.append(valore_email.lower())
+        # Un elenco riguarda un solo corso: basta il primo valore non vuoto,
+        # che non e' detto stia nella prima riga dati.
         if not corso:
             corso = _testo(riga, i_corso)
 
@@ -104,6 +121,12 @@ def leggi_elenco(file_caricato):
 
 
 def _testo(riga, indice):
+    """Contenuto della cella come testo ripulito, "" se assente.
+
+    Il controllo sulla lunghezza non e' ridondante: in modalita' read_only
+    openpyxl puo' restituire righe piu' corte dell'intestazione, quando le
+    ultime celle sono vuote e il file non dichiara le dimensioni del foglio.
+    """
     if indice is None or indice >= len(riga):
         return ""
     valore = riga[indice]

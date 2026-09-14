@@ -340,8 +340,15 @@ document.addEventListener('DOMContentLoaded', function () {
     var modale = document.getElementById('modaleValutazione');
     var moduloInSospeso = null;
 
-    // Il token CSRF e' escluso: cambia a ogni pagina ma non e' un dato che
-    // l'utente ha modificato, e includerlo non cambierebbe nulla al confronto.
+    /**
+     * Valori correnti del modulo, serializzati per un confronto fra stringhe.
+     *
+     * Il token CSRF e' escluso: cambia a ogni pagina ma non e' un dato che
+     * l'utente ha modificato, e includerlo non cambierebbe nulla al confronto.
+     *
+     * @param {HTMLFormElement} form Modulo di valutazione.
+     * @returns {string} Coppie nome=valore unite da "&".
+     */
     function istantanea(form) {
         var pezzi = [];
         new FormData(form).forEach(function (valore, nome) {
@@ -350,10 +357,17 @@ document.addEventListener('DOMContentLoaded', function () {
         return pezzi.join('&');
     }
 
+    /**
+     * Chiude il pannello di un tutorato, scartando se richiesto le modifiche.
+     *
+     * reset() riporta i campi ai valori resi dal server, cioe' a quelli
+     * salvati nel database: e' esattamente "esci senza salvare".
+     *
+     * @param {HTMLElement} modulo Contenitore collapse del modulo.
+     * @param {boolean} ripristina Se riportare i campi ai valori salvati.
+     */
     function chiudiModulo(modulo, ripristina) {
         var form = modulo.querySelector('form');
-        // reset() riporta i campi ai valori resi dal server, cioe' a quelli
-        // salvati nel database: e' esattamente "esci senza salvare".
         if (form && ripristina) form.reset();
         bootstrap.Collapse.getOrCreateInstance(modulo).hide();
     }
@@ -485,6 +499,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // della pagina che non mostra nulla.
     if (!location.hash) return;
     var bersaglio = null;
+    // L'ancora arriva dall'URL e puo' non essere un selettore CSS valido
+    // (un id che inizia con una cifra, un frammento scritto a mano):
+    // querySelector lancerebbe un'eccezione e fermerebbe il resto dello script.
     try { bersaglio = document.querySelector(location.hash); } catch (e) { return; }
     if (!bersaglio) return;
     var gruppo = bersaglio.closest('.collapse');

@@ -1131,6 +1131,19 @@
                 boxErrore.hidden = false;
             }
         }
+        /**
+         * Aggiorna barra, byte inviati, tempo residuo e velocita'.
+         *
+         * La velocita' e' la media dall'inizio del caricamento, non quella
+         * dell'ultimo intervallo: oscilla molto meno, e la stima del tempo
+         * residuo non salta avanti e indietro a ogni evento di progresso.
+         * Nel primo secondo non si mostra, perche' su pochi campioni sarebbe
+         * comunque inattendibile.
+         *
+         * @param {number} inviati Byte gia' trasmessi.
+         * @param {number} totale Byte complessivi della richiesta.
+         * @param {number} avvio Istante di inizio, in millisecondi (Date.now()).
+         */
         function aggiornaBarra(inviati, totale, avvio) {
             var perc = totale ? Math.round((inviati / totale) * 100) : 0;
             barra.style.width = perc + '%';
@@ -1173,14 +1186,20 @@
         // farebbe mentre l'utente lo sta ancora compilando.
         var giaInviato = false;
 
-        // Dove va messo il riquadro d'errore di un campo: di norma subito dopo
-        // il campo stesso, ma due contenitori non lo sopportano al loro interno
-        // e vanno scavalcati.
-        //   .campo-file-nascosto e' RITAGLIATO (il campo file lo rappresenta
-        //     l'area tratteggiata): un messaggio li' dentro non si vedrebbe.
-        //   .ricerca-con-icona tiene l'icona centrata sul 50% della PROPRIA
-        //     altezza: infilandoci dentro il messaggio il contenitore
-        //     raddoppia e l'icona scivola sopra al messaggio stesso.
+        /**
+         * Dove va messo il riquadro d'errore di un campo.
+         *
+         * Di norma subito dopo il campo stesso, ma due contenitori non lo
+         * sopportano al loro interno e vanno scavalcati:
+         * - .campo-file-nascosto e' RITAGLIATO (il campo file lo rappresenta
+         *   l'area tratteggiata): un messaggio li' dentro non si vedrebbe;
+         * - .ricerca-con-icona tiene l'icona centrata sul 50% della PROPRIA
+         *   altezza: infilandoci dentro il messaggio il contenitore raddoppia
+         *   e l'icona scivola sopra al messaggio stesso.
+         *
+         * @param {HTMLElement} elemento Campo a cui si riferisce l'errore.
+         * @returns {HTMLElement} Elemento dopo il quale inserire il riquadro.
+         */
         function ancoraErrore(elemento) {
             return elemento.closest('.campo-file-nascosto, .ricerca-con-icona')
                 || elemento;
@@ -1238,9 +1257,18 @@
             return input.files[0].size <= max;
         }
 
+        /**
+         * Approssimazione lato browser della validazione di URLField.
+         *
+         * Stessa regola del server (URLField di Django): schema http o https,
+         * sottinteso quando manca, e un nome di dominio vero. Il costruttore
+         * URL da solo non basta, perche' accetta come host anche una parola
+         * senza punti ("https://video"), che il server invece rifiuta.
+         *
+         * @param {string} valore Testo inserito, gia' privo di spazi ai bordi.
+         * @returns {boolean} true se il link ha la forma di un indirizzo web.
+         */
         function linkValido(valore) {
-            // Stessa regola del server (URLField di Django): schema http o
-            // https, sottinteso quando manca, e un nome di dominio vero.
             if (/\s/.test(valore)) return false;
             var testo = /^[a-z][a-z0-9+.-]*:\/\//i.test(valore)
                 ? valore : 'https://' + valore;
@@ -1678,12 +1706,18 @@
                     // La view reindirizza alla dashboard quando il salvataggio
                     // riesce; se invece resta su questa pagina sono errori di
                     // validazione, e si ridisegna la pagina per mostrarli.
+                    // XMLHttpRequest segue i redirect da solo e non espone il
+                    // 302: l'unico modo di sapere dove si e' arrivati e'
+                    // confrontare responseURL con l'indirizzo di questa pagina.
                     var arrivo = this.responseURL || '';
                     if (arrivo && arrivo.indexOf('carica-tesi') === -1) {
                         iniziale = istantanea();   // niente avviso "non salvato"
                         window.location.href = arrivo;
                         return;
                     }
+                    // Si sostituisce l'intero documento con la risposta invece
+                    // di ricostruire gli errori in JavaScript: cosi' restano
+                    // quelli resi dal template, identici all'invio classico.
                     document.open();
                     document.write(this.responseText);
                     document.close();
@@ -1731,6 +1765,8 @@
         // Chiudere la scheda durante il caricamento lo annulla: va chiesto.
         window.addEventListener('beforeunload', function (ev) {
             if (richiesta) {
+                // preventDefault basta ai browser recenti; returnValue serve
+                // a quelli meno recenti, che altrimenti non chiedono conferma.
                 ev.preventDefault();
                 ev.returnValue = '';
             }

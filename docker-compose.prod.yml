@@ -52,6 +52,9 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Obbligatoria: senza, con DEBUG spento, Django si rifiuta di partire.
+      # Il ":?" ferma gia' 'docker compose up' con un messaggio chiaro.
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?Manca DJANGO_SECRET_KEY nel file .env}"
       DJANGO_ALLOWED_HOSTS: "tesi.ing.unimore.it"
       DJANGO_DEBUG: "0"                # produzione: niente stack trace/debug
       SHIB_ENABLED: "1"               # attiva il middleware Shibboleth
