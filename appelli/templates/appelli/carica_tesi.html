@@ -13,62 +13,179 @@
 
 {% block content %}
 <style>
-    .upload-input::file-selector-button {
-        margin-right: .75rem;
-        border: 0;
-        background: var(--bs-primary-bg-subtle);
-        color: var(--bs-primary-text-emphasis);
-        padding: .5rem .9rem;
-        border-radius: .4rem;
-        font-weight: 600;
-        cursor: pointer;
-    }
-    .upload-input::file-selector-button:hover { background: var(--bs-primary); color: #fff; }
-    .current-file { background: #fbfbfc; }
-    .video-box { border: 1px solid var(--line); border-radius: .6rem; padding: 1rem; }
-    .errore-campo { font-size: .875rem; }
-    /* Premendo "Salva" con un campo non valido il box gia' presente viene
-       richiamato all'attenzione: senza, l'utente non capirebbe perche' il
-       pulsante "non fa niente". */
-    @keyframes richiamo-errore {
-        0%, 100% { transform: translateX(0); }
-        20%      { transform: translateX(-7px); }
-        40%      { transform: translateX(7px); }
-        60%      { transform: translateX(-4px); }
-        80%      { transform: translateX(4px); }
-    }
-    .errore-campo.evidenzia {
-        animation: richiamo-errore .45s ease;
-        box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .35) !important;
-    }
-    /* Per chi ha chiesto meno animazioni al sistema operativo: niente
-       movimento, solo l'alone colorato. */
-    @media (prefers-reduced-motion: reduce) {
-        .errore-campo.evidenzia { animation: none; }
-    }
-    /* Pannello di avanzamento: sostituisce il form durante il caricamento */
-    #pannello-avanzamento .progress { height: 1.25rem; }
-    #pannello-avanzamento .progress-bar { font-weight: 600; }
-    /* I numeri non "ballano" mentre si aggiornano */
-    .avanzamento-dettagli { font-variant-numeric: tabular-nums; }
-    /* Un dato per riga, etichetta a sinistra e valore a destra: lo stesso
-       schema delle tabelle a schede. Vale a ogni larghezza, non solo su
-       telefono, perche' la card e' stretta (col-lg-7) e tre dati affiancati
-       andrebbero a capo a meta' anche su desktop. */
-    .avanzamento-dettagli .dato {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: .4rem 0;
-        border-bottom: 1px solid var(--line);
-    }
-    .avanzamento-dettagli .dato:last-child { border-bottom: 0; }
-    .avanzamento-dettagli .etichetta { color: var(--muted); }
-    .avanzamento-dettagli .valore { font-weight: 600; color: var(--ink); }
+    /* ====================================================================
+       Impaginazione della pagina
+       --------------------------------------------------------------------
+       La card occupa tutto il contenitore del sito (come le altre pagine) e
+       si divide in due colonne: a sinistra cio' che si COMPILA, a destra cio'
+       che si LEGGE (il tutor e il riepilogo della consegna). La distinzione
+       non e' decorativa: e' quella che permette allo studente di sapere
+       sempre cosa gli manca senza scorrere il modulo.
+       ==================================================================== */
+    .tesi-testata { padding: 1.1rem 1.25rem; }
+    .tesi-titolo { font-weight: 700; margin: 0; }
+    .tesi-sottotitolo { color: var(--muted); margin: .15rem 0 0; }
 
-    /* Ricerca del tutor: stessa impostazione della ricerca docenti nella
-       creazione appello (tendina sovrapposta al contenuto e riquadro
-       tratteggiato che accoglie la persona scelta). */
+    .tesi-griglia {
+        display: grid;
+        /* minmax(0, 1fr) e non 1fr: senza il minimo a zero un nome di file
+           lunghissimo allargherebbe la colonna oltre la card. */
+        grid-template-columns: minmax(0, 1fr) 430px;
+    }
+    .tesi-col-sx { padding: 1.5rem; }
+    .tesi-col-dx {
+        padding: 1.5rem;
+        border-left: 1px solid var(--line);
+        background: #fbfbfc;
+    }
+    /* I controlli non si allargano con la card: la larghezza in piu' va alla
+       colonna destra e al respiro, non ai campi. Un campo di testo lungo
+       1000px non si legge meglio, si legge peggio. */
+    .tesi-campo { max-width: 640px; }
+
+    .blocco + .blocco { margin-top: 1.75rem; }
+    .blocco-etichetta {
+        font-weight: 700;
+        font-size: 1rem;
+        margin-bottom: .5rem;
+    }
+    .blocco-etichetta .facoltativo { font-weight: 400; color: var(--muted); }
+
+    /* ---------- Area di caricamento ---------- */
+    .dropzone {
+        display: block;
+        width: 100%;
+        border: 2px dashed var(--line);
+        border-radius: .6rem;
+        background: #fbfbfc;
+        padding: 1.75rem 1rem;
+        text-align: center;
+        cursor: pointer;
+        color: var(--muted);
+    }
+    .dropzone:hover, .dropzone:focus-visible {
+        border-color: var(--brand-tenue-bordo);
+        background: var(--brand-velo);
+    }
+    /* Trascinamento in corso: il riquadro deve dire "lascialo qui" */
+    .dropzone.sopra {
+        border-color: var(--brand);
+        background: var(--brand-velo);
+        color: var(--brand-testo);
+    }
+    .dropzone-icona { font-size: 1.5rem; display: block; margin-bottom: .35rem; }
+    .dropzone-azione { color: var(--brand); font-weight: 600; }
+    .dropzone-nota { font-size: .875rem; margin-top: .25rem; }
+    /* Il campo file vero resta nel documento (serve all'invio e ai controlli)
+       ma non si mostra: al suo posto si usa l'area tratteggiata. */
+    .campo-file-nascosto {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+    /* Se il campo nascosto e' in errore, lo dice l'area che lo rappresenta:
+       il bordo rosso su un input invisibile non si vedrebbe. */
+    .blocco:has(.campo-file-nascosto.is-invalid) .dropzone {
+        border-color: var(--bs-danger);
+        background: var(--bs-danger-bg-subtle);
+    }
+
+    /* ---------- File gia' caricato ---------- */
+    /* Sostituibile, mai rimovibile: qui non esiste nessuna azione di
+       rimozione, ne' deve essere aggiunta (vedi TesiUploadForm). */
+    .file-caricato {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        border: 1px solid var(--line);
+        border-radius: .6rem;
+        background: #fff;
+        padding: .85rem 1rem;
+    }
+    .file-caricato-icona { font-size: 1.6rem; color: var(--brand); flex-shrink: 0; }
+    .file-caricato-testo { min-width: 0; flex: 1; }
+    .file-caricato-nome { font-weight: 600; }
+
+    /* ---------- Scelta del video: tre riquadri affiancati ---------- */
+    .video-scelte {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: .75rem;
+        max-width: 640px;
+    }
+    .video-scelta {
+        position: relative;
+        border: 2px solid var(--line);
+        border-radius: .6rem;
+        background: #fff;
+        padding: .8rem .9rem;
+        cursor: pointer;
+        font-weight: 500;
+        line-height: 1.3;
+    }
+    .video-scelta:hover { border-color: var(--brand-tenue-bordo); }
+    /* Il radio resta raggiungibile da tastiera e dai lettori di schermo: e'
+       fuori campo, non rimosso. L'alone di messa a fuoco viene ridisegnato
+       sul riquadro, altrimenti chi naviga col tasto Tab non vedrebbe dove si
+       trova. */
+    .video-scelta input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        width: 1px; height: 1px;
+        margin: 0;
+    }
+    .video-scelta.attiva,
+    .video-scelta:has(input[type="radio"]:checked) {
+        border-color: var(--brand);
+        background: var(--brand-velo);
+        color: var(--brand-testo);
+    }
+    .video-scelta:has(input[type="radio"]:focus-visible) {
+        outline: .25rem solid rgba(var(--brand-alone-rgb), .35);
+        outline-offset: 1px;
+    }
+    /* Pannello della modalita' scelta: si apre SOTTO le tre opzioni, che
+       restano visibili, cosi' si puo' cambiare idea senza tornare indietro. */
+    .video-pannello {
+        margin-top: .85rem;
+        max-width: 640px;
+        border: 1px solid var(--brand-tenue-bordo);
+        border-radius: .6rem;
+        background: var(--brand-velo);
+        padding: 1rem;
+    }
+
+    /* ---------- Tutor ---------- */
+    .tutor-avviso {
+        display: flex;
+        gap: .6rem;
+        border: 1px solid var(--bs-warning-border-subtle);
+        background: var(--bs-warning-bg-subtle);
+        color: var(--bs-warning-text-emphasis);
+        border-radius: .5rem;
+        padding: .7rem .85rem;
+        font-size: .9375rem;
+        margin-bottom: .85rem;
+    }
+    .tutor-avviso i { flex-shrink: 0; }
+    /* Campo con l'icona dentro, a sinistra (il link del video) */
+    .ricerca-con-icona { position: relative; }
+    .ricerca-con-icona > .bi {
+        position: absolute;
+        left: .85rem; top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted);
+        pointer-events: none;
+    }
+    .ricerca-con-icona .form-control { padding-left: 2.4rem; }
+
+    /* Ricerca del tutor: la STESSA della ricerca docenti nella creazione
+       appello (vedi crea_appello.html). Due tendine che si comportano in modo
+       diverso nello stesso sito costringono a impararle tutte e due. */
     #risultati-tutor {
         position: absolute;
         z-index: 1000;
@@ -102,51 +219,258 @@
     .membro-icona { color: var(--muted); flex-shrink: 0; }
     .membro-testo { min-width: 0; flex: 1; }
     .membro-rimuovi { flex-shrink: 0; }
+    /* Tutor scelto (non ancora salvato) e tutor definitivo: stessa scheda */
+    .tutor-scheda {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        border: 1px solid var(--line);
+        border-radius: .6rem;
+        background: #fff;
+        padding: .85rem 1rem;
+    }
+    .tutor-scheda-icona { font-size: 1.6rem; color: var(--brand); flex-shrink: 0; }
+    .tutor-scheda-testo { min-width: 0; flex: 1; }
+    .tutor-scheda-nome { font-weight: 600; }
+    .tutor-scheda-sotto { color: var(--muted); font-size: .875rem; }
+    .tutor-scheda-stato { flex-shrink: 0; }
+
+    /* ---------- Stato della consegna ---------- */
+    /* Deve leggersi come un riepilogo che il sistema aggiorna, non come una
+       lista di caselle da spuntare: per questo le voci non sono interattive e
+       l'icona di quelle mancanti e' un trattino in cerchio, non un cerchio
+       vuoto (che sembrerebbe una checkbox da cliccare). */
+    .stato-consegna { margin-top: 1.75rem; }
+    .stato-testa {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .stato-etichetta {
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        font-size: .75rem;
+        font-weight: 700;
+        color: var(--muted);
+    }
+    .stato-contatore {
+        font-size: .875rem;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+    }
+    .stato-barra {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--line);
+        overflow: hidden;
+        margin: .5rem 0 .9rem;
+    }
+    .stato-barra-riempimento { height: 100%; background: var(--brand); border-radius: 3px; }
+    .stato-voci { list-style: none; margin: 0; padding: 0; }
+    .stato-voce {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .35rem 0;
+        color: var(--muted);
+    }
+    .stato-voce .bi { flex-shrink: 0; }
+    .stato-voce .bi-dash-circle { color: #c9ced6; }
+    .stato-voce.fatta { color: var(--ink); }
+    .stato-voce.fatta .bi-check-circle-fill { color: var(--brand); }
+    .stato-voce-nome { font-weight: 500; }
+    .stato-voce-manca { margin-left: auto; font-size: .8125rem; color: var(--muted); }
+    .stato-nota { font-size: .8125rem; color: var(--muted); margin: .6rem 0 0; }
+    /* Consegna finita: non e' una nota di servizio come quella qui sopra, ma
+       la risposta alla domanda che lo studente si fa in quel momento ("e
+       adesso? posso ancora toccare qualcosa?"). Per questo ha un riquadro. */
+    .stato-completa {
+        display: flex;
+        gap: .5rem;
+        margin: .9rem 0 0;
+        padding: .7rem .8rem;
+        border: 1px solid var(--bs-success-border-subtle);
+        border-radius: .5rem;
+        background: var(--bs-success-bg-subtle);
+        color: var(--bs-success-text-emphasis);
+        font-size: .875rem;
+    }
+    .stato-completa .bi { flex-shrink: 0; }
+
+    /* ---------- Piede della card ---------- */
+    .tesi-piede {
+        display: flex;
+        gap: .6rem;
+        background: #fbfbfc;
+        border-top: 1px solid var(--line);
+        padding: 1rem 1.5rem;
+    }
+
+    /* ====================================================================
+       Telefoni e tablet: colonna unica, con il riepilogo IN TESTA
+       --------------------------------------------------------------------
+       display: contents sui due contenitori di colonna fa diventare i cinque
+       blocchi figli diretti della griglia: solo cosi' "order" puo'
+       riordinarli, perche' il tutor su schermo piccolo va fra il titolo e il
+       file (cioe' cambia gruppo, non solo posizione).
+       ==================================================================== */
+    @media (max-width: 991.98px) {
+        .tesi-griglia { display: flex; flex-direction: column; gap: 0; }
+        .tesi-col-sx, .tesi-col-dx { display: contents; }
+
+        .blocco-stato  { order: 1; }
+        .blocco-titolo { order: 2; }
+        .blocco-tutor  { order: 3; }
+        .blocco-file   { order: 4; }
+        .blocco-video  { order: 5; }
+
+        /* I quattro blocchi del modulo sono contigui e condividono i bordi:
+           letti insieme formano un unico riquadro, come il riepilogo sopra.
+           La distanza fra un blocco e il successivo la fanno i padding, uguali
+           per tutti.
+           "margin: 0" e' scritto sulla stessa coppia di classi di
+           ".blocco + .blocco" (la regola per schermi larghi) e non sul solo
+           ".blocco": le media query non aumentano la specificita', quindi un
+           ".blocco { margin: 0 }" perderebbe il confronto e il margine di
+           1.75rem resterebbe attaccato ai blocchi che, in ordine di DOM, ne
+           seguono un altro. In pratica: titolo e tutor risultavano appiccicati
+           (sono i primi dei rispettivi contenitori) mentre tesi e video, che
+           ereditavano quel margine, restavano distanziati. */
+        .blocco, .blocco + .blocco {
+            margin: 0;
+            border: 1px solid var(--line);
+            border-top: 0;
+            background: #fff;
+            padding: 1.1rem 1rem;
+        }
+        .blocco-titolo { border-top: 1px solid var(--line); border-radius: .6rem .6rem 0 0; }
+        .blocco-video { border-radius: 0 0 .6rem .6rem; }
+        .blocco-stato {
+            margin: 0 0 1rem;
+            border: 1px solid var(--line);
+            border-radius: .6rem;
+            background: #fff;
+            padding: 1rem;
+        }
+        .stato-consegna { margin-top: 0; }
+        /* Il riepilogo resta quello di schermo grande, voce per voce con il
+           suo stato scritto accanto: comprimerlo a "solo i nomi" toglieva
+           proprio l'informazione che lo studente sta cercando ("cosa mi
+           manca?"), ed e' la meta' che non si puo' indovinare dall'icona. */
+
+        /* Il lucchetto "Definitivo" va a capo: in riga con nome ed email
+           lascerebbe al testo una colonna di pochi caratteri, e su un nome
+           lungo resterebbe visibile solo l'inizio. */
+        .tutor-scheda { flex-wrap: wrap; }
+        .tutor-scheda-stato { flex-basis: 100%; margin-top: .5rem; }
+
+        .tesi-griglia { padding: 1rem; background: var(--bg); }
+        .tesi-campo, .video-scelte, .video-pannello { max-width: none; }
+        /* Le tre opzioni video impilate a piena larghezza */
+        .video-scelte { grid-template-columns: 1fr; }
+
+        /* Il piede della card resta nel flusso, in coda al modulo.
+           Ne' "fixed" ne' "sticky": in fondo allo schermo c'e' gia' il fondo
+           pagina del sito, anch'esso fisso e opaco. Due barre nello stesso
+           punto si coprono a vicenda, ed e' cosi' che "Salva" era sparito. */
+        .tesi-piede { padding: .9rem 1rem; }
+        .tesi-piede .btn-salva { flex: 1; }
+
+        /* Comodi da premere col pollice */
+        .form-control, .btn, .video-scelta { padding-top: .65rem; padding-bottom: .65rem; }
+    }
+
+    /* ====================================================================
+       Parti invariate: caricamento in corso e messaggi d'errore
+       ==================================================================== */
+    .errore-campo { font-size: .875rem; }
+    /* Premendo "Salva" con un campo non valido il box gia' presente viene
+       richiamato all'attenzione: senza, l'utente non capirebbe perche' il
+       pulsante "non fa niente". */
+    @keyframes richiamo-errore {
+        0%, 100% { transform: translateX(0); }
+        20%      { transform: translateX(-7px); }
+        40%      { transform: translateX(7px); }
+        60%      { transform: translateX(-4px); }
+        80%      { transform: translateX(4px); }
+    }
+    .errore-campo.evidenzia {
+        animation: richiamo-errore .45s ease;
+        box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .35) !important;
+    }
+    /* Per chi ha chiesto meno animazioni al sistema operativo: niente
+       movimento, solo l'alone colorato. */
+    @media (prefers-reduced-motion: reduce) {
+        .errore-campo.evidenzia { animation: none; }
+    }
+    /* Pannello di avanzamento: sostituisce il form durante il caricamento */
+    #pannello-avanzamento { padding: 1.5rem; }
+    #pannello-avanzamento .progress { height: 1.25rem; }
+    #pannello-avanzamento .progress-bar { font-weight: 600; }
+    /* I numeri non "ballano" mentre si aggiornano */
+    .avanzamento-dettagli { font-variant-numeric: tabular-nums; max-width: 640px; }
+    /* Un dato per riga, etichetta a sinistra e valore a destra: lo stesso
+       schema delle tabelle a schede. */
+    .avanzamento-dettagli .dato {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .4rem 0;
+        border-bottom: 1px solid var(--line);
+    }
+    .avanzamento-dettagli .dato:last-child { border-bottom: 0; }
+    .avanzamento-dettagli .etichetta { color: var(--muted); }
+    .avanzamento-dettagli .valore { font-weight: 600; color: var(--ink); }
 </style>
 
-<div class="row justify-content-center">
-    <div class="col-lg-7 col-md-9">
-        <a class="btn btn-outline-secondary btn-sm mb-3 js-esci"
-           href="{% url 'appelli:studente_dashboard' %}">
-            &larr; Torna indietro
-        </a>
+<a class="btn btn-outline-secondary btn-sm mb-3 js-esci"
+   href="{% url 'appelli:studente_dashboard' %}">
+    &larr; Torna indietro
+</a>
 
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h1 class="h4 section-title mb-1">
-                    <i class="bi bi-mortarboard text-primary me-1"></i> La mia tesi
-                </h1>
-                <p class="text-muted">
-                    {{ iscrizione.appello.corso_di_laurea }} — appello del
-                    {{ iscrizione.appello.data|date:"d/m/Y" }}{% if iscrizione.appello.ora %}
-                        alle {{ iscrizione.appello.ora|time:"H:i" }}{% endif %}
-                </p>
+<div class="card shadow-sm">
+    {# ---------------- Intestazione ---------------- #}
+    <div class="card-header tesi-testata">
+        <h1 class="h4 tesi-titolo">
+            <i class="bi bi-mortarboard-fill text-primary me-1" aria-hidden="true"></i>
+            La mia tesi
+        </h1>
+        <p class="tesi-sottotitolo">
+            {{ iscrizione.appello.corso_di_laurea }} — appello del
+            {{ iscrizione.appello.data|date:"d/m/Y" }}{% if iscrizione.appello.ora %}
+                alle {{ iscrizione.appello.ora|time:"H:i" }}{% endif %}
+        </p>
+    </div>
 
-                <form method="post" enctype="multipart/form-data" id="tesi-form" novalidate>
-                    {% csrf_token %}
+    <form method="post" enctype="multipart/form-data" id="tesi-form" novalidate>
+        {% csrf_token %}
 
-                    {% comment %}
-                        Un invio rifiutato non salva NIENTE, nemmeno i campi
-                        corretti, e gli input file tornano vuoti (il browser non
-                        li ripopola, per sicurezza). Detto qui una volta sola:
-                        senza, si vede solo l'errore sul singolo campo e si
-                        crede che il resto sia stato salvato.
-                    {% endcomment %}
-                    {% if form.errors %}
-                        <div class="alert alert-warning shadow-sm" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                            Nessuna modifica è stata salvata. Correggi quanto segnalato
-                            qui sotto e riseleziona i file: il browser non li conserva.
-                        </div>
-                    {% endif %}
+        {% comment %}
+            Un invio rifiutato non salva NIENTE, nemmeno i campi corretti, e
+            gli input file tornano vuoti (il browser non li ripopola, per
+            sicurezza). Detto qui una volta sola: senza, si vede solo
+            l'errore sul singolo campo e si crede che il resto sia stato
+            salvato.
+        {% endcomment %}
+        {% if form.errors %}
+            <div class="alert alert-warning rounded-0 border-0 border-bottom mb-0" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                Nessuna modifica è stata salvata. Correggi quanto segnalato
+                qui sotto e riseleziona i file: il browser non li conserva.
+            </div>
+        {% endif %}
 
-                    {# ---------------- Titolo ---------------- #}
-                    <div class="mb-4">
-                        <h2 class="h6 section-title">
-                            <label for="{{ form.titolo.id_for_label }}">
-                                Titolo della tesi
-                            </label>
-                        </h2>
+        <div class="tesi-griglia">
+            {# ============ Colonna sinistra: cio' che si compila ============ #}
+            <div class="tesi-col-sx">
+
+                {# ---------------- Titolo ---------------- #}
+                <div class="blocco blocco-titolo">
+                    <h2 class="blocco-etichetta">
+                        <label for="{{ form.titolo.id_for_label }}">Titolo della tesi</label>
+                    </h2>
+                    <div class="tesi-campo">
                         {{ form.titolo }}
                         {% if form.titolo.errors %}
                             <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
@@ -154,234 +478,360 @@
                                 {{ form.titolo.errors.0 }}
                             </div>
                         {% endif %}
-                        <div class="form-text" id="{{ form.titolo.auto_id }}_helptext">
-                            Puoi modificarlo quando vuoi, ma non può restare vuoto.
-                        </div>
                     </div>
+                </div>
 
-                    {# ---------------- Tutor ---------------- #}
-                    <div class="mb-4">
-                        <h2 class="h6 section-title">Tutor</h2>
+                {# ---------------- File della tesi ---------------- #}
+                {% comment %}
+                    La tesi si puo' SOSTITUIRE, mai rimuovere (vedi
+                    TesiUploadForm): qui non c'e' nessuna azione di
+                    rimozione, e non va aggiunta.
+                {% endcomment %}
+                <div class="blocco blocco-file">
+                    <h2 class="blocco-etichetta">File della tesi</h2>
 
-                        {% with tutor=form.tutor_selezionato %}
-                        {% if form.tutor_bloccato %}
-                            {% comment %}
-                                Gia' scelto: si mostra soltanto. Il campo del form
-                                e' disabilitato, quindi non viene nemmeno disegnato
-                                ne' inviato: non c'e' niente da manomettere.
-                            {% endcomment %}
-                            <div class="current-file border rounded p-3 d-flex align-items-center gap-3">
-                                <i class="bi bi-person-video3 fs-3 text-primary flex-shrink-0" aria-hidden="true"></i>
-                                <div style="min-width: 0;">
-                                    <div class="fw-semibold text-truncate">{{ tutor.etichetta }}</div>
-                                    <div class="small text-muted text-truncate">{{ tutor.email }}</div>
-                                    <span class="badge text-bg-secondary ms-auto flex-shrink-0">
-                                        <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Definitivo
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="form-text">
-                                Il tutor si sceglie una volta sola: non può più essere modificato.
-                            </div>
-                        {% else %}
-                            {# L'id del docente scelto viaggia in un input nascosto #}
-                            <div id="tutor-hidden">{{ form.tutor }}</div>
-
-                            <div class="position-relative">
-                                <input type="text" id="ricerca-tutor" class="form-control"
-                                       placeholder="Cerca per nome, cognome, nome utente o email"
-                                       autocomplete="off" role="combobox"
-                                       aria-expanded="false" aria-controls="risultati-tutor">
-                                <div id="risultati-tutor" class="list-group shadow" role="listbox" hidden></div>
-                            </div>
-
-                            {% if form.tutor.errors %}
-                                <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
-                                    <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                                    {{ form.tutor.errors.0 }}
-                                </div>
-                            {% endif %}
-                            {# Riquadro d'errore proprio: il campo vero e' nascosto, quindi il messaggio non puo' stargli accanto. #}
-                            <div id="errore-tutor" class="errore-campo alert alert-danger shadow-sm mt-2"
-                                 role="alert" hidden></div>
-
-                            <div class="box-membri mt-3" id="box-tutor">
-                                <p class="text-muted text-center mb-0 py-3" id="nessun-tutor">
-                                    <i class="bi bi-person-video3 me-1" aria-hidden="true"></i>
-                                    Nessun tutor selezionato
-                                </p>
-                                <div id="tutor-scelto"></div>
-                            </div>
-
-                            {# Ridisegna la scelta quando il form torna con un errore #}
-                            {{ tutor|json_script:"tutor-iniziale" }}
-
-                            <div class="form-text">
-                                <i class="bi bi-exclamation-triangle-fill text-warning"></i>
-                                Attenzione: questa azione è <span class="fw-bold">irreversebile</span>.
-                                Una volta salvato non potrà più
-                                essere modificato.
-                            </div>
-                        {% endif %}
-                        {% endwith %}
-                    </div>
-
-                    {# ---------------- File della tesi ---------------- #}
-                    <h2 class="h6 section-title">File della tesi</h2>
-
-                    {% if nome_file %}
-                        <div id="current-file" class="current-file border rounded p-3 mb-3">
-                            <div class="d-flex align-items-center gap-3" style="min-width: 0;">
-                                <i class="bi bi-file-earmark-pdf fs-3 text-primary flex-shrink-0"></i>
-                                <div style="min-width: 0;">
-                                    <div class="fw-semibold text-truncate" title="{{ nome_file }}">{{ nome_file }}</div>
+                    <div class="tesi-campo">
+                        {% if nome_file %}
+                            <div class="file-caricato">
+                                <i class="bi bi-file-earmark-pdf file-caricato-icona" aria-hidden="true"></i>
+                                <div class="file-caricato-testo">
+                                    <div class="file-caricato-nome text-truncate" title="{{ nome_file }}">{{ nome_file }}</div>
                                     <a class="small text-decoration-none"
                                        href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
-                                        <i class="bi bi-download"></i> Scarica
+                                        <i class="bi bi-download" aria-hidden="true"></i> Scarica
                                     </a>
                                 </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                                        data-apre-file="{{ form.file_tesi.id_for_label }}">
+                                    Sostituisci…
+                                </button>
                             </div>
-                        </div>
-                    {% endif %}
+                            {# Il file scelto per la sostituzione, finche' non si salva #}
+                            <div class="small text-primary fw-semibold mt-2"
+                                 data-nome-per="{{ form.file_tesi.id_for_label }}"
+                                 data-prefisso="Nuovo file scelto: " hidden></div>
+                        {% else %}
+                            <label class="dropzone js-dropzone" for="{{ form.file_tesi.id_for_label }}">
+                                <i class="bi bi-file-earmark-arrow-up dropzone-icona" aria-hidden="true"></i>
+                                {% comment %}
+                                    Il nome del file scelto prende il posto dell'invito:
+                                    il campo vero non si vede, quindi senza questo lo
+                                    studente non saprebbe se la scelta e' andata a segno.
+                                {% endcomment %}
+                                <span data-testo-per="{{ form.file_tesi.id_for_label }}">
+                                    Trascina qui il PDF oppure <span class="dropzone-azione">sfoglia i file</span>
+                                </span>
+                                <span class="dropzone-azione"
+                                      data-nome-per="{{ form.file_tesi.id_for_label }}" hidden></span>
+                                <span class="dropzone-nota d-block">
+                                    Solo PDF. Una volta caricata potrà essere sostituita, ma non rimossa.
+                                </span>
+                            </label>
+                        {% endif %}
 
-                    <div class="mb-4">
-                        <label for="{{ form.file_tesi.id_for_label }}" class="form-label">
-                            {% if nome_file %}Sostituisci con un nuovo file{% else %}Seleziona il file{% endif %}
-                        </label>
-                        {{ form.file_tesi }}
+                        {% comment %}
+                            Il campo vero: nascosto, ma nel documento. Gli errori del
+                            controllo lato browser vengono inseriti subito dopo di lui,
+                            quindi sotto l'area di caricamento.
+                        {% endcomment %}
+                        <div class="campo-file-nascosto">{{ form.file_tesi }}</div>
+
                         {% if form.file_tesi.errors %}
                             <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
                                 <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
                                 {{ form.file_tesi.errors.0 }}
                             </div>
                         {% endif %}
-                        <div class="form-text" id="{{ form.file_tesi.auto_id }}_helptext">
-                            {% if nome_file %}
-                                Sono ammessi solo file PDF. Il nuovo file sostituirà quello
-                                attuale: una tesi già caricata può essere sostituita, ma non
-                                rimossa.
-                            {% else %}
-                                Sono ammessi solo file PDF.
-                            {% endif %}
+                        {% if nome_file %}
+                            <div class="form-text">
+                                Il nuovo file sostituirà quello attuale. Sono ammessi solo file PDF.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# ---------------- Video (facoltativo) ---------------- #}
+                <div class="blocco blocco-video">
+                    <h2 class="blocco-etichetta">
+                        Video di presentazione <span class="facoltativo">(facoltativo)</span>
+                    </h2>
+
+                    <div class="video-scelte" role="radiogroup" aria-label="Video di presentazione">
+                        {% for scelta in form.modalita_video %}
+                            <label class="video-scelta js-video-scelta"
+                                   data-modalita="{{ scelta.data.value }}"
+                                   for="{{ scelta.id_for_label }}">
+                                {{ scelta.tag }}
+                                {{ scelta.choice_label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+
+                    {% comment %}
+                        I pannelli stanno SOTTO le tre opzioni, non dentro:
+                        cosi' le opzioni restano visibili e si puo' cambiare
+                        idea senza che il riquadro aperto le nasconda.
+                    {% endcomment %}
+                    <div class="video-pannello js-video-pannello" data-modalita="file">
+                        {% if nome_video %}
+                            <div class="file-caricato mb-3">
+                                <i class="bi bi-camera-video file-caricato-icona" aria-hidden="true"></i>
+                                <div class="file-caricato-testo">
+                                    <div class="file-caricato-nome text-truncate" title="{{ nome_video }}">{{ nome_video }}</div>
+                                    <a class="small text-decoration-none"
+                                       href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                                        <i class="bi bi-download" aria-hidden="true"></i> Scarica
+                                    </a>
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                                        data-apre-file="{{ form.file_video.id_for_label }}">
+                                    Sostituisci…
+                                </button>
+                            </div>
+                            <div class="small text-primary fw-semibold mt-2"
+                                 data-nome-per="{{ form.file_video.id_for_label }}"
+                                 data-prefisso="Nuovo file scelto: " hidden></div>
+                        {% else %}
+                            <label class="dropzone js-dropzone" for="{{ form.file_video.id_for_label }}">
+                                <i class="bi bi-camera-video dropzone-icona" aria-hidden="true"></i>
+                                <span data-testo-per="{{ form.file_video.id_for_label }}">
+                                    Trascina qui il video oppure <span class="dropzone-azione">sfoglia i file</span>
+                                </span>
+                                <span class="dropzone-azione"
+                                      data-nome-per="{{ form.file_video.id_for_label }}" hidden></span>
+                            </label>
+                        {% endif %}
+
+                        <div class="campo-file-nascosto">{{ form.file_video }}</div>
+
+                        {% if form.file_video.errors %}
+                            <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.file_video.errors.0 }}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Formati ammessi: {{ formati_video }}. Dimensione massima {{ max_video }}.
                         </div>
                     </div>
 
-                    {# ---------------- Video (facoltativo) ---------------- #}
-                    <h2 class="h6 section-title">Video di presentazione <span class="fw-normal text-muted">(facoltativo)</span></h2>
-
-                    <div class="video-box mb-4">
-                        {% for scelta in form.modalita_video %}
-                            <div class="form-check{% if not forloop.last %} mb-2{% endif %}">
-                                {{ scelta.tag }}
-                                <label class="form-check-label" for="{{ scelta.id_for_label }}">
-                                    {{ scelta.choice_label }}
-                                </label>
-                            </div>
-
-                            {% if scelta.data.value == "file" %}
-                                <div class="js-video-pannello ms-4 mt-2 mb-2" data-modalita="file">
-                                    {% if nome_video %}
-                                        <div class="current-file border rounded p-2 mb-2 d-flex align-items-center gap-2">
-                                            <i class="bi bi-camera-video text-primary"></i>
-                                            <span class="small text-truncate">{{ nome_video }}</span>
-                                            <a class="small ms-auto text-decoration-none"
-                                               href="{% url 'appelli:scarica_video' iscrizione.id %}">
-                                                <i class="bi bi-download"></i> Scarica
-                                            </a>
-                                        </div>
-                                    {% endif %}
-                                    {{ form.file_video }}
-                                    {% if form.file_video.errors %}
-                                        <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
-                                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                                            {{ form.file_video.errors.0 }}
-                                        </div>
-                                    {% endif %}
-                                    <div class="form-text">
-                                        Formati ammessi: {{ formati_video }}. Dimensione massima {{ max_video }}.
-                                    </div>
-                                </div>
-                            {% elif scelta.data.value == "link" %}
-                                <div class="js-video-pannello ms-4 mt-2 mb-2" data-modalita="link">
-                                    {{ form.link_video }}
-                                    {% if form.link_video.errors %}
-                                        <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
-                                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                                            {{ form.link_video.errors.0 }}
-                                        </div>
-                                    {% endif %}
-                                    <div class="form-text">
-                                        Indirizzo di un video.
-                                    </div>
-                                </div>
-                            {% endif %}
-                        {% endfor %}
-                        {% if form.modalita_video.errors or form.non_field_errors %}
-                            <div class="alert alert-danger shadow-sm mt-2 mb-0" role="alert">
+                    <div class="video-pannello js-video-pannello" data-modalita="link">
+                        <label class="form-label" for="{{ form.link_video.id_for_label }}">
+                            Indirizzo del video
+                        </label>
+                        <div class="ricerca-con-icona">
+                            <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                            {{ form.link_video }}
+                        </div>
+                        {% if form.link_video.errors %}
+                            <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
                                 <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                                {{ form.modalita_video.errors.0|default:form.non_field_errors.0 }}
+                                {{ form.link_video.errors.0 }}
                             </div>
                         {% endif %}
                     </div>
 
-                    <div class="d-flex flex-column flex-sm-row gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-check2"></i> Salva
-                        </button>
-                        <a class="btn btn-outline-secondary js-esci" id="btn-annulla"
-                           href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
-                    </div>
-                </form>
-
-                {% comment %}
-                    Sostituisce il form durante il caricamento: senza, una tesi
-                    o un video di grandi dimensioni lasciano l'utente davanti a
-                    una pagina ferma, senza modo di distinguere "sta caricando"
-                    da "si e' bloccato".
-                {% endcomment %}
-                <div id="pannello-avanzamento" hidden>
-                    <h2 class="h6 section-title mb-3">
-                        <i class="bi bi-cloud-arrow-up text-primary me-1"></i>
-                        Caricamento in corso
-                    </h2>
-
-                    <div class="progress mb-2" role="progressbar"
-                         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated"
-                             id="barra-avanzamento" style="width: 0%;">0%</div>
-                    </div>
-
-                    <div class="avanzamento-dettagli small text-muted">
-                        <div class="dato">
-                            <span class="etichetta">Caricati</span>
-                            <span class="valore" id="avanzamento-byte">&mdash;</span>
+                    {% if form.modalita_video.errors or form.non_field_errors %}
+                        <div class="alert alert-danger shadow-sm mt-2 mb-0" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                            {{ form.modalita_video.errors.0|default:form.non_field_errors.0 }}
                         </div>
-                        <div class="dato">
-                            <span class="etichetta">Tempo rimanente</span>
-                            <span class="valore" id="avanzamento-stima">&mdash;</span>
-                        </div>
-                        <div class="dato">
-                            <span class="etichetta">Velocità</span>
-                            <span class="valore" id="avanzamento-velocita">&mdash;</span>
-                        </div>
-                    </div>
+                    {% endif %}
+                </div>
+            </div>
 
-                    <div class="alert alert-warning small mt-3 mb-3" role="alert">
-                        <i class="bi bi-exclamation-triangle me-1"></i>
-                        Non chiudere questa pagina: il caricamento verrebbe annullato.
-                    </div>
+            {# ============ Colonna destra: cio' che si legge ============ #}
+            <div class="tesi-col-dx">
 
-                    <button type="button" class="btn btn-outline-danger btn-sm"
-                            id="btn-annulla-caricamento">
-                        Annulla caricamento
-                    </button>
+                {# ---------------- Tutor ---------------- #}
+                <div class="blocco blocco-tutor">
+                    <h2 class="blocco-etichetta">Tutor</h2>
+
+                    {% with tutor=form.tutor_selezionato %}
+                    {% if form.tutor_bloccato %}
+                        {% comment %}
+                            Gia' scelto: si mostra soltanto. Il campo del form e'
+                            disabilitato, quindi non viene nemmeno disegnato ne'
+                            inviato: non c'e' niente da manomettere.
+                        {% endcomment %}
+                        <div class="tutor-scheda">
+                            <i class="bi bi-person-video3 tutor-scheda-icona" aria-hidden="true"></i>
+                            <div class="tutor-scheda-testo">
+                                <div class="tutor-scheda-nome text-truncate">{{ tutor.etichetta }}</div>
+                                <div class="tutor-scheda-sotto text-truncate">{{ tutor.email|default:tutor.username }}</div>
+                            </div>
+                            <span class="tutor-scheda-stato">
+                                <span class="badge text-bg-secondary">
+                                    <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Definitivo
+                                </span>
+                            </span>
+                        </div>
+                    {% else %}
+                        <div class="tutor-avviso" role="note">
+                            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                            <span>
+                                La scelta è definitiva: dopo il salvataggio il tutor
+                                non può più essere cambiato.
+                            </span>
+                        </div>
+
+                        {# L'id del docente scelto viaggia in un input nascosto #}
+                        <div id="tutor-hidden">{{ form.tutor }}</div>
+
+                        <div class="position-relative">
+                            <input type="text" id="ricerca-tutor" class="form-control"
+                                   placeholder="Cerca per nome, cognome, nome utente o email"
+                                   autocomplete="off" role="combobox"
+                                   aria-expanded="false" aria-controls="risultati-tutor">
+                            <div id="risultati-tutor" class="list-group shadow" role="listbox" hidden></div>
+                        </div>
+
+                        {% if form.tutor.errors %}
+                            <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                {{ form.tutor.errors.0 }}
+                            </div>
+                        {% endif %}
+                        {% comment %}
+                            Riquadro d'errore proprio: il campo vero e' nascosto,
+                            quindi il messaggio non puo' stargli accanto.
+                        {% endcomment %}
+                        <div id="errore-tutor" class="errore-campo alert alert-danger shadow-sm mt-2"
+                             role="alert" hidden></div>
+
+                        {# Riquadro del tutor scelto, come quello dei membri della commissione #}
+                        <div class="box-membri mt-3" id="box-tutor">
+                            <p class="text-muted text-center mb-0 py-3" id="nessun-tutor">
+                                <i class="bi bi-person-video3 me-1" aria-hidden="true"></i>
+                                Nessun tutor selezionato
+                            </p>
+                            <div id="tutor-scelto"></div>
+                        </div>
+
+                        {# Ridisegna la scelta quando il form torna con un errore #}
+                        {{ tutor|json_script:"tutor-iniziale" }}
+                    {% endif %}
+                    {% endwith %}
                 </div>
 
-                {# Errore di rete/interruzione: mostrato al posto del pannello #}
-                <div id="errore-caricamento" class="alert alert-danger mt-3" role="alert" hidden></div>
+                {# ---------------- Stato della consegna ---------------- #}
+                {% comment %}
+                    Riepilogo di cio' che RISULTA SALVATO (vedi _stato_consegna
+                    nella view): le voci non sono cliccabili e l'icona di quelle
+                    mancanti e' un trattino in cerchio, non un cerchio vuoto, che
+                    sembrerebbe una casella da spuntare.
+                {% endcomment %}
+                <div class="blocco-stato">
+                    <div class="stato-consegna">
+                        <div class="stato-testa">
+                            <span class="stato-etichetta">Stato consegna</span>
+                            <span class="stato-contatore">
+                                {{ stato_consegna.fatte }} di {{ stato_consegna.totale }}
+                            </span>
+                        </div>
+                        <div class="stato-barra" role="progressbar"
+                             aria-label="Avanzamento della consegna"
+                             aria-valuemin="0" aria-valuemax="{{ stato_consegna.totale }}"
+                             aria-valuenow="{{ stato_consegna.fatte }}">
+                            <div class="stato-barra-riempimento"
+                                 style="width: {{ stato_consegna.percentuale }}%;"></div>
+                        </div>
+                        <ul class="stato-voci">
+                            {% for voce in stato_consegna.voci %}
+                                <li class="stato-voce{% if voce.fatto %} fatta{% endif %}">
+                                    {% if voce.fatto %}
+                                        <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle" aria-hidden="true"></i>
+                                    {% endif %}
+                                    <span class="stato-voce-nome">{{ voce.nome }}</span>
+                                    {% if not voce.fatto %}
+                                        <span class="stato-voce-manca">{{ voce.manca }}</span>
+                                    {% else %}
+                                        <span class="visually-hidden">completato</span>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                        {% if stato_consegna.completa %}
+                            {% comment %}
+                                A consegna finita la nota sul funzionamento non serve
+                                piu': al suo posto va la risposta alla domanda che lo
+                                studente si fa adesso, cioe' se puo' ancora correggere
+                                qualcosa. Dire solo "campi completati" lascerebbe quel
+                                dubbio in piedi.
+                            {% endcomment %}
+                            <p class="stato-completa">
+                                <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                                <span>
+                                    Consegna completa: la commissione vede la tua tesi.
+                                    Titolo e file restano modificabili fino al giorno
+                                    dell'appello.
+                                </span>
+                            </p>
+                        {% else %}
+                            <p class="stato-nota">Si aggiorna da solo a ogni salvataggio.</p>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
+
+        {# ---------------- Piede ---------------- #}
+        <div class="tesi-piede">
+            <button type="submit" class="btn btn-primary btn-salva">
+                <i class="bi bi-check2" aria-hidden="true"></i> Salva
+            </button>
+            <a class="btn btn-outline-secondary js-esci" id="btn-annulla"
+               href="{% url 'appelli:studente_dashboard' %}">Annulla</a>
+        </div>
+    </form>
+
+    {% comment %}
+        Sostituisce il form durante il caricamento: senza, una tesi o un video
+        di grandi dimensioni lasciano l'utente davanti a una pagina ferma,
+        senza modo di distinguere "sta caricando" da "si e' bloccato".
+    {% endcomment %}
+    <div id="pannello-avanzamento" hidden>
+        <h2 class="h6 section-title mb-3">
+            <i class="bi bi-cloud-arrow-up text-primary me-1" aria-hidden="true"></i>
+            Caricamento in corso
+        </h2>
+
+        <div class="progress mb-2" role="progressbar"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 id="barra-avanzamento" style="width: 0%;">0%</div>
+        </div>
+
+        <div class="avanzamento-dettagli small text-muted">
+            <div class="dato">
+                <span class="etichetta">Caricati</span>
+                <span class="valore" id="avanzamento-byte">&mdash;</span>
+            </div>
+            <div class="dato">
+                <span class="etichetta">Tempo rimanente</span>
+                <span class="valore" id="avanzamento-stima">&mdash;</span>
+            </div>
+            <div class="dato">
+                <span class="etichetta">Velocità</span>
+                <span class="valore" id="avanzamento-velocita">&mdash;</span>
+            </div>
+        </div>
+
+        <div class="alert alert-warning small mt-3 mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+            Non chiudere questa pagina: il caricamento verrebbe annullato.
+        </div>
+
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                id="btn-annulla-caricamento">
+            Annulla caricamento
+        </button>
     </div>
+
+    {# Errore di rete/interruzione: mostrato al posto del pannello #}
+    <div id="errore-caricamento" class="alert alert-danger m-3" role="alert" hidden></div>
 </div>
 
 {# Popup: modifiche non salvate #}
@@ -440,6 +890,38 @@
     </div>
 </div>
 
+{% comment %}
+    Popup: conferma della scelta del tutor.
+    E' l'UNICO punto del modulo che interrompe l'utente, e per una ragione
+    precisa: tutto il resto (titolo, tesi, video) resta modificabile, il tutor
+    no. Nominare il docente nel titolo serve a far accorgere di un errore
+    proprio qui, dove si puo' ancora tornare indietro.
+{% endcomment %}
+<div class="modal fade" id="tutorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    Confermi <span id="tutor-da-confermare"></span> come tutor?
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Il tutor si sceglie una volta sola. Dopo la conferma non potrai
+                cambiarlo: per correggere un errore dovrai contattare la segreteria.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Torna indietro
+                </button>
+                <button type="button" class="btn btn-primary" id="btn-conferma-tutor-modale">
+                    Sì, conferma
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     (function () {
         var form = document.getElementById('tesi-form');
@@ -448,6 +930,7 @@
         // --- Mostra solo il pannello della modalita' video selezionata ---
         var radios = form.querySelectorAll('input[name="modalita_video"]');
         var pannelli = form.querySelectorAll('.js-video-pannello');
+        var riquadriVideo = form.querySelectorAll('.js-video-scelta');
 
         function modalitaScelta() {
             for (var i = 0; i < radios.length; i++) {
@@ -460,11 +943,97 @@
             pannelli.forEach(function (p) {
                 p.hidden = (p.dataset.modalita !== scelta);
             });
+            // Il riquadro scelto si evidenzia. Lo fa anche il CSS con :has(),
+            // ma non tutti i browser in uso lo supportano: la classe e' la
+            // strada che funziona comunque.
+            riquadriVideo.forEach(function (r) {
+                r.classList.toggle('attiva', r.dataset.modalita === scelta);
+            });
         }
         radios.forEach(function (r) {
             r.addEventListener('change', aggiornaPannelli);
         });
         aggiornaPannelli();
+
+        // --- Nome e cognome di un docente ---------------------------------
+        // Serve alla ricerca del tutor e alla finestra di conferma: tenerlo
+        // qui evita che le due parti compongano il nome ognuna a modo suo.
+        function nomeDocente(d) {
+            if (!d) return '';
+            var completo = ((d.nome || '') + ' ' + (d.cognome || '')).trim();
+            return completo || d.username || '';
+        }
+
+        // Tutor scelto adesso e non ancora salvato. Lo riempie la ricerca, lo
+        // legge l'invio del modulo per chiedere conferma: e' l'unico dato che
+        // deve viaggiare fra i due blocchi.
+        var tutorInfo = {nuovo: null};
+
+        // --- Aree di caricamento (trascina oppure sfoglia) ----------------
+        // Il campo file vero e' fuori campo e al suo posto si mostra l'area
+        // tratteggiata: senza queste righe lo studente non vedrebbe nemmeno
+        // il nome del file appena scelto.
+        function mostraNomeScelto(input) {
+            var nome = (input.files && input.files[0]) ? input.files[0].name : '';
+            document.querySelectorAll('[data-nome-per="' + input.id + '"]').forEach(function (el) {
+                el.textContent = nome ? (el.dataset.prefisso || '') + nome : '';
+                el.hidden = !nome;
+            });
+            // Dove c'e' il nome del file, l'invito a scegliere non serve piu'.
+            document.querySelectorAll('[data-testo-per="' + input.id + '"]').forEach(function (el) {
+                el.hidden = !!nome;
+            });
+        }
+
+        form.querySelectorAll('.js-dropzone').forEach(function (zona) {
+            var input = document.getElementById(zona.getAttribute('for'));
+            if (!input) return;
+
+            // Il clic apre la finestra di scelta da solo: la zona e' una
+            // <label> legata al campo, non serve JavaScript per quello.
+            ['dragenter', 'dragover'].forEach(function (evento) {
+                zona.addEventListener(evento, function (e) {
+                    e.preventDefault();
+                    zona.classList.add('sopra');
+                });
+            });
+            ['dragleave', 'dragend', 'drop'].forEach(function (evento) {
+                zona.addEventListener(evento, function () {
+                    zona.classList.remove('sopra');
+                });
+            });
+            zona.addEventListener('drop', function (e) {
+                e.preventDefault();
+                if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+                // Il file trascinato va messo DENTRO il campo, non ricordato a
+                // parte: e' il campo che viene inviato al server.
+                try {
+                    var trasferimento = new DataTransfer();
+                    trasferimento.items.add(e.dataTransfer.files[0]);
+                    input.files = trasferimento.files;
+                } catch (err) {
+                    return;   // browser che non lo permette: resta lo "sfoglia"
+                }
+                // L'evento fa scattare i controlli su formato e dimensione,
+                // gli stessi della scelta da finestra.
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+            });
+        });
+
+        // Vale per le aree tratteggiate e per i pulsanti "Sostituisci…": in
+        // entrambi i casi il nome del file scelto va mostrato da qualche parte.
+        form.querySelectorAll('input[type="file"]').forEach(function (input) {
+            input.addEventListener('change', function () { mostraNomeScelto(input); });
+            mostraNomeScelto(input);
+        });
+
+        // "Sostituisci…": apre il campo file che non si vede.
+        form.querySelectorAll('[data-apre-file]').forEach(function (bottone) {
+            bottone.addEventListener('click', function () {
+                var input = document.getElementById(bottone.dataset.apreFile);
+                if (input) input.click();
+            });
+        });
 
         // --- Conferma all'uscita se ci sono modifiche non salvate ---
         // Si confronta lo stato iniziale del form con quello attuale, cosi'
@@ -604,8 +1173,22 @@
         // farebbe mentre l'utente lo sta ancora compilando.
         var giaInviato = false;
 
+        // Dove va messo il riquadro d'errore di un campo: di norma subito dopo
+        // il campo stesso, ma due contenitori non lo sopportano al loro interno
+        // e vanno scavalcati.
+        //   .campo-file-nascosto e' RITAGLIATO (il campo file lo rappresenta
+        //     l'area tratteggiata): un messaggio li' dentro non si vedrebbe.
+        //   .ricerca-con-icona tiene l'icona centrata sul 50% della PROPRIA
+        //     altezza: infilandoci dentro il messaggio il contenitore
+        //     raddoppia e l'icona scivola sopra al messaggio stesso.
+        function ancoraErrore(elemento) {
+            return elemento.closest('.campo-file-nascosto, .ricerca-con-icona')
+                || elemento;
+        }
+
         function erroreCampo(elemento, messaggio) {
-            var contenitore = elemento.parentNode;
+            var ancora = ancoraErrore(elemento);
+            var contenitore = ancora.parentNode;
             // L'errore arrivato dal server riguarda l'invio precedente: appena
             // il controllo lato client si esprime sullo stesso campo, va tolto
             // di mezzo, altrimenti restano due riquadri rossi in colonna.
@@ -622,7 +1205,7 @@
                 box = document.createElement('div');
                 box.className = 'errore-campo alert alert-danger shadow-sm mt-2';
                 box.setAttribute('role', 'alert');
-                elemento.insertAdjacentElement('afterend', box);
+                ancora.insertAdjacentElement('afterend', box);
             }
             // Si ricostruisce il contenuto con nodi DOM invece di innerHTML.
             box.textContent = '';
@@ -786,7 +1369,7 @@
                 } else {
                     if (!c.campo) return;
                     erroreCampo(c.campo, c.messaggio);
-                    box = c.campo.parentNode.querySelector('.errore-campo');
+                    box = ancoraErrore(c.campo).parentNode.querySelector('.errore-campo');
                 }
                 if (c.messaggio && !primo) primo = box;
             });
@@ -865,6 +1448,10 @@
             }
 
             function disegnaScelto() {
+                // Chi sta per essere confermato: lo legge l'invio del modulo,
+                // che prima di salvare chiede conferma nominando il docente.
+                tutorInfo.nuovo = scelto;
+
                 contenitoreScelto.textContent = '';
                 // L'input nascosto viene ricreato da zero: cosi' "nessun tutor"
                 // significa davvero nessun campo inviato, e il server se ne
@@ -1006,6 +1593,46 @@
         // segnalerebbe una modifica che l'utente non ha fatto.
         iniziale = istantanea();
 
+        // --- Conferma della scelta del tutor -------------------------------
+        // Una volta data, l'invio riparte da solo e non viene piu' chiesta:
+        // il modulo si puo' salvare ancora molte volte per titolo, tesi e
+        // video, e richiederla ogni volta la svuoterebbe di significato.
+        var tutorConfermato = false;
+        var elModaleTutor = document.getElementById('tutorModal');
+
+        // requestSubmit (non submit) fa scattare l'evento 'submit', quindi
+        // l'invio passa comunque dai controlli e dalla barra di avanzamento.
+        // form.submit() li scavalcherebbe entrambi.
+        function inviaModulo() {
+            if (form.requestSubmit) {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        }
+
+        function chiediConfermaTutor(docente) {
+            if (!elModaleTutor || !window.bootstrap) {
+                // Senza Bootstrap la finestra non c'e': si salva comunque.
+                // Perdere il lavoro fatto sarebbe peggio che non chiedere.
+                tutorConfermato = true;
+                inviaModulo();
+                return;
+            }
+            var nomeEl = document.getElementById('tutor-da-confermare');
+            if (nomeEl) nomeEl.textContent = nomeDocente(docente);
+            bootstrap.Modal.getOrCreateInstance(elModaleTutor).show();
+        }
+
+        var btnConfermaTutorModale = document.getElementById('btn-conferma-tutor-modale');
+        if (btnConfermaTutorModale) {
+            btnConfermaTutorModale.addEventListener('click', function () {
+                tutorConfermato = true;
+                bootstrap.Modal.getOrCreateInstance(elModaleTutor).hide();
+                inviaModulo();
+            });
+        }
+
         form.addEventListener('submit', function (e) {
             giaInviato = true;
             // Vale per entrambe le strade (con e senza barra di avanzamento):
@@ -1014,6 +1641,15 @@
             if (primoErrore) {
                 e.preventDefault();
                 evidenziaErrore(primoErrore);
+                return;
+            }
+            // La scelta del tutor va confermata a parte. Si chiede DOPO la
+            // validazione, non prima: far confermare una scelta definitiva in
+            // un modulo che verra' comunque rifiutato sarebbe una domanda
+            // fatta a vuoto (e allarmante due volte).
+            if (tutorInfo.nuovo && !tutorConfermato) {
+                e.preventDefault();
+                chiediConfermaTutor(tutorInfo.nuovo);
                 return;
             }
             if (!supportoProgresso) return;          // invio classico
@@ -1119,13 +1755,7 @@
                 bootstrap.Modal.getOrCreateInstance(
                     document.getElementById('unsavedModal')
                 ).hide();
-                // requestSubmit (non submit) fa scattare l'evento 'submit',
-                // quindi passa anche da qui la barra di avanzamento.
-                if (form.requestSubmit) {
-                    form.requestSubmit();
-                } else {
-                    form.submit();
-                }
+                inviaModulo();
             });
         }
     })();

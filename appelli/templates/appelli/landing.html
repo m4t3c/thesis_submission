@@ -5,46 +5,371 @@
     percorso "/" non passa da Shibboleth, quindi e' quella che vede sempre chi
     arriva sul sito: spiega a studenti e docenti che cosa troveranno dopo
     l'accesso.
+    Pagina statica: nessun dato dal database, le card appello sono solo
+    un'anteprima con etichette segnaposto.
 {% endcomment %}
 
-{% block title %}Consegna Tesi di Laurea{% endblock %}
+{% block title %}Consegna Tesi{% endblock %}
 
 {% block content %}
-<div class="hero p-5 mb-4 text-center">
-    <h1 class="display-6 fw-bold mb-2">Consegna della Tesi di Laurea</h1>
-    <p class="lead col-lg-8 mx-auto text-muted">
-        Il servizio per caricare la tua tesi e renderla disponibile alla
-        commissione del tuo appello di laurea.
-    </p>
-    <a class="btn btn-primary btn-lg mt-2" href="{{ login_url }}">
-        Accedi con le credenziali UNIMORE
-    </a>
+<div class="landing">
+
+    {# ---------------- Hero ---------------- #}
+    {% comment %}
+        Su schermo largo testo e anteprima stanno nella stessa card bianca, in
+        due colonne. Sotto i 992px si separano: il testo resta una card, il
+        pannello dell'anteprima diventa un riquadro azzurro a se'.
+    {% endcomment %}
+    <section class="landing-hero">
+        <div class="landing-intro">
+            <p class="landing-sopratitolo">Università di Modena e Reggio Emilia</p>
+            <h1 class="landing-titolo">Consegna della tesi di laurea</h1>
+            <p class="landing-sintesi">
+                <span class="testo-lungo">Titolo, tutor, file della tesi ed eventuale video di presentazione in un unico posto. La commissione del tuo appello li trova già pronti il giorno della seduta.</span>
+                <span class="testo-breve">Titolo, tutor, file della tesi ed eventuale video in un unico posto. La commissione li trova già pronti il giorno della seduta.</span>
+            </p>
+            <a class="btn btn-primary btn-lg landing-accedi" href="{{ login_url }}">
+                Accedi con le credenziali UNIMORE
+            </a>
+            <p class="landing-nota-accesso">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                Si entra con l'account di ateneo: non serve registrarsi.
+            </p>
+        </div>
+
+        {% comment %}
+            Anteprima della card appello dell'area studente: stesse classi
+            (appello-card, appello-data, is-incompleto, badge-manca), cosi' la
+            promessa mostrata qui e' la stessa pagina che lo studente trovera'.
+            Prima l'incompleta, poi la completa.
+        {% endcomment %}
+        <div class="landing-anteprima" aria-label="Dopo l'accesso">
+            <div class="card appello-card is-incompleto" aria-hidden="true">
+                <div class="appello-data">
+                    <span class="dow">giorno</span>
+                    <span class="giorno">00</span>
+                    <span class="mese">mese anno</span>
+                    <span class="data-estesa">00 mese anno</span>
+                    <span class="ora">orario</span>
+                </div>
+                <div class="appello-corso">Corso di laurea</div>
+                <div class="appello-corpo">
+                    <p class="mb-2"><span class="badge-manca">Titolo mancante</span></p>
+                    <div class="appello-meta">
+                        <span class="voce voce-manca"><i class="bi bi-person-video3"></i>Tutor</span>
+                        <span class="voce voce-manca"><i class="bi bi-file-earmark-pdf"></i>Tesi</span>
+                        <span class="voce"><i class="bi bi-camera-video"></i>Video</span>
+                    </div>
+                </div>
+            </div>
+            <p class="landing-legenda"><span class="quadratino is-incompleto"></span>Consegna incompleta</p>
+
+            <div class="card appello-card" aria-hidden="true">
+                <div class="appello-data">
+                    <span class="dow">giorno</span>
+                    <span class="giorno">00</span>
+                    <span class="mese">mese anno</span>
+                    <span class="data-estesa">00 mese anno</span>
+                    <span class="ora">orario</span>
+                </div>
+                <div class="appello-corso">Corso di laurea</div>
+                <div class="appello-corpo">
+                    <p class="appello-titolo mb-2">Titolo Tesi</p>
+                    <div class="appello-meta">
+                        <span class="voce"><i class="bi bi-person-video3"></i>Tutor</span>
+                        <span class="voce"><i class="bi bi-file-earmark-pdf"></i>Tesi</span>
+                        <span class="voce"><i class="bi bi-camera-video"></i>Video</span>
+                    </div>
+                </div>
+            </div>
+            <p class="landing-legenda mb-0"><span class="quadratino"></span>Consegna completa</p>
+        </div>
+    </section>
+
+    {# ---------------- Percorsi ---------------- #}
+    {% comment %}
+        Un solo markup per i due schermi. Sotto i 768px e' una card a linguette
+        (nav-tabs di Bootstrap, che fa tutto da se'); sopra, il CSS nasconde le
+        linguette, mostra entrambi i pannelli e li affianca come due card con
+        testata blu.
+    {% endcomment %}
+    <section class="landing-percorsi">
+        <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="linguetta-studente" type="button" role="tab"
+                        data-bs-toggle="tab" data-bs-target="#percorso-studente"
+                        aria-controls="percorso-studente" aria-selected="true">
+                    <i class="bi bi-mortarboard me-1" aria-hidden="true"></i>Sei uno studente?
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="linguetta-docente" type="button" role="tab"
+                        data-bs-toggle="tab" data-bs-target="#percorso-docente"
+                        aria-controls="percorso-docente" aria-selected="false">
+                    <i class="bi bi-person-video3 me-1" aria-hidden="true"></i>Sei un docente?
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active percorso" id="percorso-studente"
+                 role="tabpanel" aria-labelledby="linguetta-studente" tabindex="0">
+                <h2 class="card-header testata-blu percorso-testata header-landing">
+                    <i class="bi bi-mortarboard me-2" aria-hidden="true"></i>Sei uno studente?
+                </h2>
+                <ol class="passi">
+                    <li>
+                        <span class="passo-numero">1</span>
+                        <div>
+                            <p class="passo-titolo">Iscriviti all'appello su Esse3</p>
+                            <p class="passo-testo">
+                                <span class="testo-lungo">L'iscrizione resta sul portale di ateneo. Quando il presidente crea l'appello, qui lo trovi già pronto.</span>
+                                <span class="testo-breve">Quando il presidente crea l'appello, qui lo trovi già pronto.</span>
+                            </p>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="passo-numero">2</span>
+                        <div>
+                            <p class="passo-titolo">Indica titolo e tutor</p>
+                            <p class="passo-testo">
+                                <span class="testo-lungo">Il titolo si può correggere quando vuoi. Il tutor si sceglie una volta sola: dopo la conferma non è più modificabile.</span>
+                                <span class="testo-breve">Il titolo si corregge quando vuoi, il tutor si sceglie una volta sola.</span>
+                            </p>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="passo-numero">3</span>
+                        <div>
+                            <p class="passo-titolo">Carica la tesi in PDF</p>
+                            <p class="passo-testo">
+                                <span class="testo-lungo">Puoi sostituirla fino al giorno dell'appello. Se vuoi, aggiungi un video di presentazione, come file o come link: è facoltativo.</span>
+                                <span class="testo-breve">Sostituibile fino al giorno dell'appello. Il video di presentazione è facoltativo.</span>
+                            </p>
+                        </div>
+                    </li>
+                </ol>
+                <p class="percorso-nota">La tua pagina tiene il conto di cosa manca, così sai sempre se la consegna è completa.</p>
+            </div>
+
+            <div class="tab-pane fade percorso" id="percorso-docente"
+                 role="tabpanel" aria-labelledby="linguetta-docente" tabindex="0">
+                <h2 class="card-header testata-blu percorso-testata header-landing">
+                    <i class="bi bi-person-video3 me-2" aria-hidden="true"></i>Sei un docente?
+                </h2>
+                <ol class="passi">
+                    <li>
+                        <span class="passo-numero">1</span>
+                        <div>
+                            <p class="passo-titolo">Vedi gli appelli delle tue commissioni</p>
+                            <p class="passo-testo">
+                                <span class="testo-lungo">Data, corso di laurea e studenti iscritti, con le tesi già consegnate.</span>
+                                <span class="testo-breve">Con gli studenti iscritti e le tesi già consegnate.</span>
+                            </p>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="passo-numero">2</span>
+                        <div>
+                            <p class="passo-titolo">Segui i tuoi tutorati</p>
+                            <p class="passo-testo">
+                                <span class="testo-lungo">Gli studenti che ti hanno scelto come tutor, raggruppati per appello, con tesi e video da scaricare.</span>
+                                <span class="testo-breve">Gli studenti che ti hanno scelto come tutor, raggruppati per appello.</span>
+                            </p>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="passo-numero">3</span>
+                        <div>
+                            <p class="passo-titolo">Proponi i punti di tesi</p>
+                            <p class="passo-testo">
+                                <span class="testo-lungo">Da 0 a 2 punti da aggiungere al voto di laurea, con un giudizio scritto. Restano fra docenti: lo studente non li vede.</span>
+                                <span class="testo-breve">Da 0 a 2 punti e un giudizio scritto, non visibili allo studente.</span>
+                            </p>
+                        </div>
+                    </li>
+                </ol>
+                <p class="percorso-nota">Sei presidente? Dalla tua area crei gli appelli e componi le commissioni.</p>
+            </div>
+        </div>
+    </section>
 </div>
 
-<div class="row g-4">
-    <div class="col-md-6">
-        <div class="card h-100 shadow-sm">
-            <div class="card-body">
-                <h2 class="h5 section-title">Sei uno studente?</h2>
-                <ol class="mb-0 text-muted">
-                    <li>Accedi con le tue credenziali UNIMORE.</li>
-                    <li>Iscriviti all'appello di laurea a cui partecipi.</li>
-                    <li>Carica il file della tua tesi (puoi aggiornarlo finché serve).</li>
-                </ol>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card h-100 shadow-sm">
-            <div class="card-body">
-                <h2 class="h5 section-title">Sei un docente?</h2>
-                <ol class="mb-0 text-muted">
-                    <li>Accedi con le tue credenziali UNIMORE.</li>
-                    <li>Consulta gli appelli delle commissioni di cui fai parte.</li>
-                    <li>Visualizza e scarica le tesi degli studenti iscritti.</li>
-                </ol>
-            </div>
-        </div>
-    </div>
-</div>
+<style>
+    /* ---------- Impaginazione generale ----------
+       Telefono per primo: colonna unica, 16px fra i blocchi. */
+    .landing { display: flex; flex-direction: column; gap: 16px; padding-inline: 2px; }
+    .landing p { margin-bottom: 0; }
+    .testo-lungo { display: none; }
+
+    /* ---------- Hero ---------- */
+    .landing-hero { display: flex; flex-direction: column; gap: 16px; }
+    .landing-intro {
+        background: #fff; border: 1px solid var(--line); border-radius: .6rem;
+        padding: 1.5rem 1.25rem;
+    }
+    .landing-sopratitolo {
+        color: var(--brand); text-transform: uppercase; letter-spacing: .08em;
+        font-size: .8rem; font-weight: 600; margin-bottom: .5rem !important;
+    }
+    .landing-titolo { font-size: 1.75rem; font-weight: 700; line-height: 1.2; margin-bottom: .75rem; }
+    .landing-sintesi { color: var(--muted); font-size: 1.05rem; line-height: 1.6; }
+    .landing-accedi { display: block; width: 100%; margin: 1.25rem 0 .9rem; font-weight: 500; }
+    .landing-nota-accesso { color: var(--muted); font-size: .875rem; }
+    .landing-nota-accesso .bi { margin-right: .3rem; }
+
+    /* ---------- Anteprima card appello ---------- */
+    .landing-anteprima {
+        background: var(--brand-velo); border: 1px solid var(--brand-tenue-bordo);
+        border-radius: .6rem; padding: 1rem;
+    }
+    /* Le card riusano .appello-card dell'area studente; qui si toglie solo
+       la colonna del pulsante, che nell'anteprima non c'e'. Sotto i 768px il
+       blocco data diventa una fascia in testa alla card. */
+    .landing-anteprima .appello-card {
+        grid-template-columns: 1fr;
+        grid-template-areas: "data" "corso" "titolo";
+        box-shadow: none;
+    }
+    .landing-anteprima .appello-data {
+        flex-direction: row; align-items: baseline; gap: .6rem;
+        justify-content: flex-start; padding: .75rem 1rem;
+    }
+    .landing-anteprima .appello-data .dow,
+    .landing-anteprima .appello-data .giorno,
+    .landing-anteprima .appello-data .mese { display: none; }
+    .landing-anteprima .appello-data .data-estesa { display: inline; font-size: 1.35rem; font-weight: 700; }
+    .landing-anteprima .appello-data .ora {
+        margin-top: 0; background: none !important; padding: 0; font-size: .95rem; font-weight: 400;
+    }
+    .landing-anteprima .appello-card.is-incompleto .appello-data .ora { color: var(--muted); }
+    /* Sul telefono l'area studente porta il corso dentro la fascia: qui no,
+       resta l'etichetta blu sopra il titolo come nell'impaginazione larga. */
+    .landing-anteprima .appello-corso,
+    .landing-anteprima .appello-card.is-incompleto .appello-corso {
+        background: none; color: var(--brand); padding: .9rem 1rem 0;
+        font-size: .81rem; text-transform: uppercase; letter-spacing: .06em;
+    }
+    .landing-anteprima .appello-corpo { padding: .25rem 1rem .9rem; }
+    .landing-anteprima .appello-titolo { font-size: 1.125rem; }
+    .landing-anteprima .appello-meta {
+        flex-direction: row; align-items: center; gap: .5rem 1.15rem; padding-top: .6rem;
+    }
+    .landing-anteprima .voce .bi { color: var(--muted); }
+    /* Stesso rosso di .badge-manca */
+    .landing-anteprima .voce-manca { color: #8a1a12; font-weight: 600; }
+    .landing-legenda {
+        display: flex; align-items: center; gap: .5rem;
+        font-size: .875rem; color: var(--brand-testo); margin: .6rem 0 1rem !important;
+    }
+    .quadratino {
+        width: .8rem; height: .8rem; border-radius: .15rem; flex: none;
+        background: var(--brand);
+    }
+    .quadratino.is-incompleto { background: var(--surface); border: 1px solid #d5d7db; }
+
+    /* ---------- Percorsi: card a linguette (telefono) ---------- */
+    .landing-percorsi {
+        background: #fff; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden;
+    }
+    .landing-percorsi .nav-tabs {
+        background: var(--bg); padding: .6rem .6rem 0; flex-wrap: nowrap;
+        border-bottom-color: var(--line);
+    }
+    .landing-percorsi .nav-item { flex: 1 1 0; }
+    .landing-percorsi .nav-link {
+        width: 100%; white-space: nowrap; padding: .6rem .5rem;
+        color: var(--brand); background: transparent; font-size: .95rem;
+    }
+    .landing-percorsi .nav-link:hover { border-color: transparent; color: var(--brand-piu-scuro); }
+    .landing-percorsi .nav-link.active {
+        color: var(--ink); background: #fff; font-weight: 600;
+        border-color: var(--line) var(--line) #fff;
+    }
+    .percorso-testata { display: none; }
+    .passi { list-style: none; margin: 0; padding: 1.1rem 1.1rem .4rem; }
+    .passi li { display: flex; gap: .8rem; align-items: flex-start; margin-bottom: 1rem; }
+    .passo-numero {
+        flex: none; width: 28px; height: 28px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--brand-velo); border: 1px solid var(--brand-tenue-bordo);
+        color: var(--brand-testo); font-weight: 700; font-size: .85rem;
+    }
+    .passo-titolo { font-weight: 700; line-height: 1.3; margin-top: .15rem; }
+    .passo-testo { color: var(--muted); font-size: .9rem; line-height: 1.5; margin-top: .15rem; }
+    .percorso-nota { display: none; }
+
+    /* ---------- Da tablet in su: due card affiancate ---------- */
+    @media (min-width: 768px) {
+        .testo-lungo { display: inline; }
+        .testo-breve { display: none; }
+        .landing { gap: 1.5rem; padding-inline: 0; }
+
+        .landing-percorsi { background: none; border: 0; border-radius: 0; overflow: visible; }
+        .landing-percorsi .nav-tabs { display: none; }
+        .landing-percorsi .tab-content {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+        }
+        /* Entrambi i pannelli visibili, indipendentemente dalla linguetta. */
+        .landing-percorsi .tab-content > .tab-pane { display: flex; opacity: 1; }
+        .percorso {
+            flex-direction: column;
+            background: #fff; border: 1px solid var(--line); border-radius: .6rem;
+            overflow: hidden; box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075);
+        }
+        .percorso-testata { display: block; margin: 0; border-radius: 0; }
+        .passi { padding: 1.25rem 1.25rem .25rem; flex: 1 0 auto; }
+        .passi li { gap: .9rem; }
+        .passo-testo { font-size: .9375rem; }
+        .percorso-nota {
+            display: block; margin: 0 1.25rem; padding: .85rem 0 1rem;
+            border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem;
+        }
+    }
+
+    /* ---------- Desktop: hero in due colonne ---------- */
+    @media (min-width: 992px) {
+        .landing-hero {
+            display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0;
+            background: #fff; border: 1px solid var(--line); border-radius: .6rem;
+            overflow: hidden; box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075);
+        }
+        .landing-intro {
+            border: 0; border-radius: 0; background: none; padding: 2.75rem 2.5rem;
+            display: flex; flex-direction: column; justify-content: center;
+        }
+        .landing-titolo { font-size: 2.35rem; }
+        .landing-sintesi { font-size: 1.125rem; max-width: 36rem; }
+        .landing-accedi { align-self: flex-start; width: auto; margin: 1.75rem 0 1rem; }
+        .landing-anteprima {
+            border: 0; border-left: 1px solid var(--brand-tenue-bordo); border-radius: 0;
+            padding: 1.5rem;
+        }
+        /* In colonna larga il blocco data torna la colonnina del calendario. */
+        .landing-anteprima .appello-card {
+            grid-template-columns: 92px minmax(0, 1fr);
+            grid-template-areas: "data corso" "data titolo";
+        }
+        .landing-anteprima .appello-data {
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 0; padding: .9rem .5rem;
+        }
+        .landing-anteprima .appello-data .dow,
+        .landing-anteprima .appello-data .giorno,
+        .landing-anteprima .appello-data .mese { display: inline; }
+        .landing-anteprima .appello-data .giorno { font-size: 1.9rem; }
+        .landing-anteprima .appello-data .data-estesa { display: none; }
+        .landing-anteprima .appello-data .ora {
+            margin-top: .4rem; padding: .12rem .5rem; font-size: .78rem; font-weight: 600;
+            background: rgba(255, 255, 255, .2) !important;
+        }
+        .landing-anteprima .appello-card.is-incompleto .appello-data .ora {
+            background: rgba(0, 0, 0, .08) !important; color: inherit;
+        }
+        .landing-anteprima .appello-corso,
+        .landing-anteprima .appello-card.is-incompleto .appello-corso { padding: .8rem .9rem 0; }
+        .landing-anteprima .appello-corpo { padding: .2rem .9rem .8rem; }
+        .landing-anteprima .appello-meta { gap: .4rem .9rem; font-size: .84rem; }
+    }
+</style>
 {% endblock %}

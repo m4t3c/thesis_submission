@@ -5,183 +5,250 @@
     commissione non si scelgono da una tendina ma tramite ricerca: il
     JavaScript in fondo interroga appelli:cerca_docenti e mantiene la
     selezione in input nascosti, che sono cio' che il form riceve.
+
+    La pagina ha due stati, decisi dalla classe "stato-vuoto" sul form:
+    - vuoto: nessun elenco laureandi letto; i campi sono spenti e la colonna
+      destra spiega cosa serve;
+    - compilato: l'elenco e' stato letto; la colonna destra mostra gli
+      studenti da iscrivere, con una casella ciascuno.
 {% endcomment %}
 
 {% block title %}Nuovo appello{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-7 col-md-9">
-        <a class="btn btn-outline-secondary btn-sm mb-3 js-esci"
-           href="{% url 'appelli:presidente_dashboard' %}">
-            &larr; Torna indietro
-        </a>
+<a class="btn btn-outline-secondary btn-sm mb-3 js-esci"
+   href="{% url 'appelli:presidente_dashboard' %}">
+    &larr; Torna indietro
+</a>
 
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h1 class="h4 section-title mb-3">
-                    <i class="bi bi-plus-circle text-primary me-1"></i>Nuovo appello
-                </h1>
+{% comment %}
+    Il form avvolge tutta la card, compresa la zona del file: l'input del file
+    non ha "name", quindi non viene inviato con l'appello.
+    Se il modulo torna indietro con degli errori e porta con se' gli studenti,
+    i dati del file sono gia' stati caricati: riaprirlo spento cancellerebbe
+    quello che l'utente aveva compilato.
+{% endcomment %}
+{% with caricato=form.studenti_selezionati %}
+<form method="post" id="appello-form"
+      class="nuovo-appello{% if not caricato %} stato-vuoto{% endif %}">
+    {% csrf_token %}
 
-                {% if form.non_field_errors %}
-                    <div class="alert alert-danger shadow-sm" role="alert">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                        {{ form.non_field_errors.0 }}
+    <header class="na-testata">
+        <i class="bi bi-plus-circle na-testata-icona" aria-hidden="true"></i>
+        <div class="min-w-0">
+            <h1 class="na-titolo">Nuovo appello</h1>
+            <p class="na-sottotitolo" id="sottotitolo-vuoto">
+                <span class="testo-lungo">I laureandi si importano dall'elenco Esse3 in formato .xlsx</span>
+                <span class="testo-breve">I laureandi si importano dal file .xlsx</span>
+            </p>
+            <p class="na-sottotitolo" id="sottotitolo-compilato"></p>
+        </div>
+    </header>
+
+    <div class="na-corpo">
+        {# ---------------- Colonna sinistra: il modulo ---------------- #}
+        <div class="na-col na-col-modulo">
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger shadow-sm na-largo" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                    {{ form.non_field_errors.0 }}
+                </div>
+            {% endif %}
+
+            <div class="na-campo">
+                <span class="form-label fw-bold d-block" id="etichetta-elenco">
+                    Elenco laureandi <span class="fw-normal na-estensione">(.xlsx)</span>
+                </span>
+                <div id="zona-drop" class="zona-drop na-largo" role="button" tabindex="0"
+                     aria-labelledby="etichetta-elenco" aria-describedby="zona-drop-nota">
+                    <div class="zona-vuota">
+                        <i class="bi bi-file-earmark-spreadsheet zona-icona" aria-hidden="true"></i>
+                        <div class="zona-invito">
+                            <span class="testo-lungo">Trascina qui il file oppure <span class="zona-sfoglia">sfoglia</span></span>
+                            <span class="testo-breve">Tocca per scegliere il file</span>
+                        </div>
+                        <div class="zona-nota" id="zona-drop-nota">
+                            Dall'elenco vengono letti corso di laurea e studenti iscritti.
+                        </div>
+                    </div>
+                    <div class="zona-caricata">
+                        <i class="bi bi-file-earmark-spreadsheet zona-caricata-icona" aria-hidden="true"></i>
+                        <div class="min-w-0 flex-grow-1">
+                            <div class="zona-nome-file text-truncate" id="nome-file">Elenco laureandi</div>
+                            <div class="zona-conteggio">
+                                <span id="conteggio-file">0</span>
+                                <span class="testo-lungo">studenti letti dal file</span>
+                                <span class="testo-breve">studenti letti</span>
+                            </div>
+                        </div>
+                        <span class="zona-sostituisci">Sostituisci</span>
+                    </div>
+                    <input type="file" id="file-xlsx" accept=".xlsx" hidden>
+                </div>
+                <div id="esito-xlsx" class="mt-2 na-largo" hidden></div>
+                {% if form.studenti.errors %}
+                    <div class="alert alert-danger shadow-sm mt-2 na-largo" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                        {{ form.studenti.errors.0 }}
                     </div>
                 {% endif %}
+            </div>
 
-                {# Fuori dal form: il file non viene inviato con l'appello #}
-                <div class="mb-4">
-                    <label class="form-label fw-bold">Elenco laureandi (.xlsx)</label>
-                    <div id="zona-drop" class="zona-drop">
-                        <button type="button" id="rimuovi-file" class="rimuovi-file"
-                                aria-label="Rimuovi il file caricato"
-                                title="Rimuovi il file caricato" hidden>
-                            <i class="bi bi-x-circle-fill" aria-hidden="true"></i>
-                        </button>
-                        <i class="bi bi-file-earmark-spreadsheet fs-3 text-success d-block mb-1"></i>
-                        <span id="etichetta-file">Trascina qui il file, oppure fai clic per sceglierlo</span>
-                        <input type="file" id="file-xlsx" accept=".xlsx" hidden>
+            <fieldset id="campi-appello" class="campi-appello"{% if not caricato %} disabled{% endif %}>
+                <div class="na-campo blocco-dati">
+                    <label for="{{ form.corso_di_laurea.id_for_label }}" class="form-label fw-bold">
+                        Corso di laurea
+                    </label>
+                    {{ form.corso_di_laurea }}
+                    <div class="form-text nota-corso">
+                        Letto dal file. Correggilo se l'elenco riporta una dicitura diversa.
                     </div>
-                    <button type="button" class="btn btn-outline-primary mt-2" id="btn-carica-dati">
-                        <i class="bi bi-download me-1"></i>Carica dati
-                    </button>
-                    <div id="esito-xlsx" class="mt-2" hidden></div>
-                    <div class="form-text">
-                        Carica i dati dal file poi compila il corso di laurea e prepara l'elenco degli studenti
-                        da iscrivere.
+                    {{ form.corso_di_laurea.errors }}
+                </div>
+
+                <div class="na-campo blocco-dati na-data-ora na-largo">
+                    <div>
+                        <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">Data</label>
+                        {{ form.data }}
+                        {{ form.data.errors }}
+                    </div>
+                    <div>
+                        <label for="{{ form.ora.id_for_label }}" class="form-label fw-bold">Orario</label>
+                        {{ form.ora }}
+                        {{ form.ora.errors }}
                     </div>
                 </div>
 
-                <form method="post" id="appello-form">
-                    {% csrf_token %}
+                <div class="na-campo blocco-membri">
+                    <label for="ricerca-docenti" class="form-label fw-bold">
+                        Membri della commissione
+                    </label>
 
-                    <div class="alert alert-secondary shadow-sm" id="nota-blocco" role="status">
-                        <i class="bi bi-lock-fill me-1" aria-hidden="true"></i>
-                        Carica l'elenco laureandi e premi "Carica dati" per compilare il modulo.
+                    {# Gli id scelti viaggiano in input nascosti #}
+                    <div id="docenti-hidden">{{ form.docenti }}</div>
+
+                    <div class="position-relative">
+                        <i class="bi bi-search ricerca-icona" aria-hidden="true"></i>
+                        <input type="text" id="ricerca-docenti" class="form-control ricerca-docenti"
+                               placeholder="Cerca per nome, cognome, nome utente o email"
+                               data-placeholder-breve="Cerca per nome o email"
+                               autocomplete="off" role="combobox"
+                               aria-expanded="false" aria-controls="risultati-docenti">
+                        <div id="risultati-docenti" class="list-group shadow" role="listbox" hidden></div>
                     </div>
 
-                    {% comment %}
-                    Se il modulo torna indietro con degli errori i dati del file
-                    sono gia' stati caricati: riaprirlo bloccato cancellerebbe
-                    quello che l'utente aveva compilato.
-                    {% endcomment %}
-                    <fieldset id="campi-appello" class="campi-appello"{% if not form.is_bound %} disabled{% endif %}>
-
-                    <div class="mb-3">
-                        <label for="{{ form.corso_di_laurea.id_for_label }}" class="form-labe fw-bold">
-                            Corso di laurea
-                        </label>
-                        {{ form.corso_di_laurea }}
-                        {{ form.corso_di_laurea.errors }}
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-sm-6">
-                            <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">Data</label>
-                            {{ form.data }}
-                            {{ form.data.errors }}
+                    {% if form.docenti.errors %}
+                        <div class="alert alert-danger shadow-sm mt-3" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                            {{ form.docenti.errors.0 }}
                         </div>
-                        <div class="col-sm-6">
-                            <label for="{{ form.ora.id_for_label }}" class="form-label fw-bold">Orario</label>
-                            {{ form.ora }}
-                            {{ form.ora.errors }}
-                        </div>
+                    {% endif %}
+
+                    {# Riquadro dei membri scelti #}
+                    <div class="box-membri mt-3" id="box-membri">
+                        <p class="text-muted text-center mb-0 py-3" id="nessun-docente">
+                            <i class="bi bi-people me-1" aria-hidden="true"></i>
+                            Nessun membro selezionato
+                        </p>
+                        <div id="docenti-scelti"></div>
                     </div>
-
-                    <div class="mb-4">
-                        <label for="ricerca-docenti" class="form-label fw-bold">
-                            Membri della commissione
-                        </label>
-
-                        {# Gli id scelti viaggiano in input nascosti #}
-                        <div id="docenti-hidden">{{ form.docenti }}</div>
-
-                        <div class="position-relative">
-                            <input type="text" id="ricerca-docenti" class="form-control"
-                                   placeholder="Cerca per nome, cognome, nome utente o email"
-                                   autocomplete="off" role="combobox"
-                                   aria-expanded="false" aria-controls="risultati-docenti">
-                            <div id="risultati-docenti" class="list-group shadow" role="listbox" hidden></div>
-                        </div>
-
-                        {% if form.docenti.errors %}
-                            <div class="alert alert-danger shadow-sm mt-3" role="alert">
-                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                                {{ form.docenti.errors.0 }}
-                            </div>
-                        {% endif %}
-
-                        {# Riquadro dei membri scelti #}
-                        <div class="box-membri mt-3" id="box-membri">
-                            <p class="text-muted text-center mb-0 py-3" id="nessun-docente">
-                                <i class="bi bi-people me-1" aria-hidden="true"></i>
-                                Nessun membro selezionato
-                            </p>
-                            <div id="docenti-scelti"></div>
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Studenti da iscrivere</label>
-                        <div id="studenti-hidden">{{ form.studenti }}</div>
-                        <div class="box-membri" id="box-studenti">
-                            <p class="text-muted text-center mb-0 py-3" id="nessuno-studente">
-                                <i class="bi bi-mortarboard me-1" aria-hidden="true"></i>
-                                Nessuno studente: carica l'elenco laureandi
-                            </p>
-                            <div id="studenti-scelti"></div>
-                        </div>
-                        {# Stesso riquadro d'errore dei membri della commissione #}
-                        {% if form.studenti.errors %}
-                            <div class="alert alert-danger shadow-sm mt-3" role="alert">
-                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
-                                {{ form.studenti.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
-
-                    </fieldset>
-
-                    <div class="d-flex flex-column flex-sm-row gap-2">
-                        <button type="submit" class="btn btn-primary" id="btn-crea-appello"
-                                {% if not form.is_bound %}disabled{% endif %}>
-                            <i class="bi bi-check2"></i> Crea appello
-                        </button>
-                        <a class="btn btn-outline-secondary js-esci"
-                           href="{% url 'appelli:presidente_dashboard' %}">Annulla</a>
-                    </div>
-                </form>
-            </div>
+                </div>
+            </fieldset>
         </div>
-    </div>
-</div>
 
-{% comment %}
-    Popup: conferma della rimozione del file. Compare solo se i dati sono
-    gia' stati caricati, perche' solo in quel caso la X porta via anche il
-    corso e l'elenco degli studenti.
-{% endcomment %}
-<div class="modal fade" id="rimuoviModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Rimuovere il file?</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+        {# ---------------- Colonna destra ---------------- #}
+        <aside class="na-col na-col-lato">
+            {# Stato vuoto: cosa serve, e quanto manca #}
+            <div class="pannello-passi">
+                <h2 class="na-occhiello">Cosa serve per creare l'appello</h2>
+                <ol class="passi-appello">
+                    <li>
+                        <span class="passo-pallino" aria-hidden="true">1</span>
+                        <div>
+                            <div class="passo-titolo">Carica l'elenco laureandi</div>
+                            <div class="passo-testo">
+                                <span class="testo-lungo">Il corso di laurea e gli studenti da iscrivere si compilano da soli.</span>
+                                <span class="testo-breve">Corso di laurea e studenti si compilano da soli.</span>
+                            </div>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="passo-pallino" aria-hidden="true">2</span>
+                        <div>
+                            <div class="passo-titolo">Indica data e orario</div>
+                            <div class="passo-testo">Servono entrambi per pubblicare l'appello.</div>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="passo-pallino" aria-hidden="true">3</span>
+                        <div>
+                            <div class="passo-titolo">Componi la commissione</div>
+                            <div class="passo-testo">
+                                <span class="testo-lungo">Cerca i docenti per nome, cognome, nome utente o email.</span>
+                                <span class="testo-breve">Cerca i docenti per nome, cognome o email.</span>
+                            </div>
+                        </div>
+                    </li>
+                </ol>
             </div>
-            <div class="modal-body">
-                I dati arrivati dal file — corso di laurea ed elenco degli
-                studenti — verranno tolti e il modulo tornerà bloccato.
+
+            <div class="pannello-pronto">
+                <div class="na-riga-occhiello">
+                    <h2 class="na-occhiello mb-0">Pronto per la creazione</h2>
+                    <span class="na-conteggio"><span id="pronti">0</span> di 3</span>
+                </div>
+                <div class="progress barra-pronto" role="progressbar" aria-labelledby="pronti"
+                     aria-valuemin="0" aria-valuemax="3" aria-valuenow="0">
+                    <div class="progress-bar" id="barra-pronto"></div>
+                </div>
+                <ul class="voci-pronto">
+                    <li id="pronto-laureandi">
+                        <i class="bi bi-dash-circle" aria-hidden="true"></i>
+                        <span class="voce-nome">Laureandi</span>
+                        <span class="voce-valore">nessun file</span>
+                    </li>
+                    <li id="pronto-data">
+                        <i class="bi bi-dash-circle" aria-hidden="true"></i>
+                        <span class="voce-nome">Data</span>
+                        <span class="voce-valore">non indicata</span>
+                    </li>
+                    <li id="pronto-commissione">
+                        <i class="bi bi-dash-circle" aria-hidden="true"></i>
+                        <span class="voce-nome">Commissione</span>
+                        <span class="voce-valore">nessun membro</span>
+                    </li>
+                </ul>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-danger" id="btn-conferma-rimozione">
-                    Rimuovi il file
-                </button>
+
+            {# Stato compilato: gli studenti letti dal file #}
+            <div class="pannello-studenti">
+                <div class="na-riga-occhiello">
+                    <h2 class="na-occhiello mb-0" id="titolo-studenti">Studenti da iscrivere</h2>
+                    <span class="na-conteggio"><span id="studenti-selezionati">0</span> selezionati</span>
+                </div>
+                <p class="nota-studenti">Togli la spunta a chi non deve essere iscritto.</p>
+                {# Le caselle spuntate sono gli input "studenti" inviati con il form #}
+                <div id="studenti-scelti" class="elenco-studenti" role="group"
+                     aria-labelledby="titolo-studenti"></div>
+                <button type="button" class="btn btn-link p-0 vedi-tutti" id="vedi-tutti" hidden></button>
             </div>
-        </div>
+        </aside>
     </div>
-</div>
+
+    <footer class="na-azioni">
+        <div class="na-pulsanti">
+            <button type="submit" class="btn btn-primary" id="btn-crea-appello"
+                    aria-describedby="stato-azioni"
+                    {% if not caricato %}disabled{% endif %}>
+                <i class="bi bi-check2 testo-lungo" aria-hidden="true"></i> Crea appello
+            </button>
+            <a class="btn btn-outline-secondary js-esci"
+               href="{% url 'appelli:presidente_dashboard' %}">Annulla</a>
+        </div>
+        <p class="na-stato" id="stato-azioni" aria-live="polite">Manca l'elenco laureandi</p>
+    </footer>
+</form>
+{% endwith %}
 
 {# Popup: modifiche non salvate, come nella pagina di caricamento tesi #}
 <div class="modal fade" id="unsavedModal" tabindex="-1" aria-hidden="true">
@@ -204,7 +271,116 @@
 </div>
 
 <style>
+    .min-w-0 { min-width: 0; }
+    .testo-breve { display: none; }
+
+    /* ---------- Card ---------- */
+    .nuovo-appello {
+        background: #fff;
+        border-radius: .6rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+        /* niente overflow:hidden: impedirebbe alla barra azioni di restare
+           ancorata in basso su telefono */
+    }
+    .na-testata {
+        display: flex;
+        align-items: flex-start;
+        gap: .75rem;
+        padding: 22px 28px;
+        border-bottom: 1px solid var(--line);
+    }
+    .na-testata-icona { color: var(--brand); font-size: 1.6rem; line-height: 1; margin-top: .3rem; }
+    .na-titolo { font-size: calc(1.325rem + .9vw); font-weight: 700; margin: 0; color: var(--ink); }
+    @media (min-width: 1200px) { .na-titolo { font-size: 2rem; } }
+    .na-sottotitolo { margin: .1rem 0 0; color: var(--muted); }
+    #sottotitolo-compilato { display: none; }
+    .nuovo-appello:not(.stato-vuoto) #sottotitolo-vuoto { display: none; }
+    .nuovo-appello:not(.stato-vuoto) #sottotitolo-compilato:not(:empty) { display: block; }
+
+    .na-corpo {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+    }
+    @media (min-width: 992px) {
+        .na-corpo { grid-template-columns: minmax(0, 1fr) 430px; }
+    }
+    .na-col { padding: 24px 28px; }
+    .na-col-lato { background: #fbfcfd; border-left: 1px solid var(--line); }
+    .na-largo { max-width: 640px; }
+    .na-campo + .na-campo,
+    .na-campo + .campi-appello { margin-top: 1.5rem; }
+    .na-campo .form-label { color: var(--ink); }
+
+    .na-azioni {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .75rem 1rem;
+        padding: 18px 28px;
+        border-top: 1px solid var(--line);
+        background: #fbfcfd;
+        border-radius: 0 0 .6rem .6rem;
+    }
+    .na-pulsanti { display: flex; gap: .6rem; }
+    .na-stato { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
+
+    /* ---------- Zona del file ---------- */
+    .zona-drop {
+        position: relative;
+        border: 1px dashed #b9c2cf;
+        border-radius: .5rem;
+        background: #fbfcfd;
+        cursor: pointer;
+        transition: border-color .15s ease, background .15s ease;
+    }
+    .zona-drop:focus-visible { outline: 0; box-shadow: 0 0 0 .25rem rgba(var(--brand-alone-rgb), .25); }
+    .zona-vuota { padding: 2.25rem 1.25rem; text-align: center; }
+    .zona-icona { display: block; font-size: 2rem; color: var(--muted); margin-bottom: .5rem; }
+    .zona-invito { color: var(--ink); font-size: 1.05rem; }
+    .zona-sfoglia { color: var(--brand); font-weight: 500; }
+    .zona-nota { color: var(--muted); font-size: .875rem; margin-top: .2rem; }
+    .zona-caricata { display: none; align-items: center; gap: .9rem; padding: .85rem 1.1rem; }
+    .zona-caricata-icona { font-size: 1.6rem; color: var(--brand); }
+    .zona-nome-file { font-weight: 600; color: var(--ink); }
+    .zona-conteggio { font-size: .875rem; color: var(--ink); }
+    .zona-sostituisci { color: var(--brand); flex-shrink: 0; }
+    .zona-drop:hover { border-color: var(--brand-chiaro); }
+    .zona-drop.con-file {
+        border: 1px solid var(--brand-tenue-bordo);
+        background: var(--brand-velo);
+    }
+    .zona-drop.con-file .zona-vuota { display: none; }
+    .zona-drop.con-file .zona-caricata { display: flex; }
+    .zona-drop.sopra { border-color: var(--brand); background: var(--brand-velo); }
+    .zona-drop.in-lettura { opacity: .6; pointer-events: none; }
+    /* Trascinamento di qualcosa che non e' un .xlsx: il riquadro diventa rosso
+       prima ancora del rilascio, cosi' l'utente sa che non verra' accettato. */
+    .zona-drop.rifiuta {
+        border-color: var(--bs-danger);
+        background: var(--bs-danger-bg-subtle);
+        cursor: not-allowed;
+    }
+
+    /* ---------- Campi ---------- */
+    /* Un fieldset porta con se' bordo e margini propri: qui deve solo
+       raggruppare, non farsi vedere. */
+    .campi-appello { border: 0; padding: 0; margin: 1.5rem 0 0; min-width: 0; }
+    .campi-appello > .na-campo + .na-campo { margin-top: 1.5rem; }
+    .na-data-ora { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-control::placeholder { color: #9aa3ad; }
+    .campi-appello[disabled] .blocco-dati { opacity: .55; }
+    .campi-appello[disabled] .form-control { background: #f1f3f5; }
+    /* Nello stato vuoto la nota sul corso non ha ancora niente da dire, e la
+       commissione si compone solo dopo aver letto l'elenco. */
+    .stato-vuoto .nota-corso,
+    .stato-vuoto .blocco-membri { display: none; }
+
     /* La tendina dei risultati si sovrappone al contenuto sottostante */
+    .ricerca-icona {
+        position: absolute; left: .85rem; top: 50%; transform: translateY(-50%);
+        color: var(--muted); pointer-events: none;
+    }
+    .ricerca-docenti { padding-left: 2.4rem; }
     #risultati-docenti {
         position: absolute;
         z-index: 1000;
@@ -225,62 +401,9 @@
         border: 2px dashed var(--line);
         border-radius: .6rem;
         padding: .75rem;
-        background: #fbfbfc;
+        background: #fbfcfd;
     }
-    .box-membri.pieno { border-style: solid; }
-    .zona-drop {
-        --verde-xlsx: #1b8754;
-        position: relative;
-        border: 2px dashed var(--line);
-        border-radius: .6rem;
-        padding: 1.25rem;
-        text-align: center;
-        cursor: pointer;
-        background: #fbfbfc;
-        color: var(--muted);
-        transition: border-color .15s ease, background .15s ease, color .15s ease;
-    }
-    .zona-drop:hover { border-color: var(--verde-xlsx); }
-    .zona-drop.sopra {
-        border-color: var(--verde-xlsx);
-        background: #e8f5ee;
-        color: var(--verde-xlsx);
-    }
-    .zona-drop.con-file {
-        border-style: solid;
-        border-color: var(--verde-xlsx);
-        color: var(--ink);
-    }
-    /* La X sta dentro il riquadro, quindi il clic arriverebbe anche alla zona
-       e aprirebbe la finestra di scelta del file: il gestore lo ferma. */
-    .rimuovi-file {
-        position: absolute;
-        top: .35rem;
-        right: .45rem;
-        border: 0;
-        padding: 0;
-        line-height: 1;
-        font-size: 1.35rem;
-        background: transparent;
-        color: var(--muted);
-    }
-    .rimuovi-file:hover { color: var(--bs-danger); }
-    /* Un fieldset porta con se' bordo e margini propri: qui deve solo
-       raggruppare, non farsi vedere. */
-    .campi-appello { border: 0; padding: 0; margin: 0; min-width: 0; }
-    /* Niente opacita' su tutto il fieldset: sbiadirebbe anche il link
-       "Annulla", che invece resta cliccabile. I campi disabilitati li
-       ingrigisce gia' Bootstrap, e le etichette restano leggibili. */
-    .campi-appello[disabled] .form-label,
-    .campi-appello[disabled] .box-membri { color: var(--muted); }
-    /* Trascinamento di qualcosa che non e' un .xlsx: il riquadro diventa rosso
-       prima ancora del rilascio, cosi' l'utente sa che non verra' accettato. */
-    .zona-drop.rifiuta {
-        border-color: var(--bs-danger);
-        background: var(--bs-danger-bg-subtle);
-        color: var(--bs-danger-text-emphasis);
-        cursor: not-allowed;
-    }
+    .box-membri.pieno { border: 1px solid var(--line); }
     .membro {
         display: flex;
         align-items: center;
@@ -288,12 +411,135 @@
         background: #fff;
         border: 1px solid var(--line);
         border-radius: .5rem;
-        padding: .6rem .75rem;
+        padding: 10px 12px;
     }
     .membro + .membro { margin-top: .5rem; }
+    .membro .riga-docente-nome { text-transform: uppercase; }
     .membro-icona { color: var(--muted); flex-shrink: 0; }
     .membro-testo { min-width: 0; flex: 1; }
     .membro-rimuovi { flex-shrink: 0; }
+
+    /* ---------- Colonna destra ---------- */
+    .na-occhiello {
+        font-size: .8rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: #4b5563;
+        margin-bottom: .75rem;
+    }
+    .na-riga-occhiello { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+    .na-conteggio { color: var(--muted); font-size: .875rem; white-space: nowrap; }
+
+    .pannello-pronto,
+    .pannello-studenti { display: none; }
+    .stato-vuoto .pannello-pronto { display: block; }
+    .nuovo-appello:not(.stato-vuoto) .pannello-passi { display: none; }
+    .nuovo-appello:not(.stato-vuoto) .pannello-studenti { display: block; }
+
+    .passi-appello { list-style: none; margin: 0; padding: 0; }
+    .passi-appello li { display: flex; gap: .75rem; align-items: flex-start; }
+    .passi-appello li + li { margin-top: 1rem; }
+    .passo-pallino {
+        flex-shrink: 0;
+        width: 28px; height: 28px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        background: var(--brand-velo);
+        border: 1px solid var(--brand-tenue-bordo);
+        color: var(--brand-testo);
+        font-size: .8rem; font-weight: 700;
+    }
+    .passo-titolo { font-weight: 500; color: var(--ink); }
+    .passo-testo { color: var(--muted); font-size: .9rem; }
+
+    .pannello-pronto { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+    .barra-pronto { height: 4px; margin: .5rem 0 .9rem; background: var(--line); }
+    /* Un accenno di barra anche a zero: fa capire che e' un avanzamento */
+    #barra-pronto { min-width: 4%; background: var(--brand); }
+    .voci-pronto { list-style: none; margin: 0; padding: 0; }
+    .voci-pronto li { display: flex; align-items: center; gap: .6rem; padding: .3rem 0; }
+    .voci-pronto i { color: var(--muted); }
+    .voci-pronto li.fatto i { color: var(--brand); }
+    .voce-valore { margin-left: auto; color: var(--muted); font-size: .875rem; }
+
+    .nota-studenti { color: var(--muted); font-size: .875rem; margin: .15rem 0 .5rem; }
+    .riga-studente {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+        padding: .5rem 0;
+        border-bottom: 1px solid #eef0f3;
+        margin: 0;
+        cursor: pointer;
+    }
+    .riga-studente .form-check-input { margin: 0; flex-shrink: 0; }
+    .riga-studente-nome { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .riga-studente-matricola {
+        color: var(--muted); font-size: .875rem;
+        font-variant-numeric: tabular-nums;
+    }
+    /* Elenco chiuso: le prime 8 righe, senza dissolvenze */
+    .elenco-studenti:not(.aperto) .riga-studente:nth-child(n+9) { display: none; }
+    .vuoto-studenti { color: var(--muted); padding: .75rem 0; margin: 0; }
+    .vedi-tutti { margin-top: .6rem; text-decoration: none; }
+
+    /* ---------- Sotto i 768px: una colonna ---------- */
+    @media (max-width: 767.98px) {
+        .na-corpo { grid-template-columns: 1fr; }
+        .na-col-lato { background: transparent; border-left: 0; padding-top: 0; }
+        /* Nello stato vuoto i campi spenti restano fuori: dopo il file viene
+           subito il pannello dei passi. */
+        .stato-vuoto .campi-appello { display: none; }
+        .stato-vuoto .na-col-modulo { padding-bottom: 1rem; }
+        .pannello-passi {
+            background: var(--brand-velo);
+            border: 1px solid var(--brand-tenue-bordo);
+            border-radius: .6rem;
+            padding: 1.1rem 1.25rem;
+        }
+        .pannello-passi .na-occhiello { color: var(--brand-testo); }
+        .pannello-passi .passo-pallino { background: #fff; }
+        .stato-vuoto .pannello-pronto { display: none; }
+        .pannello-studenti .na-occhiello {
+            font-size: 1.15rem; letter-spacing: 0; text-transform: none; color: var(--ink);
+        }
+
+        /* Barra azioni ancorata in basso, sopra il fondo pagina fisso */
+        .na-azioni {
+            position: sticky;
+            bottom: var(--altezza-fondo, 0px);
+            z-index: 5;
+            background: #fff;
+            flex-direction: column;
+            align-items: stretch;
+            gap: .5rem;
+        }
+        .na-pulsanti .btn-primary { flex: 1; }
+        .na-stato { margin: 0; text-align: center; }
+    }
+
+    /* ---------- Telefoni ---------- */
+    @media (max-width: 575.98px) {
+        .testo-lungo { display: none; }
+        .testo-breve { display: inline; }
+        .nuovo-appello { box-shadow: none; }
+        .na-testata { border-bottom: 0; padding: 14px 14px 0; }
+        .na-testata-icona { font-size: 1.5rem; margin-top: .25rem; }
+        .na-titolo { font-size: 1.6rem; }
+        .na-col { padding: 16px 14px 0; }
+        .na-col-modulo, .stato-vuoto .na-col-modulo { padding-bottom: 0; }
+        .na-col-lato { padding-bottom: 16px; }
+        .na-campo + .na-campo, .campi-appello { margin-top: 16px; }
+        .campi-appello > .na-campo + .na-campo { margin-top: 16px; }
+        .na-data-ora { gap: .75rem; }
+        .nuovo-appello:not(.stato-vuoto) .na-estensione,
+        .nota-corso { display: none; }
+        .zona-vuota { padding: 1.75rem 1rem; }
+        /* Qui l'elenco chiuso mostra le prime 4 righe */
+        .elenco-studenti:not(.aperto) .riga-studente:nth-child(n+5) { display: none; }
+        .na-azioni { padding: 14px; }
+    }
 </style>
 
 {{ form.docenti_selezionati|json_script:"docenti-iniziali" }}
@@ -302,6 +548,7 @@
 <script>
 (function () {
     var URL_RICERCA = "{% url 'appelli:cerca_docenti' %}";
+    var form = document.getElementById('appello-form');
     var input = document.getElementById('ricerca-docenti');
     var elencoRisultati = document.getElementById('risultati-docenti');
     var elencoScelti = document.getElementById('docenti-scelti');
@@ -309,6 +556,8 @@
     var vuoto = document.getElementById('nessun-docente');
     var boxMembri = document.getElementById('box-membri');
     if (!input) return;
+
+    var telefono = window.matchMedia('(max-width: 575.98px)');
 
     var scelti = [];          // [{id, nome, cognome, username, email}]
     var attesa = null;        // timer del debounce
@@ -365,6 +614,7 @@
         });
         vuoto.hidden = scelti.length > 0;
         boxMembri.classList.toggle('pieno', scelti.length > 0);
+        aggiornaStato();
     }
 
     function aggiungi(d) {
@@ -451,147 +701,223 @@
         if (!elencoRisultati.contains(e.target) && e.target !== input) chiudiRisultati();
     });
 
-    // Ripristina la selezione quando il form torna indietro con un errore.
-    var iniziali = document.getElementById('docenti-iniziali');
-    if (iniziali) {
-        try { scelti = JSON.parse(iniziali.textContent) || []; } catch (e) { scelti = []; }
+    // Il segnaposto non si puo' accorciare da CSS: si scambia qui.
+    var SEGNAPOSTO_LUNGO = input.placeholder;
+    function adattaSegnaposto() {
+        input.placeholder = telefono.matches ? input.dataset.placeholderBreve : SEGNAPOSTO_LUNGO;
     }
-    disegnaScelti();
 
-    // --- Caricamento dell'elenco laureandi (.xlsx) -----------------------
+    // --- Elenco laureandi (.xlsx) ----------------------------------------
     var URL_XLSX = "{% url 'appelli:analizza_xlsx' %}";
     var zona = document.getElementById('zona-drop');
     var inputFile = document.getElementById('file-xlsx');
-    var etichettaFile = document.getElementById('etichetta-file');
-    var btnCarica = document.getElementById('btn-carica-dati');
+    var nomeFile = document.getElementById('nome-file');
+    var conteggioFile = document.getElementById('conteggio-file');
     var esito = document.getElementById('esito-xlsx');
     var elencoStudenti = document.getElementById('studenti-scelti');
-    var hiddenStudenti = document.getElementById('studenti-hidden');
-    var nessunoStudente = document.getElementById('nessuno-studente');
-    var boxStudenti = document.getElementById('box-studenti');
-    var btnRimuovi = document.getElementById('rimuovi-file');
+    var vediTutti = document.getElementById('vedi-tutti');
     var campiAppello = document.getElementById('campi-appello');
-    var notaBlocco = document.getElementById('nota-blocco');
     var btnCrea = document.getElementById('btn-crea-appello');
-    var modaleRimuovi = document.getElementById('rimuoviModal');
-    // Vero solo dopo un "Carica dati" andato a buon fine: e' la condizione che
-    // rende la rimozione distruttiva, e quindi da confermare.
+    var corso = document.getElementById('id_corso_di_laurea');
+    var campoData = document.getElementById('id_data');
+    var sottotitolo = document.getElementById('sottotitolo-compilato');
+    var statoAzioni = document.getElementById('stato-azioni');
+
+    // Vero quando l'elenco e' stato letto: e' cio' che accende il modulo.
     var datiCaricati = false;
-    var studenti = [];
+    var studenti = [];        // [{id, nome, cognome, username, email}]
 
     function messaggio(testo, tipo) {
-        esito.className = 'mt-2 alert alert-' + tipo + ' shadow-sm';
-        esito.setAttribute('role', 'alert');
+        esito.className = 'mt-2 na-largo alert alert-' + tipo + ' shadow-sm';
+        esito.setAttribute('role', tipo === 'info' ? 'status' : 'alert');
         esito.textContent = testo;
         esito.hidden = false;
     }
 
-    function disegnaStudenti() {
-        elencoStudenti.textContent = '';
-        hiddenStudenti.textContent = '';
-        studenti.forEach(function (d) {
-            var riga = document.createElement('div');
-            riga.className = 'membro';
-
-            var icona = document.createElement('i');
-            icona.className = 'bi bi-mortarboard-fill membro-icona';
-            icona.setAttribute('aria-hidden', 'true');
-
-            var testo = document.createElement('div');
-            testo.className = 'membro-testo';
-            var r1 = document.createElement('div');
-            r1.className = 'riga-docente-nome text-truncate';
-            r1.textContent = nomeCompleto(d);
-            var r2 = document.createElement('div');
-            r2.className = 'riga-docente-mail text-truncate';
-            r2.textContent = d.email || '';
-            testo.appendChild(r1);
-            testo.appendChild(r2);
-
-            var togli = document.createElement('button');
-            togli.type = 'button';
-            togli.className = 'btn btn-sm btn-danger membro-rimuovi';
-            togli.setAttribute('aria-label', 'Togli ' + nomeCompleto(d));
-            togli.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
-            togli.addEventListener('click', function () {
-                studenti = studenti.filter(function (x) { return x.id !== d.id; });
-                disegnaStudenti();
-            });
-
-            riga.appendChild(icona);
-            riga.appendChild(testo);
-            riga.appendChild(togli);
-            elencoStudenti.appendChild(riga);
-
-            var hidden = document.createElement('input');
-            hidden.type = 'hidden';
-            hidden.name = 'studenti';
-            hidden.value = d.id;
-            hiddenStudenti.appendChild(hidden);
-        });
-        nessunoStudente.hidden = studenti.length > 0;
-        boxStudenti.classList.toggle('pieno', studenti.length > 0);
+    function nomeStudente(d) {
+        var pezzi = [d.cognome, d.nome].filter(Boolean).join(' ');
+        return pezzi || d.username;
     }
 
+    function caselleSpuntate() {
+        return elencoStudenti.querySelectorAll('input[name="studenti"]:checked');
+    }
+
+    // Le caselle SONO gli input "studenti" del form: una casella tolta non
+    // viene inviata, quindi quello studente non viene iscritto.
+    function disegnaStudenti() {
+        elencoStudenti.textContent = '';
+        elencoStudenti.classList.remove('aperto');
+        if (!studenti.length) {
+            var nessuno = document.createElement('p');
+            nessuno.className = 'vuoto-studenti';
+            nessuno.textContent = 'Nessuno studente del file è registrato nel sistema.';
+            elencoStudenti.appendChild(nessuno);
+        }
+        studenti.forEach(function (d) {
+            var riga = document.createElement('label');
+            riga.className = 'riga-studente';
+
+            var casella = document.createElement('input');
+            casella.type = 'checkbox';
+            casella.className = 'form-check-input';
+            casella.name = 'studenti';
+            casella.value = d.id;
+            casella.checked = true;
+
+            var nome = document.createElement('span');
+            nome.className = 'riga-studente-nome';
+            nome.textContent = nomeStudente(d);
+
+            var matricola = document.createElement('span');
+            matricola.className = 'riga-studente-matricola';
+            matricola.textContent = d.username;
+
+            riga.appendChild(casella);
+            riga.appendChild(nome);
+            riga.appendChild(matricola);
+            elencoStudenti.appendChild(riga);
+        });
+        conteggioFile.textContent = studenti.length;
+        aggiornaVediTutti();
+        aggiornaStato();
+    }
+
+    function aggiornaVediTutti() {
+        var limite = telefono.matches ? 4 : 8;
+        var aperto = elencoStudenti.classList.contains('aperto');
+        vediTutti.hidden = studenti.length <= limite;
+        vediTutti.textContent = aperto ? 'Mostra meno' : 'Vedi tutti i ' + studenti.length;
+        vediTutti.setAttribute('aria-expanded', aperto ? 'true' : 'false');
+    }
+
+    vediTutti.addEventListener('click', function () {
+        elencoStudenti.classList.toggle('aperto');
+        aggiornaVediTutti();
+    });
+
+    elencoStudenti.addEventListener('change', aggiornaStato);
+
+    // --- Stato della pagina ----------------------------------------------
+    function impostaVoce(id, fatto, valore) {
+        var voce = document.getElementById(id);
+        voce.classList.toggle('fatto', fatto);
+        voce.querySelector('i').className = 'bi ' + (fatto ? 'bi-check-circle-fill' : 'bi-dash-circle');
+        voce.querySelector('.voce-valore').textContent = valore;
+    }
+
+    function dataLeggibile(iso) {
+        var p = (iso || '').split('-');
+        return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+    }
+
+    function plurale(n, uno, tanti) { return n + ' ' + (n === 1 ? uno : tanti); }
+
+    function aggiornaStato() {
+        if (!elencoStudenti) return;   // chiamata durante l'avvio
+        var nSpuntati = caselleSpuntate().length;
+        var haData = !!(campoData && campoData.value);
+
+        form.classList.toggle('stato-vuoto', !datiCaricati);
+        campiAppello.disabled = !datiCaricati;
+        btnCrea.disabled = !datiCaricati || nSpuntati === 0;
+        document.getElementById('studenti-selezionati').textContent = nSpuntati;
+
+        impostaVoce('pronto-laureandi', datiCaricati,
+                    datiCaricati ? plurale(studenti.length, 'studente', 'studenti') : 'nessun file');
+        impostaVoce('pronto-data', haData, haData ? dataLeggibile(campoData.value) : 'non indicata');
+        impostaVoce('pronto-commissione', scelti.length > 0,
+                    scelti.length ? plurale(scelti.length, 'membro', 'membri') : 'nessun membro');
+        var pronti = document.querySelectorAll('.voci-pronto li.fatto').length;
+        document.getElementById('pronti').textContent = pronti;
+        document.getElementById('barra-pronto').style.width = (pronti / 3 * 100) + '%';
+        document.querySelector('.barra-pronto').setAttribute('aria-valuenow', pronti);
+
+        var corsoTesto = corso ? corso.value.trim() : '';
+        sottotitolo.textContent = datiCaricati && corsoTesto
+            ? corsoTesto + ' — ' + plurale(studenti.length, 'laureando importato', 'laureandi importati')
+            : '';
+
+        if (!datiCaricati) {
+            statoAzioni.textContent = "Manca l'elenco laureandi";
+        } else if (nSpuntati === 0) {
+            statoAzioni.textContent = 'Nessuno studente da iscrivere';
+        } else {
+            statoAzioni.textContent = plurale(nSpuntati, 'studente', 'studenti') + ', ' +
+                plurale(scelti.length, 'membro', 'membri') + ' di commissione';
+        }
+    }
+
+    if (corso) corso.addEventListener('input', aggiornaStato);
+    if (campoData) campoData.addEventListener('input', aggiornaStato);
+
+    // --- Scelta e lettura del file ---------------------------------------
     // Tipo MIME dei .xlsx: e' l'unica informazione che il browser espone
     // durante il trascinamento, prima che il file venga rilasciato.
     var MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    var ETICHETTA_VUOTA = etichettaFile.textContent;
-    var NON_SUPPORTATO = 'File non supportato. L\u2019unico tipo di file accettato è un file .xlsx';
+    var NON_SUPPORTATO = 'File non supportato. L’unico tipo di file accettato è un file .xlsx';
     var UN_SOLO_FILE = 'Trascina un solo file xlsx per volta.';
 
     function estensioneOk(nome) {
         return /\.xlsx$/i.test(nome || '');
     }
 
-    // Un file sbagliato non cancella quello valido gia' scelto: si svuota solo
-    // l'input, dove il browser ha appena messo il file sbagliato. Il file buono
-    // resta in _file, che e' anche quello che legge il pulsante "Carica dati".
-    function rifiutaFile(testo) {
+    // La lettura parte appena il file e' scelto. Se non riesce, quello che era
+    // gia' stato caricato resta com'era: un file sbagliato non cancella il
+    // lavoro fatto con quello giusto.
+    function leggiFile(file) {
         inputFile.value = '';
-        if (!inputFile._file) {
-            etichettaFile.textContent = ETICHETTA_VUOTA;
-            zona.classList.remove('con-file');
-            btnRimuovi.hidden = true;
-        }
-        messaggio(testo, 'danger');
-    }
-
-    function fileScelto(file) {
         if (!file) return;
         if (!estensioneOk(file.name)) {
-            rifiutaFile(NON_SUPPORTATO);
+            messaggio(NON_SUPPORTATO, 'danger');
             return;
         }
-        inputFile._file = file;
-        etichettaFile.textContent = file.name;
-        zona.classList.add('con-file');
-        btnRimuovi.hidden = false;
-        esito.hidden = true;
+        var dati = new FormData();
+        dati.append('file', file);
+        zona.classList.add('in-lettura');
+        messaggio('Lettura del file in corso…', 'info');
+
+        fetch(URL_XLSX, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value || ''
+            },
+            credentials: 'same-origin',
+            body: dati
+        })
+        .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
+        .then(function (res) {
+            zona.classList.remove('in-lettura');
+            if (!res.ok) {
+                messaggio(res.j.errore || 'Lettura non riuscita.', 'danger');
+                return;
+            }
+            if (corso && res.j.corso) corso.value = res.j.corso;
+            studenti = ordina(res.j.studenti || []);
+            nomeFile.textContent = file.name;
+            zona.classList.add('con-file');
+            datiCaricati = true;
+            disegnaStudenti();
+
+            var mancanti = res.j.mancanti || [];
+            if (mancanti.length) {
+                messaggio('Non ancora registrati nel sistema e quindi non iscrivibili: ' +
+                          mancanti.join(', '), 'warning');
+            } else {
+                esito.hidden = true;
+            }
+        })
+        .catch(function () {
+            zona.classList.remove('in-lettura');
+            messaggio('Errore di rete durante la lettura del file.', 'danger');
+        });
     }
 
-    // Il modulo si apre solo quando i dati arrivano davvero dal file.
-    function bloccaCampi(bloccato) {
-        if (campiAppello) campiAppello.disabled = bloccato;
-        if (btnCrea) btnCrea.disabled = bloccato;
-        if (notaBlocco) notaBlocco.hidden = !bloccato;
-    }
-
-    // La X annulla il caricamento: se ne vanno il file e i dati che ne erano
-    // arrivati, quindi il modulo torna bloccato come all'apertura.
-    function annullaCaricamento() {
-        inputFile.value = '';
-        inputFile._file = null;
-        etichettaFile.textContent = ETICHETTA_VUOTA;
-        zona.classList.remove('con-file');
-        btnRimuovi.hidden = true;
-        esito.hidden = true;
-        studenti = [];
-        disegnaStudenti();
-        var corso = document.getElementById('id_corso_di_laurea');
-        if (corso) corso.value = '';
-        datiCaricati = false;
-        bloccaCampi(true);
+    function ordina(elenco) {
+        return elenco.slice().sort(function (a, b) {
+            return nomeStudente(a).localeCompare(nomeStudente(b), 'it');
+        });
     }
 
     // L'avviso mostrato durante il trascinamento e' provvisorio: se il file non
@@ -630,146 +956,90 @@
         return null;
     }
 
-    if (btnRimuovi) {
-        btnRimuovi.addEventListener('click', function (e) {
-            e.stopPropagation();
-            // Senza dati caricati non c'e' niente da perdere: si toglie e basta.
-            if (datiCaricati && modaleRimuovi && window.bootstrap) {
-                bootstrap.Modal.getOrCreateInstance(modaleRimuovi).show();
-                return;
+    zona.addEventListener('click', function (e) {
+        if (e.target !== inputFile) inputFile.click();
+    });
+    zona.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputFile.click();
+        }
+    });
+    inputFile.addEventListener('change', function () {
+        leggiFile(inputFile.files[0]);
+    });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        zona.addEventListener(ev, function (e) {
+            e.preventDefault();
+            var motivo = motivoRifiuto(e.dataTransfer);
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = motivo ? 'none' : 'copy';
             }
-            annullaCaricamento();
+            zona.classList.toggle('rifiuta', !!motivo);
+            zona.classList.toggle('sopra', !motivo);
+            // Con dropEffect 'none' il rilascio non avviene e l'evento
+            // 'drop' non arriva mai: l'errore va mostrato gia' qui.
+            if (motivo) { avvisoTrascinamento(motivo); }
+            else { fineTrascinamento(); }
         });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        zona.addEventListener(ev, function (e) {
+            e.preventDefault();
+            zona.classList.remove('sopra');
+            zona.classList.remove('rifiuta');
+            fineTrascinamento();
+        });
+    });
+    zona.addEventListener('drop', function (e) {
+        var files = e.dataTransfer.files;
+        if (!files || !files.length) return;
+        if (files.length > 1) {
+            messaggio(UN_SOLO_FILE, 'danger');
+            return;
+        }
+        leggiFile(files[0]);
+    });
+
+    // --- Barra azioni su telefono ----------------------------------------
+    // Il fondo pagina di base.html e' fisso: la barra ancorata deve fermarsi
+    // sopra di lui, non finirci sotto.
+    var fondo = document.getElementById('footer');
+    function adattaAltezzaFondo() {
+        form.style.setProperty('--altezza-fondo', (fondo ? fondo.offsetHeight : 0) + 'px');
     }
 
-    var btnConfermaRimozione = document.getElementById('btn-conferma-rimozione');
-    if (btnConfermaRimozione) {
-        btnConfermaRimozione.addEventListener('click', function () {
-            bootstrap.Modal.getOrCreateInstance(modaleRimuovi).hide();
-            annullaCaricamento();
-        });
+    function adattaSchermo() {
+        adattaSegnaposto();
+        adattaAltezzaFondo();
+        aggiornaVediTutti();
     }
+    if (telefono.addEventListener) telefono.addEventListener('change', adattaSchermo);
+    window.addEventListener('resize', adattaAltezzaFondo);
 
-    if (zona) {
-        zona.addEventListener('click', function () { inputFile.click(); });
-        inputFile.addEventListener('change', function () {
-            fileScelto(inputFile.files[0]);
-        });
-        ['dragenter', 'dragover'].forEach(function (ev) {
-            zona.addEventListener(ev, function (e) {
-                e.preventDefault();
-                var motivo = motivoRifiuto(e.dataTransfer);
-                if (e.dataTransfer) {
-                    e.dataTransfer.dropEffect = motivo ? 'none' : 'copy';
-                }
-                zona.classList.toggle('rifiuta', !!motivo);
-                zona.classList.toggle('sopra', !motivo);
-                // Con dropEffect 'none' il rilascio non avviene e l'evento
-                // 'drop' non arriva mai: l'errore va mostrato gia' qui.
-                if (motivo) { avvisoTrascinamento(motivo); }
-                else { fineTrascinamento(); }
-            });
-        });
-        ['dragleave', 'drop'].forEach(function (ev) {
-            zona.addEventListener(ev, function (e) {
-                e.preventDefault();
-                zona.classList.remove('sopra');
-                zona.classList.remove('rifiuta');
-                fineTrascinamento();
-            });
-        });
-        zona.addEventListener('drop', function (e) {
-            var files = e.dataTransfer.files;
-            if (!files || !files.length) return;
-            if (files.length > 1) {
-                messaggio(UN_SOLO_FILE, 'danger');
-                return;
-            }
-            var f = files[0];
-            if (!estensioneOk(f.name)) {
-                messaggio(NON_SUPPORTATO, 'danger');
-                return;
-            }
-            // Si porta il file anche nell'input, cosi' resta una sola fonte.
-            try {
-                var dt = new DataTransfer();
-                dt.items.add(f);
-                inputFile.files = dt.files;
-            } catch (err) { /* browser senza DataTransfer: si usa _file */ }
-            fileScelto(f);
-        });
+    // --- Avvio ------------------------------------------------------------
+    // Ripristina la selezione quando il form torna indietro con un errore.
+    function datiIniziali(id) {
+        var el = document.getElementById(id);
+        if (!el) return [];
+        try { return JSON.parse(el.textContent) || []; } catch (e) { return []; }
     }
-
-    if (btnCarica) {
-        btnCarica.addEventListener('click', function () {
-            var file = (inputFile.files && inputFile.files[0]) || inputFile._file;
-            if (!file) {
-                messaggio('Scegli prima un file .xlsx', 'warning');
-                return;
-            }
-            var dati = new FormData();
-            dati.append('file', file);
-            btnCarica.disabled = true;
-            messaggio('Lettura del file in corso…', 'info');
-
-            fetch(URL_XLSX, {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value || ''
-                },
-                credentials: 'same-origin',
-                body: dati
-            })
-            .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
-            .then(function (res) {
-                btnCarica.disabled = false;
-                if (!res.ok) {
-                    messaggio(res.j.errore || 'Lettura non riuscita.', 'danger');
-                    return;
-                }
-                var corso = document.getElementById('id_corso_di_laurea');
-                if (corso && res.j.corso) corso.value = res.j.corso;
-                studenti = res.j.studenti || [];
-                disegnaStudenti();
-                datiCaricati = true;
-                bloccaCampi(false);
-
-                var righe = ['Trovati ' + studenti.length + ' studenti su ' +
-                             res.j.totale_nel_file + ' presenti nel file.'];
-                if ((res.j.mancanti || []).length) {
-                    righe.push('Non ancora registrati nel sistema e quindi non ' +
-                               'iscrivibili: ' + res.j.mancanti.join(', ') + '.');
-                }
-                messaggio(righe.join(' '),
-                          (res.j.mancanti || []).length ? 'warning' : 'success');
-            })
-            .catch(function () {
-                btnCarica.disabled = false;
-                messaggio('Errore di rete durante la lettura del file.', 'danger');
-            });
-        });
+    scelti = datiIniziali('docenti-iniziali');
+    studenti = ordina(datiIniziali('studenti-iniziali'));
+    if (studenti.length) {
+        datiCaricati = true;
+        zona.classList.add('con-file');
     }
-
-    // Lo stato iniziale del fieldset lo decide il template: qui si allinea solo
-    // la nota che spiega il blocco.
-    bloccaCampi(campiAppello ? campiAppello.disabled : false);
-
-    var studentiIniziali = document.getElementById('studenti-iniziali');
-    if (studentiIniziali) {
-        try { studenti = JSON.parse(studentiIniziali.textContent) || []; }
-        catch (e) { studenti = []; }
-    }
+    disegnaScelti();
     disegnaStudenti();
+    adattaSchermo();
 
     // --- Conferma all'uscita se ci sono modifiche non salvate ------------
     // Si confronta lo stato iniziale del form con quello attuale: cosi' vale
-    // per corso, data, orario e membri senza doverli elencare a mano.
-    var form = document.getElementById('appello-form');
-
+    // per corso, data, orario, membri e studenti senza doverli elencare a mano.
     function istantanea() {
         var parti = scelti.map(function (d) { return d.id; }).sort();
-        parti = parti.concat(studenti.map(function (d) { return 's' + d.id; }).sort());
+        caselleSpuntate().forEach(function (c) { parti.push('s' + c.value); });
         form.querySelectorAll('input[type="text"], input[type="date"], input[type="time"]')
             .forEach(function (i) {
                 if (i.id !== 'ricerca-docenti') parti.push(i.name + '=' + i.value);

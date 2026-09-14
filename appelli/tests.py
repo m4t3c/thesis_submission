@@ -305,6 +305,85 @@ class CaricamentoTesiTest(BaseSetup):
         self.assertEqual(os.listdir(cartella), ["tesi.pdf"])
 
 
+class StatoConsegnaTest(BaseSetup):
+    """Il riepilogo "stato consegna" della pagina della tesi.
+
+    Riassume le TRE cose obbligatorie (titolo, tutor, tesi) e va letto come
+    "cosa risulta consegnato", non come "cosa ho scritto nel modulo": e' la
+    differenza che questi test tengono ferma.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        self.url = reverse("appelli:carica_tesi", args=[self.iscrizione.id])
+        self.client.force_login(self.studente)
+
+    def tearDown(self):
+        self.iscrizione.refresh_from_db()
+        if self.iscrizione.file_tesi:
+            self.iscrizione.file_tesi.delete(save=False)
+
+    def _stato(self):
+        stato = self.client.get(self.url).context["stato_consegna"]
+        return stato, {v["nome"]: v["fatto"] for v in stato["voci"]}
+
+    def test_iscrizione_appena_creata_non_ha_niente_di_fatto(self):
+        stato, fatte = self._stato()
+        self.assertEqual(stato["fatte"], 0)
+        self.assertEqual(stato["totale"], 3)
+        self.assertEqual(fatte, {"Titolo": False, "Tutor": False, "Tesi": False})
+
+    def test_conta_solo_le_voci_salvate(self):
+        self.iscrizione.titolo = "Un titolo"
+        self.iscrizione.tutor = self.docente
+        self.iscrizione.save()
+
+        stato, fatte = self._stato()
+        self.assertEqual(stato["fatte"], 2)
+        self.assertEqual(fatte, {"Titolo": True, "Tutor": True, "Tesi": False})
+
+    def test_tutto_consegnato(self):
+        self.iscrizione.titolo = "Un titolo"
+        self.iscrizione.tutor = self.docente
+        self.iscrizione.file_tesi.save(
+            "tesi.pdf", SimpleUploadedFile("tesi.pdf", b"%PDF-1.7 x"), save=True
+        )
+
+        stato, fatte = self._stato()
+        self.assertEqual(stato["fatte"], 3)
+        self.assertEqual(stato["percentuale"], 100)
+        self.assertTrue(all(fatte.values()))
+
+    def test_il_video_non_entra_nel_conteggio(self):
+        """E' facoltativo: fra le voci mancanti sembrerebbe necessario."""
+        stato, _ = self._stato()
+        self.assertEqual([v["nome"] for v in stato["voci"]], ["Titolo", "Tutor", "Tesi"])
+
+    def test_un_invio_rifiutato_non_risulta_consegnato(self):
+        """La parte delicata: niente e' stato salvato, niente deve dirsi fatto.
+
+        Su un POST non valido il ModelForm copia comunque i dati ricevuti
+        dentro l'istanza. Se il riepilogo venisse calcolato dopo la
+        validazione mostrerebbe titolo e tutor come acquisiti, mentre il
+        database e' rimasto vuoto.
+        """
+        # Manca la tesi, che il form richiede: l'invio viene rifiutato.
+        resp = self.client.post(self.url, {
+            "titolo": "Un titolo mai salvato",
+            "tutor": self.docente.pk,
+            "modalita_video": "nessuno",
+        })
+        self.assertEqual(resp.status_code, 200)       # resta sulla pagina
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.titolo)      # davvero non salvato
+
+        stato = resp.context["stato_consegna"]
+        self.assertEqual(stato["fatte"], 0)
+        self.assertTrue(all(not v["fatto"] for v in stato["voci"]))
+
 class UnicitaAppelloTest(BaseSetup):
     """Data + corso + commissione identificano un appello."""
 

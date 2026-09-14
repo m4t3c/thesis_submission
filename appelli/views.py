@@ -165,6 +165,34 @@ def studente_dashboard(request):
     )
 
 
+def _stato_consegna(iscrizione):
+    """Le tre cose che servono per la consegna, e quali risultano fatte.
+
+    Torna le voci pronte per il template piu' il conteggio, cosi' la pagina
+    non deve contarle da sola (i template Django non sanno sommare) e la
+    percentuale della barra non viene calcolata a mano in due posti.
+
+    "manca" e' il testo mostrato accanto alla voce non completata: dirlo qui
+    tiene le tre frasi vicine, dove si vede subito che sono coerenti fra loro.
+    """
+    voci = [
+        {"nome": "Titolo", "fatto": bool(iscrizione.titolo), "manca": "non ancora indicato"},
+        {"nome": "Tutor", "fatto": bool(iscrizione.tutor_id), "manca": "non ancora scelto"},
+        {"nome": "Tesi", "fatto": bool(iscrizione.file_tesi), "manca": "non ancora caricata"},
+    ]
+    fatte = sum(1 for v in voci if v["fatto"])
+    return {
+        "voci": voci,
+        "fatte": fatte,
+        "totale": len(voci),
+        # A consegna finita la pagina cambia messaggio: vedi il template.
+        "completa": fatte == len(voci),
+        # Con zero voci fatte la barra resterebbe invisibile: un filo di
+        # riempimento la fa leggere come "barra vuota" e non come "assente".
+        "percentuale": round(fatte * 100 / len(voci)) if fatte else 3,
+    }
+
+
 @login_required
 def carica_tesi(request, iscrizione_id):
     """Titolo, file della tesi ed eventuale video di una propria iscrizione.
@@ -186,6 +214,15 @@ def carica_tesi(request, iscrizione_id):
     # "gia' caricata" una tesi che invece non e' stata salvata.
     nome_file = os.path.basename(iscrizione.file_tesi.name) if iscrizione.file_tesi else ""
     nome_video = os.path.basename(iscrizione.file_video.name) if iscrizione.file_video else ""
+
+    # Riepilogo "stato consegna" mostrato in pagina. Va letto qui, insieme ai
+    # nomi dei file e per la stessa ragione: e' il riassunto di cio' che RISULTA
+    # SALVATO, e su un POST rifiutato l'istanza porta gia' i dati inviati.
+    # Calcolato dopo, darebbe per fatto quello che non e' stato salvato.
+    #
+    # Il video non entra nel conteggio: e' facoltativo, e vederlo fra le voci
+    # mancanti farebbe credere allo studente che gli serva per laurearsi.
+    stato_consegna = _stato_consegna(iscrizione)
 
     if request.method == "POST":
         form = TesiUploadForm(request.POST, request.FILES, instance=iscrizione)
@@ -215,6 +252,7 @@ def carica_tesi(request, iscrizione_id):
             "nome_video": nome_video,
             "formati_video": ", ".join(FORMATI_VIDEO),
             "max_video": filesizeformat(MAX_BYTE_VIDEO),
+            "stato_consegna": stato_consegna,
         },
     )
 
