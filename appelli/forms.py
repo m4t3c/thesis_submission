@@ -96,9 +96,10 @@ class TesiUploadForm(forms.ModelForm):
        quest'ultimo genera la checkbox "Svuota" e, se ricevuta, azzera il
        campo. Con ``FileInput`` la richiesta di svuotamento non viene proprio
        letta, quindi la tesi si puo' solo sostituire, mai rimuovere.
-    2. tesi e titolo obbligatori nel form, benche' facoltativi nel modello
-       (una iscrizione puo' esistere senza, e l'import automatico ne creera').
-       Cosi' un invio a vuoto non puo' essere usato per cancellarli.
+    2. tesi e titolo vanno A COPPIA: o ci sono tutti e due, o nessuno (vedi
+       clean). Cosi' si puo' salvare la sola scelta del tutor e completare il
+       resto piu' avanti. Una volta salvati pero' non si cancellano: la tesi
+       si puo' solo sostituire (punto 1), il titolo solo correggere.
     3. il video e' invece facoltativo E rimovibile: essendo un'aggiunta
        opzionale, impedirne la rimozione renderebbe permanente un errore.
     4. il tutor e' obbligatorio ma si sceglie UNA VOLTA SOLA: quando c'e' gia',
@@ -167,8 +168,12 @@ class TesiUploadForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["file_tesi"].required = True
-        self.fields["titolo"].required = True
+        # Facoltativi uno per uno: l'obbligo e' di coppia, e lo applica clean().
+        self.fields["file_tesi"].required = False
+        self.fields["titolo"].required = False
+        # Letto prima della validazione, per la stessa ragione del tutor qui
+        # sotto: dopo, l'istanza porterebbe il titolo appena inviato.
+        self.titolo_iniziale = self.instance.titolo if self.instance.pk else ""
         self.fields["tutor"].queryset = (
             User.objects.filter(groups__name=GRUPPO_DOCENTE)
             .order_by("last_name", "first_name", "username")
@@ -255,14 +260,17 @@ class TesiUploadForm(forms.ModelForm):
         return file
 
     def clean_titolo(self):
-        """Titolo senza spazi ai bordi, mai vuoto.
+        """Titolo senza spazi ai bordi; se era gia' salvato, mai vuoto.
 
         Uno spazio non e' un titolo: normalizzando qui si evita che il
-        controllo di obbligatorieta' si aggiri con un carattere vuoto.
+        controllo di coppia in clean() si aggiri con un carattere vuoto.
+        Il riferimento e' titolo_iniziale, fissato in __init__.
         """
         titolo = (self.cleaned_data.get("titolo") or "").strip()
-        if not titolo:
-            raise forms.ValidationError("Il titolo della tesi è obbligatorio.")
+        if not titolo and self.titolo_iniziale:
+            raise forms.ValidationError(
+                "Il titolo della tesi non può essere svuotato."
+            )
         return titolo
 
     # --- Video ------------------------------------------------------------
@@ -288,13 +296,34 @@ class TesiUploadForm(forms.ModelForm):
         return file
 
     def clean(self):
-        """Applica la modalita' scelta: video, link, o nessuno dei due.
+        """Titolo e tesi a coppia; modalita' del video.
 
-        Il vincolo "mai entrambi" e' garantito anche dal database
-        (CheckConstraint), ma qui si traduce in un messaggio comprensibile
-        invece che in un IntegrityError.
+        La coppia si giudica sull'iscrizione COME RISULTERA' dopo il
+        salvataggio, non sul solo invio: senza un nuovo file Django restituisce
+        quello gia' salvato, quindi correggere il titolo di una tesi gia'
+        caricata non chiede di ricaricarla. Se uno dei due campi ha gia' un
+        errore suo (file non PDF, titolo svuotato) non se ne aggiunge un
+        secondo sulla coppia.
+
+        Sul video, il vincolo "mai file e link insieme" e' garantito anche dal
+        database (CheckConstraint), ma qui si traduce in un messaggio
+        comprensibile invece che in un IntegrityError.
         """
         dati = super().clean()
+
+        if "titolo" in dati and "file_tesi" in dati:
+            ha_titolo = bool(dati["titolo"])
+            ha_tesi = bool(dati["file_tesi"])
+            if ha_tesi and not ha_titolo:
+                self.add_error(
+                    "titolo", "Hai caricato la tesi: indica anche il titolo."
+                )
+            elif ha_titolo and not ha_tesi:
+                self.add_error(
+                    "file_tesi",
+                    "Hai indicato il titolo: carica anche il file della tesi.",
+                )
+
         modalita = dati.get("modalita_video") or self.modalita_iniziale()
 
         if modalita == VIDEO_FILE:

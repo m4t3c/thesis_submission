@@ -1,0 +1,113 @@
+{% comment %}
+    Modulo di valutazione di un tutorato (titolo, punti, giudizio), chiuso in
+    un collapse. Lo usano la sezione "I miei tutorati" dell'area docente e il
+    dettaglio di un appello: un modulo solo, cosi' le due pagine non divergono.
+
+    Si aspetta nel contesto:
+      - "iscrizione", con l'attributo .form gia' agganciato dalla view;
+      - "ritorno", il valore del campo omonimo: dice alla view dove tornare
+        dopo il salvataggio (vedi _url_ritorno_tutorati in views.py);
+      - "valutazione_aperta", l'id dell'iscrizione il cui salvataggio e' stato
+        rifiutato: quel pannello si riapre gia' compilato, con gli errori.
+
+    Il comportamento (chiusura esclusiva, controllo punteggio+giudizio,
+    uscita con modifiche non salvate) sta in valutazione.js, incluso da
+    _modale_valutazione.html.
+{% endcomment %}
+<div class="collapse js-modifica {% if valutazione_aperta == iscrizione.id %}show{% endif %}"
+     id="modifica-{{ iscrizione.id }}">
+    <form method="post" class="p-3"
+          action="{% url 'appelli:salva_valutazione' iscrizione.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="ritorno" value="{{ ritorno }}">
+
+        {% comment %}
+            Intestazione: dice chi si sta valutando e da' accesso agli
+            allegati -- che qui, con piu' spazio, sono per esteso.
+        {% endcomment %}
+        <div class="modulo-testata d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
+            <div class="text-truncate" style="min-width: 0;">
+                <span class="nome-studente">
+                    {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+                </span>
+                <span class="text-muted ms-2">
+                    {{ iscrizione.studente.email|default:iscrizione.studente.get_username }}
+                </span>
+            </div>
+            <div class="d-flex flex-wrap gap-3">
+                {% if iscrizione.file_tesi %}
+                    <a class="text-nowrap" href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
+                        <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Scarica tesi</a>
+                {% else %}
+                    <span class="text-nowrap allegato-assente">
+                        <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Nessuna tesi</span>
+                {% endif %}
+                {% if iscrizione.file_video %}
+                    <a class="text-nowrap" href="{% url 'appelli:scarica_video' iscrizione.id %}">
+                        <i class="bi bi-camera-video me-1" aria-hidden="true"></i>Scarica video</a>
+                {% elif iscrizione.link_video %}
+                    <a class="text-nowrap" href="{{ iscrizione.link_video }}"
+                       target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Apri video</a>
+                {% else %}
+                    <span class="text-nowrap allegato-assente">
+                        <i class="bi bi-camera-video me-1" aria-hidden="true"></i>Nessun video</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="etichetta-campo" for="{{ iscrizione.form.titolo.id_for_label }}">
+                Titolo della tesi
+            </label>
+            {{ iscrizione.form.titolo }}
+            {% if iscrizione.form.titolo.errors %}
+                <div class="text-danger small mt-1">{{ iscrizione.form.titolo.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-md-4">
+                {% comment %}
+                    I punti sono tre valori, non un numero da digitare: tre
+                    pulsanti si leggono e si premono in un colpo solo. Le
+                    etichette sono fratelli degli input (btn-check), quindi
+                    il gruppo va scritto a mano e non con {{ form.campo }}.
+                {% endcomment %}
+                <span class="etichetta-campo" id="punti-{{ iscrizione.id }}">Punteggio</span>
+                <div class="d-flex gap-2 segmento-punti" role="group"
+                     aria-labelledby="punti-{{ iscrizione.id }}">
+                    {% for scelta in iscrizione.form.punteggio %}
+                        {{ scelta.tag }}
+                        <label class="btn btn-outline-primary" for="{{ scelta.id_for_label }}">
+                            {{ scelta.choice_label }}
+                        </label>
+                    {% endfor %}
+                </div>
+                <div class="form-text">{{ iscrizione.form.punteggio.help_text }}</div>
+                {% if iscrizione.form.punteggio.errors %}
+                    <div class="text-danger small mt-1">{{ iscrizione.form.punteggio.errors.0 }}</div>
+                {% endif %}
+            </div>
+            <div class="col-12 col-md-8">
+                <label class="etichetta-campo" for="{{ iscrizione.form.giudizio.id_for_label }}">
+                    Giudizio
+                    <span class="etichetta-nota">(non visibile allo studente)</span>
+                </label>
+                {{ iscrizione.form.giudizio }}
+                {% if iscrizione.form.giudizio.errors %}
+                    <div class="text-danger small mt-1">{{ iscrizione.form.giudizio.errors.0 }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end align-items-center gap-3 mt-3">
+            <button type="button"
+                    class="btn btn-link text-muted text-decoration-none js-annulla-valutazione"
+                    data-bs-target="#modifica-{{ iscrizione.id }}">
+                Annulla
+            </button>
+            <button type="submit" class="btn btn-primary">Salva</button>
+        </div>
+    </form>
+</div>

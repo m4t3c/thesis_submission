@@ -454,6 +454,18 @@ def appello_detail(request, appello_id):
     if not docente_in_commissione(request.user, appello):
         raise PermissionDenied("Non fai parte della commissione di questo appello.")
 
+    return render(
+        request, "appelli/appello_detail.html", _contesto_dettaglio(request, appello)
+    )
+
+
+def _contesto_dettaglio(request, appello):
+    """Contesto del dettaglio di un appello, con i moduli di valutazione.
+
+    Separato dalla view perche' serve anche a salva_valutazione: un
+    salvataggio rifiutato dal dettaglio ridisegna questa pagina, non la
+    dashboard. I permessi li controlla chi la chiama.
+    """
     # Ordinate per cognome: l'ordine predefinito del modello e' quello di
     # iscrizione, che in un elenco da leggere non dice niente a nessuno.
     iscrizioni = list(
@@ -467,32 +479,65 @@ def appello_detail(request, appello_id):
     miei = [i for i in iscrizioni if i.tutor_id == request.user.pk]
     altri = [i for i in iscrizioni if i.tutor_id != request.user.pk]
 
-    return render(
-        request,
-        "appelli/appello_detail.html",
-        {
-            "appello": appello,
-            "iscrizioni": iscrizioni,
-            "iscritti_miei": miei,
-            "iscritti_altri": altri,
-            # Un presidente e' anche docente: senza questo, "Torna indietro" lo
-            # riporterebbe sempre nell'area docente, cioe' non da dove veniva.
-            "url_ritorno": (
-                "appelli:presidente_dashboard"
-                if is_presidente(request.user)
-                else "appelli:docente_dashboard"
-            ),
-        },
+    # Solo i propri laureandi hanno il modulo: la valutazione e' del relatore
+    # (vedi puo_valutare). auto_id come in _tutorati_correnti, e per la stessa
+    # ragione: un modulo per riga, e le <label> devono puntare al proprio.
+    for iscrizione in miei:
+        iscrizione.form = ValutazioneForm(
+            instance=iscrizione, auto_id=f"id_%s_{iscrizione.pk}"
+        )
+
+    return {
+        "appello": appello,
+        "iscrizioni": iscrizioni,
+        "iscritti_miei": miei,
+        "iscritti_altri": altri,
+        "punteggio_massimo": PUNTEGGIO_MAX,
+        # Un presidente e' anche docente: senza questo, "Torna indietro" lo
+        # riporterebbe sempre nell'area docente, cioe' non da dove veniva.
+        "url_ritorno": (
+            "appelli:presidente_dashboard"
+            if is_presidente(request.user)
+            else "appelli:docente_dashboard"
+        ),
+    }
+
+
+def _ritorno_al_dettaglio(request, iscrizione):
+    """True se il modulo e' stato inviato dal dettaglio dell'appello dello studente.
+
+    Il campo "ritorno" del dettaglio porta l'URL della pagina. Lo si confronta
+    con quello ricostruito da reverse(), e l'unico accettato e' quello
+    dell'appello a cui lo studente e' iscritto: un valore diverso o manomesso
+    fa ricadere sulla dashboard, e il valore ricevuto non finisce mai in un
+    rimando.
+
+    Serve anche essere in commissione, come per aprire la pagina: senza, un
+    relatore esterno potrebbe farsi ridisegnare (sugli errori) un elenco di
+    iscritti che appello_detail gli negherebbe.
+    """
+    atteso = reverse("appelli:appello_detail", args=[iscrizione.appello_id])
+    return request.POST.get("ritorno", "") == atteso and docente_in_commissione(
+        request.user, iscrizione.appello
     )
 
 
 def _url_ritorno_tutorati(request, iscrizione):
     """Dove tornare dopo un salvataggio: stessa pagina, stessi filtri, stessa riga.
 
-    Del "ritorno" ricevuto si tengono SOLO i filtri della sezione e si
-    ricostruisce il percorso con reverse(): cosi' un valore manomesso non puo'
+    Due pagine hanno il modulo: il dettaglio dell'appello (riconosciuto da
+    _ritorno_al_dettaglio) e la dashboard. Per quest'ultima del "ritorno"
+    ricevuto si tengono SOLO i filtri della sezione. In entrambi i casi il
+    percorso si ricostruisce con reverse(): cosi' un valore manomesso non puo'
     trasformare il salvataggio in un rimando verso un sito esterno.
     """
+    # L'ancora riporta alla riga appena salvata invece che in cima all'elenco.
+    ancora = f"#tutorato-{iscrizione.pk}"
+    if _ritorno_al_dettaglio(request, iscrizione):
+        return (
+            reverse("appelli:appello_detail", args=[iscrizione.appello_id]) + ancora
+        )
+
     nome = (
         "appelli:presidente_dashboard"
         if is_presidente(request.user)
@@ -506,8 +551,7 @@ def _url_ritorno_tutorati(request, iscrizione):
     url = reverse(nome)
     if coppie:
         url += "?" + urlencode(coppie)
-    # L'ancora riporta alla riga appena salvata invece che in cima all'elenco.
-    return f"{url}#tutorato-{iscrizione.pk}"
+    return url + ancora
 
 
 @login_required
@@ -543,7 +587,19 @@ def salva_valutazione(request, iscrizione_id):
     # rimandare alla dashboard. Con il rimando il pannello si sarebbe richiuso
     # e quanto scritto sarebbe andato perso: chi aveva compilato solo il
     # giudizio avrebbe dovuto riscriverlo daccapo.
+    if _ritorno_al_dettaglio(request, iscrizione):
+        return _dettaglio_con_valutazione_da_correggere(request, iscrizione, form)
     return _pagina_con_valutazione_da_correggere(request, iscrizione, form)
+
+
+def _dettaglio_con_valutazione_da_correggere(request, iscrizione, form):
+    """Dettaglio dell'appello con un modulo di valutazione aperto sugli errori."""
+    contesto = _contesto_dettaglio(request, iscrizione.appello)
+    for riga in contesto["iscritti_miei"]:
+        if riga.pk == iscrizione.pk:
+            riga.form = form
+    contesto["valutazione_aperta"] = iscrizione.pk
+    return render(request, "appelli/appello_detail.html", contesto)
 
 
 def _pagina_con_valutazione_da_correggere(request, iscrizione, form):

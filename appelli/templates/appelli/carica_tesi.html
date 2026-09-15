@@ -409,7 +409,7 @@
     #pannello-avanzamento .progress { height: 1.25rem; }
     #pannello-avanzamento .progress-bar { font-weight: 600; }
     /* I numeri non "ballano" mentre si aggiornano */
-    .avanzamento-dettagli { font-variant-numeric: tabular-nums; max-width: 640px; }
+    .avanzamento-dettagli { font-variant-numeric: tabular-nums; /*max-width: 640px;*/ }
     /* Un dato per riga, etichetta a sinistra e valore a destra: lo stesso
        schema delle tabelle a schede. */
     .avanzamento-dettagli .dato {
@@ -476,6 +476,17 @@
                             <div class="errore-server alert alert-danger shadow-sm mt-2" role="alert">
                                 <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
                                 {{ form.titolo.errors.0 }}
+                            </div>
+                        {% endif %}
+                        {% comment %}
+                            La regola della coppia detta prima di scontrarcisi.
+                            A consegna fatta non serve piu': titolo e tesi ci
+                            sono gia' entrambi e non si possono togliere.
+                        {% endcomment %}
+                        {% if not form.titolo_iniziale or not nome_file %}
+                            <div class="form-text">
+                                Titolo e file della tesi vanno inseriti insieme. Puoi
+                                salvare anche solo il tutor e completarli più avanti.
                             </div>
                         {% endif %}
                     </div>
@@ -765,8 +776,7 @@
                                 <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
                                 <span>
                                     Consegna completa: la commissione vede la tua tesi.
-                                    Titolo e file restano modificabili fino al giorno
-                                    dell'appello.
+                                    Titolo e file restano modificabili.
                                 </span>
                             </p>
                         {% else %}
@@ -1181,6 +1191,9 @@
         // stata caricata, non sceglierne una nuova significa "lasciala
         // com'e'", non "campo vuoto".
         var TESI_SALVATA = {% if nome_file %}true{% else %}false{% endif %};
+        // Il titolo gia' salvato si corregge ma non si svuota (vedi
+        // TesiUploadForm.clean_titolo).
+        var TITOLO_SALVATO = {% if form.titolo_iniziale %}true{% else %}false{% endif %};
         var VIDEO_SALVATO = {% if nome_video %}true{% else %}false{% endif %};
         // Prima del primo "Salva" non si segnala che un campo e' vuoto: lo si
         // farebbe mentre l'utente lo sta ancora compilando.
@@ -1284,16 +1297,29 @@
 
         // Ogni controllo restituisce il messaggio da mostrare, o '' se il
         // campo va bene.
+        //
+        // Titolo e tesi vanno a coppia (vedi TesiUploadForm.clean): nessuno
+        // dei due e' obbligatorio da solo, ma chi c'e' chiama l'altro. "C'e'"
+        // vuol dire scelto adesso OPPURE gia' salvato: una tesi gia' caricata
+        // non va ricaricata per correggere il titolo.
+        function titoloPresente() {
+            return !!(inputTitolo && inputTitolo.value.trim());
+        }
+        function tesiPresente() {
+            return TESI_SALVATA || !!(inputTesi && inputTesi.files && inputTesi.files[0]);
+        }
+
         function erroreTitolo() {
-            if (!inputTitolo) return '';
-            if (!inputTitolo.value.trim()) return 'Il titolo della tesi è obbligatorio.';
-            return '';
+            if (!inputTitolo || titoloPresente()) return '';
+            if (TITOLO_SALVATO) return 'Il titolo della tesi non può essere svuotato.';
+            return tesiPresente() ? 'Hai caricato la tesi: indica anche il titolo.' : '';
         }
 
         function erroreTesi() {
             if (!inputTesi) return '';
             if (!inputTesi.files || !inputTesi.files[0]) {
-                return TESI_SALVATA ? '' : 'Scegli il file PDF della tesi.';
+                return (TESI_SALVATA || !titoloPresente())
+                    ? '' : 'Hai indicato il titolo: carica anche il file della tesi.';
             }
             if (!estensioneAmmessa(inputTesi)) {
                 return 'La tesi deve essere un file PDF.';
@@ -1438,7 +1464,9 @@
         if (inputTesi) {
             inputTesi.addEventListener('change', function () {
                 if (inputTesi.files && inputTesi.files[0]) erroreCampo(inputTesi, erroreTesi());
-                else ricontrolla();
+                // Il file scelto cambia anche la risposta sul titolo (coppia):
+                // dopo il primo invio va riletto l'intero modulo.
+                ricontrolla();
             });
         }
         if (inputVideo) {

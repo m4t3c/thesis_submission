@@ -4,9 +4,13 @@
     una riga sola garantisce che i due gruppi restino identici col tempo.
 
     Si aspetta "iscrizione" nel contesto e, se la riga appartiene ai propri
-    laureandi, "mia" a vero.
+    laureandi, "mia" a vero. Solo in quel caso la riga porta la valutazione e,
+    subito sotto, una seconda riga con il modulo per modificarla: e allora
+    l'iscrizione deve avere .form agganciato dalla view (vedi appello_detail).
+
+    L'id "tutorato-N" e' l'ancora a cui torna la view dopo il salvataggio.
 {% endcomment %}
-<tr {% if mia %}class="riga-mia"{% endif %}>
+<tr {% if mia %}class="riga-mia" id="tutorato-{{ iscrizione.id }}"{% endif %}>
     <td class="fw-semibold" data-label="Studente">
         {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
     </td>
@@ -31,7 +35,7 @@
             <span class="text-muted small">nessuno</span>
         {% endif %}
     </td>
-    <td class="text-end" data-label="Tesi">
+    <td data-label="Tesi">
         {% if iscrizione.file_tesi %}
             <a class="btn btn-sm btn-soft-primary"
                href="{% url 'appelli:scarica_tesi' iscrizione.id %}">
@@ -41,4 +45,48 @@
             <span class="text-muted small">Non ancora caricata</span>
         {% endif %}
     </td>
+    <td class="text-end" data-label="Valutazione">
+        {% if mia %}
+            <span class="d-inline-flex align-items-center gap-3">
+                {% comment %}
+                    Stessa resa della sezione tutorati (_riga_tutorato.html):
+                    il punteggio si legge come un voto, e uno zero non si
+                    confonde con chi aspetta ancora la valutazione.
+                {% endcomment %}
+                {% if iscrizione.valutata %}
+                    <span class="punti-dati">
+                        <span class="punti-valore">{{ iscrizione.punteggio }}</span>
+                        <span class="punti-scala">/{{ punteggio_massimo }} punti</span>
+                    </span>
+                {% else %}
+                    <span class="pill-da-valutare" data-bs-toggle="tooltip"
+                          title="Per valutare uno studente, premi sul tasto «Modifica»">
+                        Da valutare
+                    </span>
+                {% endif %}
+                <button class="btn btn-sm btn-outline-primary" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#modifica-{{ iscrizione.id }}"
+                        aria-expanded="{% if valutazione_aperta == iscrizione.id %}true{% else %}false{% endif %}"
+                        aria-controls="modifica-{{ iscrizione.id }}">
+                    Modifica
+                </button>
+            </span>
+        {% else %}
+            {# La valutazione e' del solo relatore: agli altri non si mostra #}
+            <span class="text-muted small">—</span>
+        {% endif %}
+    </td>
 </tr>
+{% if mia %}
+    {% comment %}
+        Il modulo sta in una riga a se', a tutta larghezza: dentro una cella
+        sarebbe costretto nella colonna. "ritorno" e' l'URL di questa pagina,
+        che la view riconosce e ricostruisce (vedi _url_ritorno_tutorati).
+    {% endcomment %}
+    {% url 'appelli:appello_detail' iscrizione.appello_id as url_appello %}
+    <tr class="riga-valuta">
+        <td colspan="5">
+            {% include "appelli/_modulo_valutazione.html" with ritorno=url_appello %}
+        </td>
+    </tr>
+{% endif %}

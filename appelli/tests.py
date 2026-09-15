@@ -11,6 +11,8 @@ Uso:  python manage.py test appelli
 import datetime
 import os
 import re
+import shutil
+import tempfile
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
@@ -26,7 +28,37 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from .forms import MAX_BYTE_VIDEO
-from .models import AppelloDiLaurea, Commissione, StudenteAppelloDiLaurea
+from .models import (
+    PUNTEGGIO_MAX,
+    AppelloDiLaurea,
+    Commissione,
+    StudenteAppelloDiLaurea,
+)
+
+
+# --- File caricati: una cartella usa e getta per l'intera esecuzione ---------
+# Senza, i test scriverebbero nella MEDIA_ROOT vera (in Docker e' ./media del
+# progetto, montata dal disco) e ci lascerebbero dei resti: i file sostituiti
+# li cancella django-cleanup solo a transazione confermata, e TestCase non
+# conferma mai. Il database di test riparte dagli stessi id a ogni esecuzione,
+# quindi quei resti finiscono proprio nelle cartelle dei test successivi e ne
+# falsano i controlli sul contenuto della cartella.
+_MEDIA_DI_PROVA = None
+_media_override = None
+
+
+def setUpModule():
+    global _MEDIA_DI_PROVA, _media_override
+    _MEDIA_DI_PROVA = tempfile.mkdtemp(prefix="media-test-")
+    # override_settings avvisa gli storage (setting_changed), che ricalcolano
+    # la cartella: vale anche per SovrascriviStorage, creato senza location.
+    _media_override = override_settings(MEDIA_ROOT=_MEDIA_DI_PROVA)
+    _media_override.enable()
+
+
+def tearDownModule():
+    _media_override.disable()
+    shutil.rmtree(_MEDIA_DI_PROVA, ignore_errors=True)
 
 
 class BaseSetup(TestCase):
@@ -223,7 +255,8 @@ class CaricamentoTesiTest(BaseSetup):
         return SimpleUploadedFile(nome, b"%PDF-1.7 contenuto", content_type="application/pdf")
 
     def _dati(self, **extra):
-        """POST completo: titolo e tutor sono obbligatori in ogni salvataggio."""
+        """POST con titolo e tutor: la tesi, che va in coppia col titolo, la
+        aggiunge il singolo test."""
         dati = {
             "titolo": self.TITOLO,
             "tutor": self.docente.pk,
@@ -277,10 +310,10 @@ class CaricamentoTesiTest(BaseSetup):
         self.assertNotEqual(self.iscrizione.file_tesi.name, primo)
         self.assertIn("seconda", self.iscrizione.file_tesi.name)
 
-    def test_invio_a_vuoto_senza_tesi_da_errore(self):
+    def test_titolo_senza_tesi_da_errore(self):
         resp = self.client.post(self.url, self._dati())
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "obbligatorio")
+        self.assertContains(resp, "carica anche il file della tesi")
 
     def test_stesso_nome_non_viene_rinominato(self):
         """Ricaricare un file con lo stesso nome non aggiunge suffissi casuali."""
@@ -308,7 +341,7 @@ class CaricamentoTesiTest(BaseSetup):
 class StatoConsegnaTest(BaseSetup):
     """Il riepilogo "stato consegna" della pagina della tesi.
 
-    Riassume le TRE cose obbligatorie (titolo, tutor, tesi) e va letto come
+    Riassume le TRE cose da consegnare (titolo, tutor, tesi) e va letto come
     "cosa risulta consegnato", non come "cosa ho scritto nel modulo": e' la
     differenza che questi test tengono ferma.
     """
@@ -370,7 +403,7 @@ class StatoConsegnaTest(BaseSetup):
         validazione mostrerebbe titolo e tutor come acquisiti, mentre il
         database e' rimasto vuoto.
         """
-        # Manca la tesi, che il form richiede: l'invio viene rifiutato.
+        # Titolo senza tesi, che vanno a coppia: l'invio viene rifiutato.
         resp = self.client.post(self.url, {
             "titolo": "Un titolo mai salvato",
             "tutor": self.docente.pk,
@@ -633,7 +666,7 @@ class AffiliationTest(TestCase):
 
 
 class TitoloEVideoTest(BaseSetup):
-    """Titolo obbligatorio e non rimovibile; video facoltativo, file O link."""
+    """Titolo non rimovibile; video facoltativo, file O link."""
 
     def setUp(self):
         super().setUp()
@@ -807,6 +840,105 @@ class TitoloEVideoTest(BaseSetup):
     def test_download_video_assente_da_404(self):
         url = reverse("appelli:scarica_video", args=[self.iscrizione.id])
         self.assertEqual(self.client.get(url).status_code, 404)
+
+
+class TitoloETesiACoppiaTest(BaseSetup):
+    """Titolo e file della tesi: o tutti e due, o nessuno.
+
+    Nessuno dei due e' obbligatorio da solo, cosi' lo studente puo' salvare
+    la sola scelta del tutor. La coppia si giudica su come l'iscrizione
+    risultera' salvata, non sul singolo invio.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello
+        )
+        self.url = reverse("appelli:carica_tesi", args=[self.iscrizione.id])
+        self.client.force_login(self.studente)
+
+    def tearDown(self):
+        self.iscrizione.refresh_from_db()
+        if self.iscrizione.file_tesi:
+            self.iscrizione.file_tesi.delete(save=False)
+
+    def _pdf(self):
+        return SimpleUploadedFile(
+            "tesi.pdf", b"%PDF-1.7 contenuto", content_type="application/pdf"
+        )
+
+    def _post(self, **extra):
+        dati = {"tutor": self.docente.pk, "modalita_video": "nessuno"}
+        dati.update(extra)
+        return self.client.post(self.url, dati)
+
+    def test_si_salva_il_solo_tutor(self):
+        resp = self._post()
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.tutor, self.docente)
+        self.assertFalse(self.iscrizione.titolo)
+        self.assertFalse(self.iscrizione.file_tesi)
+
+    def test_titolo_di_soli_spazi_conta_come_assente(self):
+        resp = self._post(titolo="   ")
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+
+    def test_titolo_senza_tesi_rifiutato(self):
+        resp = self._post(titolo="Un titolo")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "carica anche il file della tesi")
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.tutor_id)   # niente di salvato
+
+    def test_tesi_senza_titolo_rifiutata(self):
+        resp = self._post(file_tesi=self._pdf())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "indica anche il titolo")
+        self.iscrizione.refresh_from_db()
+        self.assertFalse(self.iscrizione.file_tesi)
+
+    def test_tutti_e_due_insieme_salvati(self):
+        resp = self._post(titolo="Un titolo", file_tesi=self._pdf())
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Un titolo")
+        self.assertTrue(self.iscrizione.file_tesi)
+
+    def test_tutor_salvato_prima_poi_titolo_e_tesi(self):
+        """Il tutor bloccato non impedisce di completare il resto dopo."""
+        self._post()
+        resp = self.client.post(self.url, {
+            "titolo": "Un titolo", "file_tesi": self._pdf(),
+            "modalita_video": "nessuno",
+        })
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Un titolo")
+        self.assertTrue(self.iscrizione.file_tesi)
+
+    def test_tesi_gia_salvata_basta_per_correggere_il_titolo(self):
+        self._post(titolo="Primo", file_tesi=self._pdf())
+        resp = self._post(titolo="Secondo")
+        self.assertRedirects(resp, reverse("appelli:studente_dashboard"))
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Secondo")
+
+    def test_titolo_gia_salvato_non_si_svuota_nemmeno_senza_tesi(self):
+        """Un titolo senza tesi puo' esistere: lo mette il relatore dalla
+        valutazione. Lo studente non deve poterlo cancellare con un invio a
+        vuoto."""
+        self.iscrizione.titolo = "Messo dal relatore"
+        self.iscrizione.save()
+        resp = self._post(titolo="")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "non può essere svuotato")
+        self.iscrizione.refresh_from_db()
+        self.assertEqual(self.iscrizione.titolo, "Messo dal relatore")
+
+    def test_la_pagina_spiega_la_regola_finche_manca_qualcosa(self):
+        self.assertContains(self.client.get(self.url), "vanno inseriti insieme")
 
 
 class PuliziaOrfaneTest(BaseSetup):
@@ -2404,3 +2536,125 @@ class DettaglioIscrittiRaggruppatiTest(BaseSetup):
     def test_dentro_un_gruppo_l_ordine_e_alfabetico(self):
         html = self.client.get(self.url).content.decode()
         self.assertLess(html.index("Anna Bianchi"), html.index("Luca Verdi"))
+
+
+class ValutazioneDalDettaglioTest(BaseSetup):
+    """Dal dettaglio dell'appello il relatore valuta i propri laureandi.
+
+    "docente_test" (da BaseSetup) siede in commissione ed e' relatore di uno
+    solo dei due iscritti: l'altro e' di un collega, e il suo modulo non deve
+    comparire.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.collega = User.objects.create_user("doc_collega", password="pw")
+        self.collega.groups.add(self.g_docente)
+
+        self.mia = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello,
+            tutor=self.docente, titolo="Tesi mia",
+        )
+        altro = User.objects.create_user("studente_altro", password="pw")
+        altro.groups.add(self.g_studente)
+        self.sua = StudenteAppelloDiLaurea.objects.create(
+            studente=altro, appello=self.appello,
+            tutor=self.collega, titolo="Tesi sua",
+        )
+        self.url = reverse("appelli:appello_detail", args=[self.appello.id])
+        self.url_valuta = reverse("appelli:salva_valutazione", args=[self.mia.id])
+        self.client.force_login(self.docente)
+
+    def _post(self, **dati):
+        valori = {"titolo": "Tesi mia", "ritorno": self.url}
+        valori.update(dati)
+        return self.client.post(self.url_valuta, valori)
+
+    # --- La pagina ---------------------------------------------------------
+
+    def test_il_modulo_c_e_solo_per_i_propri_laureandi(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertIn('id="modifica-%d"' % self.mia.id, html)
+        self.assertNotIn('id="modifica-%d"' % self.sua.id, html)
+        self.assertNotIn(
+            reverse("appelli:salva_valutazione", args=[self.sua.id]), html
+        )
+
+    def test_il_ritorno_del_modulo_e_la_pagina_stessa(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertIn('name="ritorno" value="%s"' % self.url, html)
+
+    def test_punteggio_mostrato_come_voto(self):
+        self.mia.punteggio = 0
+        self.mia.giudizio = "Da rivedere."
+        self.mia.save()
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.context["punteggio_massimo"], PUNTEGGIO_MAX)
+        html = re.sub(r"\s+", " ", resp.content.decode())
+        self.assertIn('<span class="punti-scala">/%d punti</span>' % PUNTEGGIO_MAX, html)
+        self.assertNotIn('class="pill-da-valutare"', html)
+
+    def test_pagina_con_modale_e_script_condiviso(self):
+        for url in (self.url, reverse("appelli:docente_dashboard")):
+            with self.subTest(url=url):
+                html = self.client.get(url).content.decode()
+                self.assertIn('id="modaleValutazione"', html)
+                script = re.findall(r'<script src="[^"]*valutazione[^"]*\.js"', html)
+                self.assertEqual(len(script), 1)
+
+    # --- Il salvataggio ----------------------------------------------------
+
+    def test_salvato_si_torna_al_dettaglio_sulla_riga(self):
+        resp = self._post(punteggio="2", giudizio="Ottimo.")
+        self.assertRedirects(
+            resp, f"{self.url}#tutorato-{self.mia.id}", fetch_redirect_response=False
+        )
+        self.mia.refresh_from_db()
+        self.assertEqual(self.mia.punteggio, 2)
+
+    def test_errore_ridisegna_il_dettaglio_col_modulo_aperto(self):
+        resp = self._post(giudizio="Solo il giudizio.")
+        self.assertTemplateUsed(resp, "appelli/appello_detail.html")
+        self.assertEqual(resp.context["valutazione_aperta"], self.mia.id)
+        html = re.sub(r"\s+", " ", resp.content.decode())
+        self.assertIn(
+            'class="collapse js-modifica show" id="modifica-%d"' % self.mia.id, html
+        )
+        self.assertIn("Solo il giudizio.", html)
+
+    def test_ritorno_di_un_altro_appello_non_accettato(self):
+        """Solo il dettaglio dell'appello dello studente: il resto va in dashboard."""
+        altro = AppelloDiLaurea.objects.create(
+            data=datetime.date(2030, 2, 1),
+            corso_di_laurea="Altro corso",
+            commissione=self.commissione,
+        )
+        resp = self._post(
+            punteggio="1", giudizio="Va bene.",
+            ritorno=reverse("appelli:appello_detail", args=[altro.id]),
+        )
+        self.assertTrue(
+            resp["Location"].startswith(reverse("appelli:docente_dashboard"))
+        )
+
+    def test_ritorno_manomesso_non_porta_fuori_dal_sito(self):
+        resp = self._post(
+            punteggio="1", giudizio="Va bene.",
+            ritorno="https://esempio.invalido" + self.url,
+        )
+        self.assertNotIn("esempio.invalido", resp["Location"])
+        self.assertTrue(
+            resp["Location"].startswith(reverse("appelli:docente_dashboard"))
+        )
+
+    def test_relatore_fuori_commissione_non_riceve_il_dettaglio(self):
+        """Sugli errori non gli si ridisegna una pagina che non potrebbe aprire."""
+        self.commissione.docenti.remove(self.docente)
+        resp = self._post(giudizio="Solo il giudizio.")
+        self.assertTemplateUsed(resp, "appelli/docente_dashboard.html")
+        self.assertNotContains(resp, "Tesi sua")
+
+        resp = self._post(punteggio="1", giudizio="Va bene.")
+        self.assertTrue(
+            resp["Location"].startswith(reverse("appelli:docente_dashboard"))
+        )

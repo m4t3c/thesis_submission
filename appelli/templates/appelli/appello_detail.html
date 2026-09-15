@@ -7,6 +7,9 @@
     "url_ritorno" arriva dalla view perche' il presidente e' anche docente: un
     collegamento fisso lo riporterebbe sempre nell'area docente, cioe' non da
     dove era venuto.
+
+    Dei propri laureandi il docente vede e modifica anche la valutazione, con
+    lo stesso modulo della sezione "I miei tutorati" (_modulo_valutazione.html).
 {% endcomment %}
 
 {% block title %}{{ appello.corso_di_laurea }} — {{ appello.data|date:"d/m/Y" }}{% if appello.ora %} {{ appello.ora|time:"H:i" }}{% endif %}{% endblock %}
@@ -75,12 +78,28 @@
 
     /* Striscia blu a sinistra, sulla testata e su ogni riga del gruppo.
        box-shadow e non border-left: il bordo allargherebbe la cella e
-       disallineerebbe le colonne rispetto alle righe degli altri studenti. */
-    .riga-gruppo-mia td:first-child,
-    .riga-mia td:first-child { box-shadow: inset 4px 0 0 var(--brand); }
-    /* table-hover riscrive lo sfondo della cella al passaggio del cursore:
-       senza questo la striscia resterebbe coperta. */
-    .table-hover > tbody > tr.riga-mia:hover > td:first-child {
+       disallineerebbe le colonne rispetto alle righe degli altri studenti.
+       Solo da desktop: in modalita' "schede" la striscia va sul riquadro
+       (vedi sotto), e la regola dell'hover, piu' specifica, la riporterebbe
+       sulla prima cella dopo un tocco. */
+    @media (min-width: 992px) {
+        .riga-gruppo-mia td:first-child,
+        .riga-mia td:first-child { box-shadow: inset 4px 0 0 var(--brand); }
+        /* table-hover riscrive lo sfondo della cella al passaggio del cursore:
+           senza questo la striscia resterebbe coperta. */
+        .table-hover > tbody > tr.riga-mia:hover > td:first-child {
+            box-shadow: inset 4px 0 0 var(--brand);
+        }
+    }
+
+    /* Riga del modulo di valutazione, sotto quella dello studente. A modulo
+       chiuso la cella resta alta zero, quindi fondo e striscia si vedono solo
+       quando il modulo e' aperto, e lo legano alla riga "mia" di sopra.
+       Il box-shadow sostituisce quello con cui Bootstrap colora le celle al
+       passaggio del cursore: il modulo non e' una riga da evidenziare. */
+    .riga-valuta td {
+        padding: 0;
+        background: var(--brand-velo);
         box-shadow: inset 4px 0 0 var(--brand);
     }
 
@@ -98,7 +117,18 @@
         .table-stack .riga-gruppo td::before { display: none; }
         /* Sulla scheda la striscia va su tutto il riquadro, non su una cella */
         .table-stack .riga-mia { box-shadow: inset 4px 0 0 var(--brand); }
-        .table-stack .riga-mia td:first-child { box-shadow: none; }
+
+        /* Neanche la riga del modulo e' una scheda: chiusa sarebbe un
+           riquadro vuoto fra uno studente e l'altro. Aperta, il riquadro lo
+           disegna la cella stessa. */
+        .table-stack .riga-valuta {
+            background: transparent; border: 0; border-radius: 0;
+            margin: 0; padding: 0;
+        }
+        .table-stack .riga-valuta td {
+            display: block; text-align: left; border-radius: .6rem;
+        }
+        .table-stack .riga-valuta td::before { display: none; }
     }
 </style>
 
@@ -114,7 +144,8 @@
                             <th>Studente</th>
                             <th>Titolo</th>
                             <th>Video</th>
-                            <th class="text-end">Tesi</th>
+                            <th>Tesi</th>
+                            <th class="text-end">Valutazione</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -125,7 +156,7 @@
                         {% endcomment %}
                         {% if iscritti_miei %}
                             <tr class="riga-gruppo riga-gruppo-mia">
-                                <td colspan="4">
+                                <td colspan="5">
                                     Di cui sei tutor
                                     <span class="conteggio">· {{ iscritti_miei|length }}</span>
                                 </td>
@@ -136,7 +167,7 @@
 
                             {% if iscritti_altri %}
                                 <tr class="riga-gruppo">
-                                    <td colspan="4">
+                                    <td colspan="5">
                                         Altri studenti
                                         <span class="conteggio">· {{ iscritti_altri|length }}</span>
                                     </td>
@@ -155,4 +186,7 @@
         {% endif %}
     </div>
 </div>
+
+{# Modale "modifiche non salvate" e script dei moduli di valutazione #}
+{% include "appelli/_modale_valutazione.html" %}
 {% endblock %}

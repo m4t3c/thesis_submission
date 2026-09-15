@@ -1,0 +1,33 @@
+{% load static %}
+{% comment %}
+    Popup: uscita dal modulo di valutazione con modifiche non salvate, piu' lo
+    script che governa i moduli (valutazione.js). Stanno insieme perche' lo
+    script si appoggia a questa modale: includendo l'uno si ha sempre l'altra.
+
+    Uno solo per tutta la pagina, non uno per riga: le righe sono tante e
+    possono arrivare anche dopo, dalla ricerca. Lo includono le pagine che
+    mostrano _modulo_valutazione.html.
+{% endcomment %}
+<div class="modal fade" id="modaleValutazione" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifiche non salvate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Hai delle modifiche non ancora salvate. Vuoi salvarle prima di uscire?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Rimani</button>
+                <button type="button" class="btn btn-outline-danger" id="btn-esci-senza-salvare">
+                    Esci senza salvare
+                </button>
+                <button type="button" class="btn btn-primary" id="btn-salva-esci-valutazione">
+                    Salva ed esci
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="{% static 'valutazione.js' %}"></script>
