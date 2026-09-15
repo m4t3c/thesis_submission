@@ -58,6 +58,28 @@ CSRF_TRUSTED_ORIGINS = [
     ).split(",") if o
 ]
 
+# Traefik parla gia' solo HTTPS con il browser, quindi qui sotto e' difesa in
+# profondita': protegge dai casi in cui una richiesta in chiaro non passa da
+# Traefik (rete compromessa fra client e proxy, redirect futuro cambiato per
+# errore). In locale (DEBUG=1) resterebbero attive senza motivo, dato che li'
+# non c'e' alcun HTTPS: per questo valgono solo in produzione.
+if not DEBUG:
+    # Il cookie di sessione e quello CSRF non vengono mai mandati su HTTP.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # Se una richiesta arrivasse comunque in HTTP, Django la rimanda in HTTPS
+    # invece di servirla in chiaro (si affida a SECURE_PROXY_SSL_HEADER sopra
+    # per sapere lo schema reale della richiesta originale).
+    SECURE_SSL_REDIRECT = True
+    # Dice al browser di andare sempre in HTTPS anche per il primo indirizzo
+    # digitato senza schema, PRIMA che la richiesta parta in rete: e' l'unica
+    # difesa contro chi intercetta la primissima richiesta in chiaro, che un
+    # redirect lato server non puo' prevenire (per redirigerla dovrebbe prima
+    # riceverla). Valore basso apposta: e' quasi irreversibile una volta
+    # ricordato dal browser, da alzare gradualmente dopo aver verificato che
+    # tutto funzioni in HTTPS.
+    SECURE_HSTS_SECONDS = 3600
+
 
 # --- Applicazioni e middleware -----------------------------------------------
 

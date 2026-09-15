@@ -81,14 +81,19 @@ def puo_valutare(utente, iscrizione):
 
 # --- Pagina di test Shibboleth --------------------------------------------
 
+@login_required
 def shibboleth_test(request):
     """Stampa tutti gli attributi che il server passa a Django (request.META).
 
     Serve a verificare i nomi reali degli attributi Shibboleth (uid, ou, sn,
     givenName, ...) sul dominio di produzione, prima di configurare
-    shibboleth.py. ATTENZIONE: espone dati sensibili (cookie di sessione,
-    header) -> da RIMUOVERE o proteggere una volta finiti i test.
+    shibboleth.py. Espone dati sensibili (cookie di sessione, header): per
+    questo è riservata ai superuser, l'unico ruolo pensato per la
+    manutenzione tecnica del sito.
     """
+    if not request.user.is_superuser:
+        raise PermissionDenied("Pagina riservata agli amministratori.")
+
     righe = [
         f"{chiave}: {valore!r}, type: {type(valore)}"
         for chiave, valore in sorted(request.META.items())
