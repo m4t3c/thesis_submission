@@ -137,4 +137,7 @@ thesis_submission/          Configurazione del progetto Django
   all'esterno.
 - `pulisci_tesi_orfane` (in modalità anteprima di default) individua i file
   rimasti sul disco senza più un'iscrizione che li referenzi, utile come
-  manutenzione periodica.
+  manutenzione periodica. Il comando è:
+  ```bash
+  docker compose exec web python manage.py pulisci_tesi_orfane
+  ```
