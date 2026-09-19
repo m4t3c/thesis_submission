@@ -14,6 +14,7 @@
     uscita con modifiche non salvate) sta in valutazione.js, incluso da
     _modale_valutazione.html.
 {% endcomment %}
+{% load anagrafica %}
 <div class="collapse js-modifica {% if valutazione_aperta == iscrizione.id %}show{% endif %}"
      id="modifica-{{ iscrizione.id }}">
     <form method="post" class="p-3"
@@ -26,9 +27,9 @@
             allegati -- che qui, con piu' spazio, sono per esteso.
         {% endcomment %}
         <div class="modulo-testata d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
-            <div class="text-truncate" style="min-width: 0;">
+            <div class="text-truncate min-w-0">
                 <span class="nome-studente">
-                    {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+                    {{ iscrizione.studente|cognome_nome }}
                 </span>
                 <span class="text-muted ms-2">
                     {{ iscrizione.studente.email|default:iscrizione.studente.get_username }}

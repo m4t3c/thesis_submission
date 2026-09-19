@@ -5,6 +5,10 @@
     una card ciascuna, e la tabella degli appelli a cui puo' ancora iscriversi.
     La commissione non compare mai: allo studente si mostrano solo corso, data
     ed eventuale orario.
+
+    Entrambe le parti si fermano agli appelli non ancora passati: quelli
+    conclusi non compaiono e non c'e' spunta che li riporti (vedi
+    studente_dashboard in views.py).
 {% endcomment %}
 
 {% block title %}Area Studente{% endblock %}
@@ -129,7 +133,7 @@
     {% endfor %}
     </div>
 {% else %}
-    <p class="text-muted mb-4">Non sei ancora iscritto a nessun appello. Iscriviti all'appello di laurea su
+    <p class="text-muted mb-4">Non sei iscritto a nessun appello in programma. Iscriviti all'appello di laurea su
         <a href="https://www.esse3.unimore.it/auth/studente/Graduation/Bacheca.do?menu_opened_cod=menu_link-navbox_studenti_Area_Studente" target="blank">esse3</a> e, una volta che il presidente l'avrà
         creato, vedrai i dati in questa pagina.</p>
 {% endif %}
@@ -164,7 +168,9 @@
                 </table>
             </div>
         {% else %}
-            <p class="text-muted mb-0 p-3">Nessun altro appello disponibile.</p>
+            <p class="text-muted mb-0 p-3">
+                Nessun altro appello disponibile in programma.
+            </p>
         {% endif %}
     </div>
 </div>

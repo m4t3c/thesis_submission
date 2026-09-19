@@ -3,13 +3,14 @@
  * controllo punteggio+giudizio, uscita con modifiche non salvate, fumetti.
  *
  * Condiviso dall'area docente (sezione "I miei tutorati") e dal dettaglio di
- * un appello: lo include _modale_valutazione.html, che porta anche la modale
+ * un appello: lo collega _modale_valutazione.html, che porta anche la modale
  * a cui questo script si appoggia. Si aspetta i moduli di
  * _modulo_valutazione.html.
  *
- * DOMContentLoaded non e' una precauzione di rito: bootstrap.bundle.js e'
- * caricato in fondo a base.html, cioe' DOPO questo file. Eseguendo subito,
- * "bootstrap" non esisterebbe ancora.
+ * Caricato con "defer", quindi dopo bootstrap.bundle.js (che in fondo a
+ * base.html e' un normale script bloccante) e a documento gia' letto.
+ * L'ascolto di DOMContentLoaded resta comunque: non costa nulla e non fa
+ * dipendere lo script da come viene incluso.
  */
 document.addEventListener('DOMContentLoaded', function () {
     // --- Modulo di valutazione ------------------------------------------

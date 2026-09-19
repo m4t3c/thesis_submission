@@ -1,4 +1,5 @@
 {% extends "appelli/base.html" %}
+{% load static %}
 
 {% comment %}
     Pagina degli appelli, usata sia dal docente sia dal presidente: cambiano
@@ -12,9 +13,17 @@
 
 {% block title %}{{ titolo_pagina }}{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/docente_dashboard.css' %}">
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/docente_dashboard.js' %}" defer></script>
+{% endblock %}
+
 {% block content %}
-<div style="display: flex; justify-content: space-between;" class="mb-4">
-    <h1 class="h3 section-title" style="margin-top: auto; margin-bottom: auto;">{{ titolo_pagina }}</h1>
+<div class="dashboard-testata mb-4">
+    <h1 class="h3 section-title dashboard-titolo">{{ titolo_pagina }}</h1>
 
     {% if puo_creare_appelli %}
         <a class="btn btn-outline-primary btn-crea-appello btn-lg py-3"
@@ -25,7 +34,7 @@
 </div>
 
 {% comment %}
-    I miei tutorati: gli studenti di cui il docente e' relatore, degli appelli
+    I miei tutorati: gli studenti di cui il docente e' tutor, degli appelli
     non ancora passati. Sta in cima perche' e' l'unica sezione su cui deve
     AGIRE; le altre due si consultano.
 
@@ -34,7 +43,7 @@
     utile un gruppo chiuso -- senza, per sapere dove intervenire bisognerebbe
     aprirli tutti.
 
-    La ricerca aggiorna l'elenco mentre si scrive (vedi lo script in fondo) e
+    La ricerca aggiorna l'elenco mentre si scrive (vedi static/js/docente_dashboard.js) e
     sostituisce i gruppi con un elenco piatto. I gruppi restano comunque nella
     pagina, solo nascosti: annullare la ricerca e' cosi' immediato e non costa
     un'altra richiesta al server.
@@ -48,14 +57,19 @@
 
         {% comment %}
             Resta un form vero: senza JavaScript si cerca premendo Invio e la
-            pagina risponde con gli stessi risultati. Lo script in fondo ci si
+            pagina risponde con gli stessi risultati. Lo script (docente_dashboard.js) ci si
             innesta sopra, non lo sostituisce.
         {% endcomment %}
         <form method="get" class="d-flex align-items-center" id="form-ricerca-tutorati">
+            {# Senza, cercare spegnerebbe i due interruttori (vedi _campi_nascosti) #}
+            {% for campo in filtri_ricerca %}
+                <input type="hidden" name="{{ campo.nome }}" value="{{ campo.valore }}">
+            {% endfor %}
             <div class="campo-ricerca">
                 <i class="bi bi-search" aria-hidden="true"></i>
                 <input type="search" name="q" value="{{ ricerca_tutorati }}"
                        id="ricerca-tutorati" class="form-control"
+                       data-url-ricerca="{% url 'appelli:cerca_tutorati' %}"
                        autocomplete="off"
                        aria-label="Cerca fra i tuoi tutorati"
                        aria-controls="risultati-tutorati"
@@ -119,7 +133,7 @@
                     </div>
                 </div>
             {% empty %}
-                <p class="text-muted mb-0 p-3">Non sei relatore di nessuno studente.</p>
+                <p class="text-muted mb-0 p-3">Non sei tutor di nessuno studente.</p>
             {% endfor %}
         </div>
     </div>
@@ -127,7 +141,10 @@
 
 {# ---------------- Appelli delle proprie commissioni ---------------- #}
 <div class="card shadow-sm mb-4">
-    <div class="card-header testata-blu">I miei appelli</div>
+    <div class="card-header testata-blu d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <span>I miei appelli</span>
+        {% include "appelli/_spunta_passati.html" with spunta=spunta_miei %}
+    </div>
     <div class="card-body p-0">
         {% if miei_appelli %}
             <div class="table-responsive">
@@ -164,14 +181,19 @@
                 </table>
             </div>
         {% else %}
-            <p class="text-muted mb-0 p-3">Non fai parte della commissione di nessun appello.</p>
+            <p class="text-muted mb-0 p-3">
+                Non fai parte della commissione di nessun appello{% if not spunta_miei.attiva %} in programma{% endif %}.
+            </p>
         {% endif %}
     </div>
 </div>
 
 {# ---------------- Altri appelli: sola consultazione, senza dettaglio ---------------- #}
 <div class="card shadow-sm">
-    <div class="card-header testata-blu">Altri appelli</div>
+    <div class="card-header testata-blu d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <span>Altri appelli</span>
+        {% include "appelli/_spunta_passati.html" with spunta=spunta_altri %}
+    </div>
     <div class="card-body p-0">
         {% if altri_appelli %}
             <div class="table-responsive">
@@ -201,7 +223,9 @@
                 </table>
             </div>
         {% else %}
-            <p class="text-muted mb-0 p-3">Nessun altro appello.</p>
+            <p class="text-muted mb-0 p-3">
+                Nessun altro appello{% if not spunta_altri.attiva %} in programma{% endif %}.
+            </p>
         {% endif %}
     </div>
 </div>
@@ -209,104 +233,4 @@
 {# Modale "modifiche non salvate" e script dei moduli di valutazione #}
 {% include "appelli/_modale_valutazione.html" %}
 
-<script>
-{% comment %}
-    Solo la ricerca mentre si scrive: il comportamento dei moduli di
-    valutazione sta in valutazione.js (vedi _modale_valutazione.html).
-
-    DOMContentLoaded non e' una precauzione di rito: bootstrap.bundle.js e'
-    caricato in fondo a base.html, cioe' DOPO questo blocco. Eseguendo subito,
-    "bootstrap" non esisterebbe ancora.
-{% endcomment %}
-document.addEventListener('DOMContentLoaded', function () {
-    var URL_RICERCA = "{% url 'appelli:cerca_tutorati' %}";
-    var input = document.getElementById('ricerca-tutorati');
-    var azzera = document.getElementById('azzera-ricerca');
-    var risultati = document.getElementById('risultati-tutorati');
-    var elenco = document.getElementById('elenco-tutorati');
-    var attesa = null;     // timer del debounce
-    var richiesta = null;  // ricerca in corso, da annullare se ne parte un'altra
-
-    // --- Ricerca mentre si scrive ---------------------------------------
-    if (input) {
-        // I gruppi restano nella pagina: tornare all'elenco completo e'
-        // scoprirli di nuovo, non richiederli al server.
-        var mostraElenco = function () {
-            risultati.hidden = true;
-            risultati.textContent = '';
-            elenco.hidden = false;
-        };
-
-        var annulla = function () {
-            if (richiesta) { richiesta.abort(); richiesta = null; }
-            clearTimeout(attesa);
-            input.value = '';
-            azzera.hidden = true;
-            mostraElenco();
-            // L'URL torna pulito senza ricaricare: altrimenti un aggiornamento
-            // della pagina (o il salvataggio di una valutazione) riporterebbe
-            // una ricerca che sullo schermo era gia' stata annullata.
-            history.replaceState(null, '', window.location.pathname);
-            input.focus();
-        };
-
-        var cerca = function (termine) {
-            if (richiesta) richiesta.abort();
-            richiesta = new AbortController();
-            fetch(URL_RICERCA + '?q=' + encodeURIComponent(termine), {
-                headers: {'X-Requested-With': 'XMLHttpRequest'},
-                credentials: 'same-origin',
-                signal: richiesta.signal
-            })
-            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-            .then(function (dati) {
-                // Il contenuto arriva dal nostro template, gia' messo in salvo
-                // da Django: non e' testo dell'utente rimesso in pagina.
-                risultati.innerHTML = dati.html;
-                risultati.hidden = false;
-                elenco.hidden = true;
-                // Anche l'URL segue la ricerca: ricaricando, o tornando dopo
-                // aver salvato, si ritrovano gli stessi risultati.
-                history.replaceState(null, '', '?q=' + encodeURIComponent(termine));
-            })
-            .catch(function (e) { if (e.name !== 'AbortError') mostraElenco(); });
-        };
-
-        input.addEventListener('input', function () {
-            clearTimeout(attesa);
-            var termine = input.value.trim();
-            if (termine.length < 2) {
-                // Sotto le due lettere i risultati sarebbero troppi per essere
-                // utili: e' la stessa soglia della ricerca dei docenti.
-                mostraElenco();
-            } else {
-                // Si aspetta una breve pausa nella digitazione: senza, ogni
-                // tasto premuto produrrebbe una query al database.
-                attesa = setTimeout(function () { cerca(termine); }, 250);
-            }
-            azzera.hidden = termine.length === 0;
-        });
-
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') { annulla(); return; }
-            // La ricerca e' gia' partita da sola: inviare il form mostrerebbe
-            // lo stesso risultato, solo dopo un giro completo di pagina.
-            if (e.key === 'Enter') e.preventDefault();
-        });
-
-        azzera.addEventListener('click', annulla);
-        // Il collegamento dentro i risultati e' un vero link, e senza
-        // JavaScript ricarica la pagina: qui lo si intercetta per evitarlo.
-        risultati.addEventListener('click', function (e) {
-            if (!e.target.closest('.js-annulla-ricerca')) return;
-            e.preventDefault();
-            annulla();
-        });
-
-        // Pagina aperta con una ricerca gia' nell'URL (o tornata da un
-        // salvataggio): il campo e' pieno, quindi la crocetta deve esserci.
-        if (input.value.trim()) azzera.hidden = false;
-    }
-});
-</script>
 {% endblock %}

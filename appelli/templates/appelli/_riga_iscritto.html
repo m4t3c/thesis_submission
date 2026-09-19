@@ -10,9 +10,11 @@
 
     L'id "tutorato-N" e' l'ancora a cui torna la view dopo il salvataggio.
 {% endcomment %}
+{% load anagrafica %}
 <tr {% if mia %}class="riga-mia" id="tutorato-{{ iscrizione.id }}"{% endif %}>
+    {# "Cognome Nome": e' il cognome a dare l'ordine dell'elenco. #}
     <td class="fw-semibold" data-label="Studente">
-        {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+        {{ iscrizione.studente|cognome_nome }}
     </td>
     <td class="cell-titolo" data-label="Titolo">
         {% if iscrizione.titolo %}{{ iscrizione.titolo }}{% else %}
@@ -72,7 +74,7 @@
                 </button>
             </span>
         {% else %}
-            {# La valutazione e' del solo relatore: agli altri non si mostra #}
+            {# La valutazione e' del solo tutor: agli altri non si mostra #}
             <span class="text-muted small">—</span>
         {% endif %}
     </td>

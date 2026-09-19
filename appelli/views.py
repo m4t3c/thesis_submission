@@ -65,18 +65,18 @@ def docente_in_commissione(user, appello):
     return appello.commissione.docenti.filter(pk=user.pk).exists()
 
 
-def is_relatore(utente, iscrizione):
-    """True se l'utente e' il relatore (tutor) di quella iscrizione."""
+def is_tutor(utente, iscrizione):
+    """True se l'utente e' il tutor (tutor) di quella iscrizione."""
     return iscrizione.tutor_id == utente.pk
 
 
 def puo_valutare(utente, iscrizione):
-    """Chi puo' correggere titolo, punteggio e giudizio: il solo relatore.
+    """Chi puo' correggere titolo, punteggio e giudizio: il solo tutor.
 
     Non basta essere docente e non basta essere in commissione: la valutazione
     e' una proposta personale di chi ha seguito la tesi, e solo lui la scrive.
     """
-    return is_docente(utente) and is_relatore(utente, iscrizione)
+    return is_docente(utente) and is_tutor(utente, iscrizione)
 
 
 # --- Pagina di test Shibboleth --------------------------------------------
@@ -147,25 +147,35 @@ def studente_dashboard(request):
     I due elenchi sono complementari: un appello a cui lo studente e' gia'
     iscritto non deve ricomparire fra quelli disponibili, altrimenti il
     pulsante "Iscriviti" prometterebbe un'azione che non ha piu' effetto.
+
+    Gli appelli gia' passati restano fuori da entrambi, e qui senza spunta che
+    li riporti: la pagina serve a completare una consegna, e una scadenza
+    trascorsa non si completa piu'. Allo studente riguarda al piu' la propria
+    laurea, che ha gia' discusso; l'interruttore sta nell'area docente, dove
+    invece capita davvero di dover rivedere un appello concluso.
     """
     if not is_studente(request.user):
         raise PermissionDenied("Solo gli studenti possono accedere a questa pagina.")
 
+    oggi = timezone.localdate()
+
     iscrizioni = request.user.iscrizioni.select_related("appello", "tutor").order_by(
         "appello__data", F("appello__ora").asc(nulls_last=True)
     )
-    appelli_iscritti = iscrizioni.values_list("appello_id", flat=True)
-    # L'ordine (dal piu' vecchio) arriva dal Meta di AppelloDiLaurea.
-    appelli_disponibili = AppelloDiLaurea.objects.exclude(
-        pk__in=list(appelli_iscritti)
-    )
+    # Gli id da escludere si prendono da TUTTE le iscrizioni, comprese quelle
+    # passate: un appello a cui si e' gia' iscritti non deve ricomparire fra i
+    # disponibili, dove il posto sembrerebbe ancora da prendere.
+    appelli_iscritti = list(iscrizioni.values_list("appello_id", flat=True))
 
     return render(
         request,
         "appelli/studente_dashboard.html",
         {
-            "iscrizioni": iscrizioni,
-            "appelli_disponibili": appelli_disponibili,
+            "iscrizioni": iscrizioni.filter(appello__data__gte=oggi),
+            # L'ordine (dal piu' vecchio) arriva dal Meta di AppelloDiLaurea.
+            "appelli_disponibili": AppelloDiLaurea.objects.exclude(
+                pk__in=appelli_iscritti
+            ).filter(data__gte=oggi),
         },
     )
 
@@ -280,8 +290,11 @@ def _contesto_appelli(request, puo_creare, titolo, filtri=None):
             filtri viaggiano nel campo "ritorno" e non nell'URL.
     """
     utente = request.user
+    valori = _filtri_pagina(request, filtri)
 
-    def elenco(queryset):
+    def elenco(queryset, passati):
+        if not passati:
+            queryset = queryset.filter(data__gte=timezone.localdate())
         # order_by esplicito: con annotate() il Meta.ordering non viene
         # applicato (vedi ORDINE_APPELLI in models.py).
         return (
@@ -291,22 +304,84 @@ def _contesto_appelli(request, puo_creare, titolo, filtri=None):
             .order_by(*ORDINE_APPELLI)
         )
 
-    miei = elenco(AppelloDiLaurea.objects.filter(commissione__docenti=utente))
-    altri = elenco(AppelloDiLaurea.objects.exclude(commissione__docenti=utente))
+    miei = elenco(
+        AppelloDiLaurea.objects.filter(commissione__docenti=utente),
+        valori[PASSATI_MIEI],
+    )
+    altri = elenco(
+        AppelloDiLaurea.objects.exclude(commissione__docenti=utente),
+        valori[PASSATI_ALTRI],
+    )
 
     contesto = {
         "miei_appelli": miei,
         "altri_appelli": altri,
         "puo_creare_appelli": puo_creare,
         "titolo_pagina": titolo,
+        "spunta_miei": _spunta(valori, PASSATI_MIEI),
+        "spunta_altri": _spunta(valori, PASSATI_ALTRI),
+        # Il form della ricerca e' l'altro comando della pagina, e ha lo
+        # stesso bisogno: riportare cio' che non gestisce lui.
+        "filtri_ricerca": _campi_nascosti(valori, "q"),
     }
     contesto.update(_tutorati_del_docente(request, utente, filtri))
     return contesto
 
 
-# Filtri della sezione tutorati. Sono anche gli unici parametri che vengono
-# riportati nell'URL dopo un salvataggio: tutto il resto viene scartato.
-PARAMETRI_TUTORATI = ("q",)
+def _filtri_pagina(request, filtri=None):
+    """Valori dei filtri della pagina, letti dalla querystring o dal "ritorno".
+
+    Dopo una POST la querystring non c'e': i filtri viaggiano nel campo
+    "ritorno" del modulo e arrivano qui gia' spacchettati in coppie. In
+    entrambi i casi si tiene solo cio' che e' un filtro noto, perche' il valore
+    viene comunque dal browser.
+    """
+    if filtri is None:
+        voci = request.GET
+    else:
+        voci = dict((c, v) for c, v in filtri if c in PARAMETRI_TUTORATI)
+    return {
+        "q": (voci.get("q") or "").strip(),
+        # Solo "1" accende un interruttore: un valore storto vale come spento,
+        # che e' il comportamento predefinito e piu' innocuo.
+        PASSATI_MIEI: voci.get(PASSATI_MIEI) == "1",
+        PASSATI_ALTRI: voci.get(PASSATI_ALTRI) == "1",
+    }
+
+
+def _campi_nascosti(valori, escluso):
+    """I filtri attivi della pagina meno uno, come coppie nome/valore.
+
+    Ogni comando della pagina e' un form GET a se', e un form GET manda solo
+    cio' che contiene: senza riportare gli altri filtri, accendere un
+    interruttore spegnerebbe il gemello e azzererebbe la ricerca in corso.
+    Si esclude il proprio, che il form gia' contiene per conto suo.
+    """
+    return [
+        {"nome": chiave, "valore": "1" if valore is True else valore}
+        for chiave, valore in valori.items()
+        if chiave != escluso and valore
+    ]
+
+
+def _spunta(valori, nome):
+    """Un interruttore "appelli passati" pronto per il template."""
+    return {
+        "nome": nome,
+        "attiva": valori[nome],
+        "nascosti": _campi_nascosti(valori, nome),
+    }
+
+
+# Le due tabelle degli appelli hanno un interruttore ciascuna, e quindi un
+# parametro ciascuna: si guarda lo storico di una senza allungare l'altra.
+PASSATI_MIEI = "passati_miei"
+PASSATI_ALTRI = "passati_altri"
+
+# Filtri della pagina degli appelli: la ricerca fra i tutorati e i due
+# interruttori. Sono anche gli unici parametri che vengono riportati nell'URL
+# dopo un salvataggio: tutto il resto viene scartato.
+PARAMETRI_TUTORATI = ("q", PASSATI_MIEI, PASSATI_ALTRI)
 
 
 def _corrisponde(iscrizione, parole):
@@ -326,8 +401,24 @@ def _corrisponde(iscrizione, parole):
     return all(parola in campi for parola in parole)
 
 
+def _chiave_alfabetica(iscrizione):
+    """Ordine per cognome, poi nome, poi username: lo stesso delle query.
+
+    Serve dove l'elenco si riordina in Python invece che nel database. Il
+    confronto e' in minuscolo perche' altrimenti "de Rossi" finirebbe dopo
+    "Zeta", e lo username chiude la chiave per dare un ordine stabile anche a
+    chi ha l'anagrafica vuota.
+    """
+    studente = iscrizione.studente
+    return (
+        studente.last_name.lower(),
+        studente.first_name.lower(),
+        studente.get_username().lower(),
+    )
+
+
 def _tutorati_correnti(utente):
-    """Iscrizioni di cui l'utente e' relatore, con il modulo gia' agganciato.
+    """Iscrizioni di cui l'utente e' tutor, con il modulo gia' agganciato.
 
     Solo appelli non ancora passati: una tesi discussa non si valuta piu', e
     tenere in pagina anni di archivio renderebbe la sezione inservibile proprio
@@ -368,21 +459,17 @@ def _tutorati_del_docente(request, utente, filtri=None):
     """Sezione tutorati pronta per il template: gruppi ed eventuali risultati.
 
     Non ha relazione con gli appelli delle proprie commissioni: si puo' essere
-    relatore di uno studente senza sedere nella commissione che lo esamina,
+    tutor di uno studente senza sedere nella commissione che lo esamina,
     quindi l'elenco si costruisce a parte.
 
     I gruppi si calcolano SEMPRE, anche durante una ricerca: cosi' annullarla
     e' immediato, perche' l'elenco completo e' gia' nella pagina e non va
     richiesto di nuovo al server.
     """
-    if filtri is None:
-        termine = (request.GET.get("q") or "").strip()
-    else:
-        # Filtri espliciti: arrivano dal campo "ritorno" di una POST, dove la
-        # querystring non c'e'. Si tiene solo cio' che e' un filtro noto, come
-        # fa _url_ritorno_tutorati: il valore viene dal browser.
-        voci = dict((c, v) for c, v in filtri if c in PARAMETRI_TUTORATI)
-        termine = (voci.get("q") or "").strip()
+    # La sezione tutorati guarda solo il termine di ricerca: la spunta sugli
+    # appelli passati non la riguarda, perche' un tutorato gia' discusso non si
+    # valuta piu' e resta fuori comunque (vedi _tutorati_correnti).
+    termine = _filtri_pagina(request, filtri)["q"]
     correnti = _tutorati_correnti(utente)
 
     commissioni_mie = set(
@@ -412,6 +499,9 @@ def _tutorati_del_docente(request, utente, filtri=None):
     if termine:
         parole = termine.lower().split()
         trovati = [t for t in correnti if _corrisponde(t, parole)]
+        # Senza i gruppi resterebbe l'ordine per appello, che qui non si vede
+        # piu': in un elenco piatto di persone l'ordine leggibile e' il cognome.
+        trovati.sort(key=_chiave_alfabetica)
 
     return {
         "tutorati_trovati": trovati,
@@ -479,7 +569,7 @@ def _contesto_dettaglio(request, appello):
     miei = [i for i in iscrizioni if i.tutor_id == request.user.pk]
     altri = [i for i in iscrizioni if i.tutor_id != request.user.pk]
 
-    # Solo i propri laureandi hanno il modulo: la valutazione e' del relatore
+    # Solo i propri laureandi hanno il modulo: la valutazione e' del tutor
     # (vedi puo_valutare). auto_id come in _tutorati_correnti, e per la stessa
     # ragione: un modulo per riga, e le <label> devono puntare al proprio.
     for iscrizione in miei:
@@ -513,7 +603,7 @@ def _ritorno_al_dettaglio(request, iscrizione):
     rimando.
 
     Serve anche essere in commissione, come per aprire la pagina: senza, un
-    relatore esterno potrebbe farsi ridisegnare (sugli errori) un elenco di
+    tutor esterno potrebbe farsi ridisegnare (sugli errori) un elenco di
     iscritti che appello_detail gli negherebbe.
     """
     atteso = reverse("appelli:appello_detail", args=[iscrizione.appello_id])
@@ -556,7 +646,7 @@ def _url_ritorno_tutorati(request, iscrizione):
 
 @login_required
 def salva_valutazione(request, iscrizione_id):
-    """Titolo, punti e giudizio di un proprio tutorato, salvati dal relatore."""
+    """Titolo, punti e giudizio di un proprio tutorato, salvati dal tutor."""
     iscrizione = get_object_or_404(
         StudenteAppelloDiLaurea.objects.select_related("studente", "appello"),
         pk=iscrizione_id,
@@ -564,7 +654,7 @@ def salva_valutazione(request, iscrizione_id):
     # Il controllo sta qui e non nel template: nascondere il pulsante non
     # impedisce a un altro docente di inviare la richiesta a mano.
     if not puo_valutare(request.user, iscrizione):
-        raise PermissionDenied("Solo il relatore può valutare questo studente.")
+        raise PermissionDenied("Solo il tutor può valutare questo studente.")
     if request.method != "POST":
         return redirect(_url_ritorno_tutorati(request, iscrizione))
 
@@ -775,6 +865,10 @@ def cerca_tutorati(request):
     if termine:
         parole = termine.lower().split()
         trovati = [t for t in correnti if _corrisponde(t, parole)]
+        # Stesso ordine dei risultati calcolati dalla pagina (vedi
+        # _tutorati_del_docente): con e senza JavaScript si deve vedere
+        # la stessa cosa, ordine compreso.
+        trovati.sort(key=_chiave_alfabetica)
     else:
         trovati = []
 
@@ -859,7 +953,7 @@ def _iscrizione_scaricabile(request, iscrizione_id):
     """Iscrizione richiesta, se l'utente ha diritto di vederne gli allegati.
 
     Il permesso e' lo stesso per tesi e video: lo studente proprietario, un
-    docente della commissione di quell'appello, oppure il relatore. Il relatore
+    docente della commissione di quell'appello, oppure il tutor. Il tutor
     va incluso esplicitamente perche' NON e' detto che sieda in commissione:
     senza, i link agli allegati dei propri studenti gli darebbero un 403.
     Tenerlo in un'unica funzione evita che i due percorsi di download divergano.
@@ -872,8 +966,8 @@ def _iscrizione_scaricabile(request, iscrizione_id):
     e_commissario = is_docente(request.user) and docente_in_commissione(
         request.user, iscrizione.appello
     )
-    e_relatore = is_docente(request.user) and is_relatore(request.user, iscrizione)
-    if not (e_proprietario or e_commissario or e_relatore):
+    e_tutor = is_docente(request.user) and is_tutor(request.user, iscrizione)
+    if not (e_proprietario or e_commissario or e_tutor):
         raise PermissionDenied("Non hai i permessi per scaricare questo file.")
 
     return iscrizione

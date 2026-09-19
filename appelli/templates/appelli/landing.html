@@ -1,4 +1,5 @@
 {% extends "appelli/base.html" %}
+{% load static %}
 
 {% comment %}
     Pagina pubblica, l'unica visibile senza autenticazione. In produzione il
@@ -10,6 +11,10 @@
 {% endcomment %}
 
 {% block title %}Consegna Tesi{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/landing.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="landing">
@@ -25,8 +30,8 @@
             <p class="landing-sopratitolo">Università di Modena e Reggio Emilia</p>
             <h1 class="landing-titolo">Consegna della tesi di laurea</h1>
             <p class="landing-sintesi">
-                <span class="testo-lungo">Titolo, tutor, file della tesi ed eventuale video di presentazione in un unico posto. La commissione del tuo appello li trova già prima della seduta.</span>
-                <span class="testo-breve">Titolo, tutor, file della tesi ed eventuale video in un unico posto. La commissione li trova già prima della seduta.</span>
+                <span class="testo-lungo">Titolo, tutor, file della tesi ed eventuale video di presentazione in un unico posto. La commissione del tuo appello li trova prima dell'appello.</span>
+                <span class="testo-breve">Titolo, tutor, file della tesi ed eventuale video in un unico posto. La commissione li trova prima dell'appello.</span>
             </p>
             <a class="btn btn-primary btn-lg landing-accedi" href="{{ login_url }}">
                 Accedi con le credenziali UNIMORE
@@ -123,8 +128,8 @@
                         <div>
                             <p class="passo-titolo">Iscriviti all'appello su Esse3</p>
                             <p class="passo-testo">
-                                <span class="testo-lungo">L'iscrizione resta sul portale di ateneo. Quando il presidente crea l'appello, qui lo trovi già pronto.</span>
-                                <span class="testo-breve">Quando il presidente crea l'appello, qui lo trovi già pronto.</span>
+                                <span class="testo-lungo">L'iscrizione resta sul portale di ateneo. Quando il presidente crea l'appello, qui trovi la tua iscrizione.</span>
+                                <span class="testo-breve">Quando il presidente crea l'appello, qui trovi la tua iscrizione.</span>
                             </p>
                         </div>
                     </li>
@@ -195,181 +200,4 @@
     </section>
 </div>
 
-<style>
-    /* ---------- Impaginazione generale ----------
-       Telefono per primo: colonna unica, 16px fra i blocchi. */
-    .landing { display: flex; flex-direction: column; gap: 16px; padding-inline: 2px; }
-    .landing p { margin-bottom: 0; }
-    .testo-lungo { display: none; }
-
-    /* ---------- Hero ---------- */
-    .landing-hero { display: flex; flex-direction: column; gap: 16px; }
-    .landing-intro {
-        background: #fff; border: 1px solid var(--line); border-radius: .6rem;
-        padding: 1.5rem 1.25rem;
-    }
-    .landing-sopratitolo {
-        color: var(--brand); text-transform: uppercase; letter-spacing: .08em;
-        font-size: .8rem; font-weight: 600; margin-bottom: .5rem !important;
-    }
-    .landing-titolo { font-size: 1.75rem; font-weight: 700; line-height: 1.2; margin-bottom: .75rem; }
-    .landing-sintesi { color: var(--muted); font-size: 1.05rem; line-height: 1.6; }
-    .landing-accedi { display: block; width: 100%; margin: 1.25rem 0 .9rem; font-weight: 500; }
-    .landing-nota-accesso { color: var(--muted); font-size: .875rem; }
-    .landing-nota-accesso .bi { margin-right: .3rem; }
-
-    /* ---------- Anteprima card appello ---------- */
-    .landing-anteprima {
-        background: var(--brand-velo); border: 1px solid var(--brand-tenue-bordo);
-        border-radius: .6rem; padding: 1rem;
-    }
-    /* Le card riusano .appello-card dell'area studente; qui si toglie solo
-       la colonna del pulsante, che nell'anteprima non c'e'. Sotto i 768px il
-       blocco data diventa una fascia in testa alla card. */
-    .landing-anteprima .appello-card {
-        grid-template-columns: 1fr;
-        grid-template-areas: "data" "corso" "titolo";
-        box-shadow: none;
-    }
-    .landing-anteprima .appello-data {
-        flex-direction: row; align-items: baseline; gap: .6rem;
-        justify-content: flex-start; padding: .75rem 1rem;
-    }
-    .landing-anteprima .appello-data .dow,
-    .landing-anteprima .appello-data .giorno,
-    .landing-anteprima .appello-data .mese { display: none; }
-    .landing-anteprima .appello-data .data-estesa { display: inline; font-size: 1.35rem; font-weight: 700; }
-    .landing-anteprima .appello-data .ora {
-        margin-top: 0; background: none !important; padding: 0; font-size: .95rem; font-weight: 400;
-    }
-    .landing-anteprima .appello-card.is-incompleto .appello-data .ora { color: var(--muted); }
-    /* Sul telefono l'area studente porta il corso dentro la fascia: qui no,
-       resta l'etichetta blu sopra il titolo come nell'impaginazione larga. */
-    .landing-anteprima .appello-corso,
-    .landing-anteprima .appello-card.is-incompleto .appello-corso {
-        background: none; color: var(--brand); padding: .9rem 1rem 0;
-        font-size: .81rem; text-transform: uppercase; letter-spacing: .06em;
-    }
-    .landing-anteprima .appello-corpo { padding: .25rem 1rem .9rem; }
-    .landing-anteprima .appello-titolo { font-size: 1.125rem; }
-    .landing-anteprima .appello-meta {
-        flex-direction: row; align-items: center; gap: .5rem 1.15rem; padding-top: .6rem;
-    }
-    .landing-anteprima .voce .bi { color: var(--muted); }
-    /* Stesso rosso di .badge-manca */
-    .landing-anteprima .voce-manca { color: #8a1a12; font-weight: 600; }
-    .landing-legenda {
-        display: flex; align-items: center; gap: .5rem;
-        font-size: .875rem; color: var(--brand-testo); margin: .6rem 0 1rem !important;
-    }
-    .quadratino {
-        width: .8rem; height: .8rem; border-radius: .15rem; flex: none;
-        background: var(--brand);
-    }
-    .quadratino.is-incompleto { background: var(--surface); border: 1px solid #d5d7db; }
-
-    /* ---------- Percorsi: card a linguette (telefono) ---------- */
-    .landing-percorsi {
-        background: #fff; border: 1px solid var(--line); border-radius: .6rem; overflow: hidden;
-    }
-    .landing-percorsi .nav-tabs {
-        background: var(--bg); padding: .6rem .6rem 0; flex-wrap: nowrap;
-        border-bottom-color: var(--line);
-    }
-    .landing-percorsi .nav-item { flex: 1 1 0; }
-    .landing-percorsi .nav-link {
-        width: 100%; white-space: nowrap; padding: .6rem .5rem;
-        color: var(--brand); background: transparent; font-size: .95rem;
-    }
-    .landing-percorsi .nav-link:hover { border-color: transparent; color: var(--brand-piu-scuro); }
-    .landing-percorsi .nav-link.active {
-        color: var(--ink); background: #fff; font-weight: 600;
-        border-color: var(--line) var(--line) #fff;
-    }
-    .percorso-testata { display: none; }
-    .passi { list-style: none; margin: 0; padding: 1.1rem 1.1rem .4rem; }
-    .passi li { display: flex; gap: .8rem; align-items: flex-start; margin-bottom: 1rem; }
-    .passo-numero {
-        flex: none; width: 28px; height: 28px; border-radius: 50%;
-        display: inline-flex; align-items: center; justify-content: center;
-        background: var(--brand-velo); border: 1px solid var(--brand-tenue-bordo);
-        color: var(--brand-testo); font-weight: 700; font-size: .85rem;
-    }
-    .passo-titolo { font-weight: 700; line-height: 1.3; margin-top: .15rem; }
-    .passo-testo { color: var(--muted); font-size: .9rem; line-height: 1.5; margin-top: .15rem; }
-    .percorso-nota { display: none; }
-
-    /* ---------- Da tablet in su: due card affiancate ---------- */
-    @media (min-width: 768px) {
-        .testo-lungo { display: inline; }
-        .testo-breve { display: none; }
-        .landing { gap: 1.5rem; padding-inline: 0; }
-
-        .landing-percorsi { background: none; border: 0; border-radius: 0; overflow: visible; }
-        .landing-percorsi .nav-tabs { display: none; }
-        .landing-percorsi .tab-content {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
-        }
-        /* Entrambi i pannelli visibili, indipendentemente dalla linguetta. */
-        .landing-percorsi .tab-content > .tab-pane { display: flex; opacity: 1; }
-        .percorso {
-            flex-direction: column;
-            background: #fff; border: 1px solid var(--line); border-radius: .6rem;
-            overflow: hidden; box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075);
-        }
-        .percorso-testata { display: block; margin: 0; border-radius: 0; }
-        .passi { padding: 1.25rem 1.25rem .25rem; flex: 1 0 auto; }
-        .passi li { gap: .9rem; }
-        .passo-testo { font-size: .9375rem; }
-        .percorso-nota {
-            display: block; margin: 0 1.25rem; padding: .85rem 0 1rem;
-            border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem;
-        }
-    }
-
-    /* ---------- Desktop: hero in due colonne ---------- */
-    @media (min-width: 992px) {
-        .landing-hero {
-            display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0;
-            background: #fff; border: 1px solid var(--line); border-radius: .6rem;
-            overflow: hidden; box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075);
-        }
-        .landing-intro {
-            border: 0; border-radius: 0; background: none; padding: 2.75rem 2.5rem;
-            display: flex; flex-direction: column; justify-content: center;
-        }
-        .landing-titolo { font-size: 2.35rem; }
-        .landing-sintesi { font-size: 1.125rem; max-width: 36rem; }
-        .landing-accedi { align-self: flex-start; width: auto; margin: 1.75rem 0 1rem; }
-        .landing-anteprima {
-            border: 0; border-left: 1px solid var(--brand-tenue-bordo); border-radius: 0;
-            padding: 1.5rem;
-        }
-        /* In colonna larga il blocco data torna la colonnina del calendario. */
-        .landing-anteprima .appello-card {
-            grid-template-columns: 92px minmax(0, 1fr);
-            grid-template-areas: "data corso" "data titolo";
-        }
-        .landing-anteprima .appello-data {
-            flex-direction: column; align-items: center; justify-content: center;
-            gap: 0; padding: .9rem .5rem;
-        }
-        .landing-anteprima .appello-data .dow,
-        .landing-anteprima .appello-data .giorno,
-        .landing-anteprima .appello-data .mese { display: inline; }
-        .landing-anteprima .appello-data .giorno { font-size: 1.9rem; }
-        .landing-anteprima .appello-data .data-estesa { display: none; }
-        .landing-anteprima .appello-data .ora {
-            margin-top: .4rem; padding: .12rem .5rem; font-size: .78rem; font-weight: 600;
-            background: rgba(255, 255, 255, .2) !important;
-        }
-        .landing-anteprima .appello-card.is-incompleto .appello-data .ora {
-            background: rgba(0, 0, 0, .08) !important; color: inherit;
-        }
-        .landing-anteprima .appello-corso,
-        .landing-anteprima .appello-card.is-incompleto .appello-corso { padding: .8rem .9rem 0; }
-        .landing-anteprima .appello-corpo { padding: .2rem .9rem .8rem; }
-        .landing-anteprima .appello-meta { gap: .4rem .9rem; font-size: .84rem; }
-    }
-</style>
 {% endblock %}

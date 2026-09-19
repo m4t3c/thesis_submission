@@ -576,7 +576,7 @@ def commissione_esistente_con(docenti):
 
 
 class ValutazioneForm(forms.ModelForm):
-    """Titolo, punti e giudizio, compilati dal RELATORE dei propri studenti.
+    """Titolo, punti e giudizio, compilati dal TUTOR dei propri studenti.
 
     Punteggio e giudizio sono materiale interno ai docenti: non esiste nessun
     form dell'area studente che li contenga, quindi lo studente non puo'
@@ -584,7 +584,7 @@ class ValutazioneForm(forms.ModelForm):
 
     Sul titolo vale la stessa regola del form dello studente: si puo' sempre
     correggere, mai svuotare. Qui pero' e' ammesso lasciarlo vuoto se vuoto
-    era gia', altrimenti il relatore non potrebbe registrare una valutazione
+    era gia', altrimenti il tutor non potrebbe registrare una valutazione
     per uno studente che il titolo non l'ha ancora messo.
     """
 
@@ -642,7 +642,7 @@ class ValutazioneForm(forms.ModelForm):
         valutazione lascerebbe la commissione con un voto senza motivo, o con
         un commento che non si sa dove collochi lo studente. Restano pero'
         entrambi facoltativi finche' sono vuoti tutti e due, perche' il
-        relatore deve poter correggere il solo titolo di uno studente che non
+        tutor deve poter correggere il solo titolo di uno studente che non
         ha ancora valutato.
         """
         dati = super().clean()

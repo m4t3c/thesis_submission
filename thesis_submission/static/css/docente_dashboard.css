@@ -1,0 +1,6 @@
+/* Pagina degli appelli di docente e presidente (docente_dashboard.html). */
+
+/* Titolo della pagina a sinistra, pulsante "Crea un nuovo appello" a destra */
+.dashboard-testata { display: flex; justify-content: space-between; }
+/* Margini automatici: il titolo resta centrato in verticale sul pulsante */
+.dashboard-titolo { margin-top: auto; margin-bottom: auto; }

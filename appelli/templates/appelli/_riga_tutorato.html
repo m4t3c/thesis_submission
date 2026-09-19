@@ -7,9 +7,10 @@
     dalla view (ValutazioneForm precompilato).
 
     Aprendo il modulo la riga compatta sparisce (regola .is-aperto in
-    base.html) e al suo posto compare l'intestazione del modulo: le stesse
+    static/css/common.css) e al suo posto compare l'intestazione del modulo: le stesse
     informazioni ci sarebbero due volte, una sopra l'altra.
 {% endcomment %}
+{% load anagrafica %}
 {% comment %}
     "aperta" e' vero quando il salvataggio e' stato rifiutato PROPRIO per
     questa riga: il pannello si riapre gia' compilato, con gli errori dentro.
@@ -19,9 +20,9 @@
     <div class="riga-sintesi row g-2 align-items-center p-3">
 
         {# 1. Chi #}
-        <div class="col-12 col-lg-3" style="min-width: 0;">
+        <div class="col-12 col-lg-3 min-w-0">
             <div class="nome-studente text-truncate">
-                {{ iscrizione.studente.get_full_name|default:iscrizione.studente.get_username }}
+                {{ iscrizione.studente|cognome_nome }}
             </div>
             <div class="small text-muted text-truncate">
                 {{ iscrizione.studente.email|default:iscrizione.studente.get_username }}

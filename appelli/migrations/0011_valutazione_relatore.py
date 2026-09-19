@@ -16,12 +16,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='studenteappellodilaurea',
             name='giudizio',
-            field=models.TextField(blank=True, help_text='Giudizio del relatore. Non visibile allo studente.', verbose_name='Giudizio'),
+            field=models.TextField(blank=True, help_text='Giudizio del tutor. Non visibile allo studente.', verbose_name='Giudizio'),
         ),
         migrations.AddField(
             model_name='studenteappellodilaurea',
             name='punteggio',
-            field=models.SmallIntegerField(blank=True, help_text='Punti che il relatore propone di aggiungere al voto di laurea (da 0 a 2). Vuoto = non ancora valutato.', null=True, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(2)], verbose_name='Punti proposti'),
+            field=models.SmallIntegerField(blank=True, help_text='Punti che il tutor propone di aggiungere al voto di laurea (da 0 a 2). Vuoto = non ancora valutato.', null=True, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(2)], verbose_name='Punti proposti'),
         ),
         migrations.AddConstraint(
             model_name='studenteappellodilaurea',

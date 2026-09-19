@@ -66,9 +66,9 @@ class StudenteAppelloDiLaureaAdmin(admin.ModelAdmin):
 
     Punteggio e giudizio si modificano anche da qui: l'admin e' lo strumento
     con cui la segreteria corregge i casi che l'applicazione non prevede
-    (relatore che non c'e' piu', valutazione inserita sullo studente
+    (tutor che non c'e' piu', valutazione inserita sullo studente
     sbagliato). Nelle pagine dell'applicazione, invece, li scrive il solo
-    relatore.
+    tutor.
     """
 
     list_display = (

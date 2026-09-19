@@ -926,16 +926,16 @@ class TitoloETesiACoppiaTest(BaseSetup):
         self.assertEqual(self.iscrizione.titolo, "Secondo")
 
     def test_titolo_gia_salvato_non_si_svuota_nemmeno_senza_tesi(self):
-        """Un titolo senza tesi puo' esistere: lo mette il relatore dalla
+        """Un titolo senza tesi puo' esistere: lo mette il tutor dalla
         valutazione. Lo studente non deve poterlo cancellare con un invio a
         vuoto."""
-        self.iscrizione.titolo = "Messo dal relatore"
+        self.iscrizione.titolo = "Messo dal tutor"
         self.iscrizione.save()
         resp = self._post(titolo="")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "non può essere svuotato")
         self.iscrizione.refresh_from_db()
-        self.assertEqual(self.iscrizione.titolo, "Messo dal relatore")
+        self.assertEqual(self.iscrizione.titolo, "Messo dal tutor")
 
     def test_la_pagina_spiega_la_regola_finche_manca_qualcosa(self):
         self.assertContains(self.client.get(self.url), "vanno inseriti insieme")
@@ -2004,18 +2004,18 @@ class AvvisoTutorTest(BaseSetup):
 
 
 class TutoratiEValutazioneTest(BaseSetup):
-    """Sezione tutorati dell'area docente e valutazione del relatore.
+    """Sezione tutorati dell'area docente e valutazione del tutor.
 
-    Lo scenario tiene separati i due ruoli: "relatore" segue gli studenti ma
+    Lo scenario tiene separati i due ruoli: "tutor" segue gli studenti ma
     NON siede in commissione, "docente_test" (da BaseSetup) e' in commissione
-    ma non e' relatore di nessuno. E' la combinazione che mette alla prova i
+    ma non e' tutor di nessuno. E' la combinazione che mette alla prova i
     permessi, perche' finche' le due cose coincidono non si distinguono.
     """
 
     def setUp(self):
         super().setUp()
-        self.relatore = User.objects.create_user("relatore_test", password="pw")
-        self.relatore.groups.add(self.g_docente)
+        self.tutor = User.objects.create_user("tutor_test", password="pw")
+        self.tutor.groups.add(self.g_docente)
 
         oggi = timezone.localdate()
         self.passato = AppelloDiLaurea.objects.create(
@@ -2026,7 +2026,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         # self.appello di BaseSetup e' nel 2030, quindi futuro.
         self.i_futura = StudenteAppelloDiLaurea.objects.create(
             studente=self.studente, appello=self.appello,
-            tutor=self.relatore, titolo="Tesi futura",
+            tutor=self.tutor, titolo="Tesi futura",
         )
         altro = User.objects.create_user("studente_due", password="pw")
         altro.groups.add(self.g_studente)
@@ -2034,7 +2034,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         altro.save()
         self.i_passata = StudenteAppelloDiLaurea.objects.create(
             studente=altro, appello=self.passato,
-            tutor=self.relatore, titolo="Tesi passata",
+            tutor=self.tutor, titolo="Tesi passata",
         )
         self.url_valuta = reverse(
             "appelli:salva_valutazione", args=[self.i_futura.id]
@@ -2047,7 +2047,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         nella tabella "Altri appelli", quindi cercare nell'intera pagina darebbe
         risultati falsi.
         """
-        self.client.force_login(self.relatore)
+        self.client.force_login(self.tutor)
         html = self.client.get(
             reverse("appelli:docente_dashboard") + query
         ).content.decode()
@@ -2057,23 +2057,23 @@ class TutoratiEValutazioneTest(BaseSetup):
 
     # --- Permessi --------------------------------------------------------
 
-    def test_relatore_fuori_commissione_scarica_la_tesi(self):
-        """Il relatore non e' detto sieda in commissione: deve poter scaricare."""
+    def test_tutor_fuori_commissione_scarica_la_tesi(self):
+        """Il tutor non e' detto sieda in commissione: deve poter scaricare."""
         self.i_futura.file_tesi.save(
             "t.pdf", SimpleUploadedFile("t.pdf", b"%PDF-1.7 x"), save=True
         )
         self.addCleanup(self.i_futura.file_tesi.delete, save=False)
         self.assertFalse(
-            self.appello.commissione.docenti.filter(pk=self.relatore.pk).exists()
+            self.appello.commissione.docenti.filter(pk=self.tutor.pk).exists()
         )
-        self.client.force_login(self.relatore)
+        self.client.force_login(self.tutor)
         resp = self.client.get(
             reverse("appelli:scarica_tesi", args=[self.i_futura.id])
         )
         self.assertEqual(resp.status_code, 200)
 
-    def test_commissario_non_relatore_non_valuta(self):
-        """Essere in commissione non basta: la valutazione la scrive il relatore."""
+    def test_commissario_non_tutor_non_valuta(self):
+        """Essere in commissione non basta: la valutazione la scrive il tutor."""
         self.client.force_login(self.docente)
         resp = self.client.post(self.url_valuta, {"titolo": "X", "punteggio": "2"})
         self.assertEqual(resp.status_code, 403)
@@ -2085,8 +2085,8 @@ class TutoratiEValutazioneTest(BaseSetup):
         resp = self.client.post(self.url_valuta, {"titolo": "X", "punteggio": "2"})
         self.assertEqual(resp.status_code, 403)
 
-    def test_relatore_salva_titolo_punteggio_e_giudizio(self):
-        self.client.force_login(self.relatore)
+    def test_tutor_salva_titolo_punteggio_e_giudizio(self):
+        self.client.force_login(self.tutor)
         resp = self.client.post(self.url_valuta, {
             "titolo": "Titolo corretto",
             "punteggio": "1",
@@ -2099,9 +2099,9 @@ class TutoratiEValutazioneTest(BaseSetup):
         self.assertEqual(self.i_futura.punteggio, 1)
         self.assertEqual(self.i_futura.giudizio, "Lavoro solido.")
 
-    def test_titolo_non_svuotabile_dal_relatore(self):
+    def test_titolo_non_svuotabile_dal_tutor(self):
         """Vale la stessa regola dello studente: correggere si', svuotare no."""
-        self.client.force_login(self.relatore)
+        self.client.force_login(self.tutor)
         self.client.post(self.url_valuta, {
             "titolo": "", "punteggio": "1", "giudizio": "Va bene.",
         })
@@ -2110,7 +2110,7 @@ class TutoratiEValutazioneTest(BaseSetup):
 
     def test_ritorno_manomesso_non_porta_fuori_dal_sito(self):
         """Del 'ritorno' si tengono solo i filtri: il percorso lo rifa' reverse()."""
-        self.client.force_login(self.relatore)
+        self.client.force_login(self.tutor)
         resp = self.client.post(self.url_valuta, {
             "titolo": "T", "punteggio": "1", "giudizio": "Va bene.",
             "ritorno": "q=ciao&next=https://esempio.invalido/rubato",
@@ -2163,7 +2163,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         terzo = User.objects.create_user("studente_zero", password="pw")
         terzo.groups.add(self.g_studente)
         StudenteAppelloDiLaurea.objects.create(
-            studente=terzo, appello=self.appello, tutor=self.relatore
+            studente=terzo, appello=self.appello, tutor=self.tutor
         )
 
         sezione = self._sezione()
@@ -2206,7 +2206,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         )
 
     def test_endpoint_restituisce_le_righe_dei_propri_tutorati(self):
-        resp = self._cerca(self.relatore, "futura")
+        resp = self._cerca(self.tutor, "futura")
         self.assertEqual(resp.status_code, 200)
         dati = resp.json()
         self.assertEqual(dati["numero"], 1)
@@ -2216,7 +2216,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         self.assertIn("csrfmiddlewaretoken", dati["html"])
 
     def test_endpoint_mostra_solo_i_propri_tutorati(self):
-        """Il docente in commissione non e' relatore: per lui non c'e' nulla."""
+        """Il docente in commissione non e' tutor: per lui non c'e' nulla."""
         dati = self._cerca(self.docente, "futura").json()
         self.assertEqual(dati["numero"], 0)
         self.assertNotIn("Tesi futura", dati["html"])
@@ -2227,14 +2227,14 @@ class TutoratiEValutazioneTest(BaseSetup):
     def test_endpoint_solo_dall_applicazione(self):
         """Senza l'intestazione delle richieste interne non risponde."""
         self.assertEqual(
-            self._cerca(self.relatore, "futura", ajax=False).status_code, 403
+            self._cerca(self.tutor, "futura", ajax=False).status_code, 403
         )
 
     def test_riepilogo_del_gruppo_conta_i_da_valutare(self):
         terzo = User.objects.create_user("studente_tre", password="pw")
         terzo.groups.add(self.g_studente)
         StudenteAppelloDiLaurea.objects.create(
-            studente=terzo, appello=self.appello, tutor=self.relatore
+            studente=terzo, appello=self.appello, tutor=self.tutor
         )
         self.i_futura.punteggio = 2
         self.i_futura.save()
@@ -2245,7 +2245,7 @@ class TutoratiEValutazioneTest(BaseSetup):
 
     def test_le_query_non_crescono_con_i_tutorati(self):
         """Il template non deve interrogare il database una volta per riga."""
-        self.client.force_login(self.relatore)
+        self.client.force_login(self.tutor)
         url = reverse("appelli:docente_dashboard")
         with CaptureQueriesContext(connection) as prima:
             self.client.get(url)
@@ -2254,7 +2254,7 @@ class TutoratiEValutazioneTest(BaseSetup):
             extra = User.objects.create_user(f"studente_extra_{numero}", password="pw")
             extra.groups.add(self.g_studente)
             StudenteAppelloDiLaurea.objects.create(
-                studente=extra, appello=self.appello, tutor=self.relatore
+                studente=extra, appello=self.appello, tutor=self.tutor
             )
 
         with CaptureQueriesContext(connection) as dopo:
@@ -2338,14 +2338,14 @@ class ValutazioneObbligatoriaTest(BaseSetup):
 
     def setUp(self):
         super().setUp()
-        self.relatore = User.objects.create_user("rel_obbl", password="pw")
-        self.relatore.groups.add(self.g_docente)
+        self.tutor = User.objects.create_user("rel_obbl", password="pw")
+        self.tutor.groups.add(self.g_docente)
         self.iscrizione = StudenteAppelloDiLaurea.objects.create(
             studente=self.studente, appello=self.appello,
-            tutor=self.relatore, titolo="Una tesi",
+            tutor=self.tutor, titolo="Una tesi",
         )
         self.url = reverse("appelli:salva_valutazione", args=[self.iscrizione.id])
-        self.client.force_login(self.relatore)
+        self.client.force_login(self.tutor)
 
     def test_punteggio_senza_giudizio_non_salva(self):
         self.client.post(self.url, {"titolo": "Una tesi", "punteggio": "2"})
@@ -2510,7 +2510,7 @@ class DettaglioIscrittiRaggruppatiTest(BaseSetup):
     def test_i_propri_laureandi_sono_in_cima(self):
         """Anche se il cognome li metterebbe in mezzo agli altri."""
         html = self.client.get(self.url).content.decode()
-        self.assertLess(html.index("Mario Rossi"), html.index("Anna Bianchi"))
+        self.assertLess(html.index("Rossi Mario"), html.index("Bianchi Anna"))
 
     def test_le_righe_dei_propri_sono_contrassegnate(self):
         html = self.client.get(self.url).content.decode()
@@ -2522,7 +2522,7 @@ class DettaglioIscrittiRaggruppatiTest(BaseSetup):
         """Un solo gruppo non ha bisogno di essere annunciato.
 
         Serve un commissario che non segua NESSUNO: altro_docente non va bene,
-        perche' di suo e' relatore di due dei tre iscritti.
+        perche' di suo e' tutor di due dei tre iscritti.
         """
         estraneo = User.objects.create_user("doc_estraneo", password="pw")
         estraneo.groups.add(self.g_docente)
@@ -2535,13 +2535,23 @@ class DettaglioIscrittiRaggruppatiTest(BaseSetup):
 
     def test_dentro_un_gruppo_l_ordine_e_alfabetico(self):
         html = self.client.get(self.url).content.decode()
-        self.assertLess(html.index("Anna Bianchi"), html.index("Luca Verdi"))
+        self.assertLess(html.index("Bianchi Anna"), html.index("Verdi Luca"))
+
+    def test_lo_studente_e_scritto_cognome_nome(self):
+        """L'elenco e' ordinato per cognome: dev'essere la parola che si legge.
+
+        Sui docenti della commissione, che non sono in tabella e non seguono
+        quell'ordine, la forma resta invece "Nome Cognome".
+        """
+        html = self.client.get(self.url).content.decode()
+        self.assertIn("Rossi Mario", html)
+        self.assertNotIn("Mario Rossi", html)
 
 
 class ValutazioneDalDettaglioTest(BaseSetup):
-    """Dal dettaglio dell'appello il relatore valuta i propri laureandi.
+    """Dal dettaglio dell'appello il tutor valuta i propri laureandi.
 
-    "docente_test" (da BaseSetup) siede in commissione ed e' relatore di uno
+    "docente_test" (da BaseSetup) siede in commissione ed e' tutor di uno
     solo dei due iscritti: l'altro e' di un collega, e il suo modulo non deve
     comparire.
     """
@@ -2647,7 +2657,7 @@ class ValutazioneDalDettaglioTest(BaseSetup):
             resp["Location"].startswith(reverse("appelli:docente_dashboard"))
         )
 
-    def test_relatore_fuori_commissione_non_riceve_il_dettaglio(self):
+    def test_tutor_fuori_commissione_non_riceve_il_dettaglio(self):
         """Sugli errori non gli si ridisegna una pagina che non potrebbe aprire."""
         self.commissione.docenti.remove(self.docente)
         resp = self._post(giudizio="Solo il giudizio.")
@@ -2658,3 +2668,185 @@ class ValutazioneDalDettaglioTest(BaseSetup):
         self.assertTrue(
             resp["Location"].startswith(reverse("appelli:docente_dashboard"))
         )
+
+
+class AppelliPassatiTest(BaseSetup):
+    """Gli appelli gia' passati restano fuori dagli elenchi, salvo spunta.
+
+    Le pagine servono a preparare una consegna: una data trascorsa non si
+    prepara piu', e in un ateneo che accumula appelli anno dopo anno lo
+    storico seppellirebbe le poche righe su cui c'e' da lavorare. La spunta
+    lo rimette, perche' consultarlo deve restare possibile.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # self.appello di BaseSetup e' nel 2030, quindi futuro.
+        self.passato = AppelloDiLaurea.objects.create(
+            data=timezone.localdate() - datetime.timedelta(days=1),
+            corso_di_laurea="Corso Passato",
+            commissione=self.commissione,
+        )
+        # Un appello di OGGI: e' il confine, e deve stare dalla parte di chi
+        # si vede -- la discussione non e' ancora avvenuta.
+        self.oggi = AppelloDiLaurea.objects.create(
+            data=timezone.localdate(),
+            corso_di_laurea="Corso Di Oggi",
+            commissione=self.commissione,
+        )
+
+    def _pagina(self, chi, rotta, query=""):
+        self.client.force_login(chi)
+        return self.client.get(reverse(rotta) + query)
+
+    # --- Area docente ------------------------------------------------------
+
+    def test_docente_non_vede_i_passati(self):
+        resp = self._pagina(self.docente, "appelli:docente_dashboard")
+        self.assertNotContains(resp, "Corso Passato")
+        self.assertContains(resp, "Corso Di Oggi")
+
+    def test_docente_con_l_interruttore_li_vede(self):
+        resp = self._pagina(
+            self.docente, "appelli:docente_dashboard", "?passati_miei=1"
+        )
+        self.assertContains(resp, "Corso Passato")
+
+    def test_i_due_interruttori_sono_indipendenti(self):
+        """Uno per tabella: guardare lo storico di una non allunga l'altra."""
+        self.commissione.docenti.remove(self.docente)
+        altrui = AppelloDiLaurea.objects.create(
+            data=timezone.localdate() - datetime.timedelta(days=2),
+            corso_di_laurea="Corso Altrui",
+            commissione=Commissione.objects.create(nome="Commissione B"),
+        )
+        # Il docente torna in commissione del solo appello passato "suo".
+        self.passato.commissione.docenti.add(self.docente)
+
+        resp = self._pagina(
+            self.docente, "appelli:docente_dashboard", "?passati_miei=1"
+        )
+        self.assertIn(self.passato, list(resp.context["miei_appelli"]))
+        self.assertNotIn(altrui, list(resp.context["altri_appelli"]))
+
+        resp = self._pagina(
+            self.docente, "appelli:docente_dashboard", "?passati_altri=1"
+        )
+        self.assertNotIn(self.passato, list(resp.context["miei_appelli"]))
+        self.assertIn(altrui, list(resp.context["altri_appelli"]))
+
+    def test_ogni_tabella_ha_il_proprio_interruttore(self):
+        resp = self._pagina(self.docente, "appelli:docente_dashboard")
+        html = resp.content.decode()
+        self.assertEqual(html.count('class="spunta-passati'), 2)
+        # Due id distinti: con un id solo la seconda etichetta punterebbe
+        # all'interruttore della prima tabella.
+        self.assertIn('id="mostra-passati_miei"', html)
+        self.assertIn('id="mostra-passati_altri"', html)
+
+    def test_l_interruttore_acceso_si_vede_acceso(self):
+        resp = self._pagina(self.docente, "appelli:docente_dashboard")
+        self.assertNotContains(resp, "is-attiva")
+
+        resp = self._pagina(
+            self.docente, "appelli:docente_dashboard", "?passati_miei=1"
+        )
+        self.assertEqual(resp.content.decode().count("is-attiva"), 1)
+
+    def test_ogni_comando_riporta_i_filtri_degli_altri(self):
+        """Un form GET manda solo cio' che contiene: il resto va in campi nascosti.
+
+        Senza, accendere un interruttore spegnerebbe il gemello e cercare li
+        spegnerebbe entrambi.
+        """
+        resp = self._pagina(
+            self.docente,
+            "appelli:docente_dashboard",
+            "?passati_miei=1&passati_altri=1&q=rossi",
+        )
+        html = resp.content.decode()
+        # La ricerca riporta i due interruttori, ognuno dei due riporta
+        # l'altro piu' la ricerca: in tutto quattro volte ciascun parametro.
+        self.assertEqual(
+            html.count('<input type="hidden" name="passati_miei" value="1">'), 2
+        )
+        self.assertEqual(
+            html.count('<input type="hidden" name="passati_altri" value="1">'), 2
+        )
+        self.assertEqual(html.count('<input type="hidden" name="q" value="rossi">'), 2)
+
+    def test_gli_interruttori_non_riguardano_i_tutorati(self):
+        """Una tesi gia' discussa non si valuta piu': resta fuori comunque."""
+        studente = User.objects.create_user("stud_passato", password="pw")
+        studente.groups.add(self.g_studente)
+        StudenteAppelloDiLaurea.objects.create(
+            studente=studente, appello=self.passato,
+            tutor=self.docente, titolo="Tesi discussa",
+        )
+        resp = self._pagina(
+            self.docente,
+            "appelli:docente_dashboard",
+            "?passati_miei=1&passati_altri=1",
+        )
+        self.assertEqual(resp.context["tutorati_totali"], 0)
+
+    # --- Area studente -----------------------------------------------------
+
+    def test_studente_non_vede_i_disponibili_passati(self):
+        resp = self._pagina(self.studente, "appelli:studente_dashboard")
+        self.assertNotIn(self.passato, list(resp.context["appelli_disponibili"]))
+        self.assertIn(self.oggi, list(resp.context["appelli_disponibili"]))
+
+    def test_studente_non_vede_le_proprie_iscrizioni_passate(self):
+        StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.passato, titolo="Tesi discussa"
+        )
+        resp = self._pagina(self.studente, "appelli:studente_dashboard")
+        self.assertEqual(list(resp.context["iscrizioni"]), [])
+
+    def test_lo_studente_non_ha_l_interruttore(self):
+        """L'area studente non lo mostra, e il parametro a mano non lo accende."""
+        StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.passato, titolo="Tesi discussa"
+        )
+        resp = self._pagina(
+            self.studente, "appelli:studente_dashboard", "?passati_miei=1"
+        )
+        self.assertNotContains(resp, "spunta-passati")
+        self.assertEqual(list(resp.context["iscrizioni"]), [])
+        self.assertNotIn(self.passato, list(resp.context["appelli_disponibili"]))
+
+    def test_un_appello_passato_a_cui_si_e_iscritti_non_torna_fra_i_disponibili(self):
+        """I due elenchi restano complementari anche sugli appelli passati.
+
+        Gli id da escludere si calcolano su TUTTE le iscrizioni: prendendoli
+        da quelle mostrate, l'appello passato sparirebbe dalle iscrizioni per
+        ricomparire fra i disponibili, dove il posto sembrerebbe libero.
+        """
+        StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.passato
+        )
+        resp = self._pagina(self.studente, "appelli:studente_dashboard")
+        self.assertNotIn(self.passato, list(resp.context["appelli_disponibili"]))
+
+    # --- Gli interruttori sopravvivono alle altre azioni -------------------
+
+    def test_un_valore_storto_vale_come_interruttore_spento(self):
+        resp = self._pagina(
+            self.docente, "appelli:docente_dashboard", "?passati_miei=vero"
+        )
+        self.assertFalse(resp.context["spunta_miei"]["attiva"])
+        self.assertNotContains(resp, "Corso Passato")
+
+    def test_restano_accesi_dopo_il_salvataggio_di_una_valutazione(self):
+        """Il "ritorno" riporta i filtri: fra questi ci sono i due interruttori."""
+        iscrizione = StudenteAppelloDiLaurea.objects.create(
+            studente=self.studente, appello=self.appello, tutor=self.docente
+        )
+        self.client.force_login(self.docente)
+        resp = self.client.post(
+            reverse("appelli:salva_valutazione", args=[iscrizione.id]),
+            {"titolo": "Una tesi", "ritorno": "passati_miei=1&passati_altri=1"},
+        )
+        self.assertIn("passati_miei=1", resp["Location"])
+        self.assertIn("passati_altri=1", resp["Location"])

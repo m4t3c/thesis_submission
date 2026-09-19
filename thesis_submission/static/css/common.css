@@ -1,0 +1,520 @@
+/* Stile condiviso da tutte le pagine (collegato in base.html). */
+
+/* Colori del sito, definiti una volta sola: le pagine e i blocchi di
+   stile dei singoli template usano queste variabili, cosi' una
+   modifica alla tavolozza vale ovunque. */
+:root {
+    --brand: #0a4fc2;
+    --ink: #1f2933;
+    --muted: #6b7280;
+    --bg: #f5f6f8;
+    --line: #e6e8ec;
+    --surface: #ececec;
+
+    /* Sfumature del blu. NON sono scelte a occhio: sono le stesse
+       funzioni con cui Bootstrap ricava le proprie varianti dal colore
+       di base, cioe' schiarite (tint: verso il bianco) e scurite
+       (shade: verso il nero) di una percentuale fissa, applicate a
+       --brand. Ricalcolarle cosi' fa si' che questo blu si comporti
+       come quello predefinito di Bootstrap che sostituisce. */
+    --brand-scuro: #0943a5;        /* shade 15%: cursore sopra          */
+    --brand-piu-scuro: #083f9b;    /* shade 20%: premuto, link visitato */
+    --brand-scurissimo: #083b92;   /* shade 25%: bordo del premuto      */
+    --brand-testo: #04204e;        /* shade 60%: testo su sfondo tenue  */
+    --brand-chiaro: #85a7e1;       /* tint  50%: bordo del campo a fuoco*/
+    --brand-tenue-bordo: #9db9e7;  /* tint  60%: bordi tenui            */
+    --brand-tenue: #cedcf3;        /* tint  80%: sfondi tenui           */
+    --brand-velo: #ebf1fa;         /* tint  92%: fondi appena accennati */
+    --brand-rgb: 10, 79, 194;
+    --brand-alone-rgb: 47, 105, 203;/* tint 15%: alone di messa a fuoco */
+
+    /* Il "primary" di Bootstrap diventa il blu del progetto. Questi
+       token bastano per tutto cio' che li legge: .text-primary,
+       .bg-primary, .badge, e le classi .btn-soft-primary e
+       .upload-input di questo progetto. */
+    --bs-primary: var(--brand);
+    --bs-primary-rgb: var(--brand-rgb);
+    --bs-primary-bg-subtle: var(--brand-tenue);
+    --bs-primary-border-subtle: var(--brand-tenue-bordo);
+    --bs-primary-text-emphasis: var(--brand-testo);
+
+    /* Collegamenti testuali (i vari "Scarica", "Apri link", ...) */
+    --bs-link-color: var(--brand);
+    --bs-link-color-rgb: var(--brand-rgb);
+    --bs-link-hover-color: var(--brand-piu-scuro);
+    --bs-link-hover-color-rgb: 8, 63, 155;
+}
+
+/* ---------- Componenti Bootstrap ----------
+   I token qui sopra da soli NON bastano: nel CSS del CDN i componenti
+   arrivano con il blu gia' compilato dentro variabili proprie
+   (--bs-btn-bg e simili), che non derivano da --bs-primary. Vanno
+   quindi ridefinite una per una. Sono qui tutte e sole quelle che
+   l'applicazione usa davvero. */
+.btn-primary {
+    --bs-btn-bg: var(--brand);
+    --bs-btn-border-color: var(--brand);
+    --bs-btn-hover-bg: var(--brand-scuro);
+    --bs-btn-hover-border-color: var(--brand-piu-scuro);
+    --bs-btn-active-bg: var(--brand-piu-scuro);
+    --bs-btn-active-border-color: var(--brand-scurissimo);
+    --bs-btn-disabled-bg: var(--brand);
+    --bs-btn-disabled-border-color: var(--brand);
+    --bs-btn-focus-shadow-rgb: var(--brand-alone-rgb);
+}
+.btn-outline-primary {
+    --bs-btn-color: var(--brand);
+    --bs-btn-border-color: var(--brand);
+    --bs-btn-hover-bg: var(--brand);
+    --bs-btn-hover-border-color: var(--brand);
+    --bs-btn-active-bg: var(--brand);
+    --bs-btn-active-border-color: var(--brand);
+    --bs-btn-disabled-color: var(--brand);
+    --bs-btn-disabled-border-color: var(--brand);
+    --bs-btn-focus-shadow-rgb: var(--brand-alone-rgb);
+}
+/* Invito a creare un appello: bianco pieno sul grigio della pagina,
+   e blu pieno al passaggio del cursore. Basta cambiare lo sfondo a
+   riposo, perche' l'hover di btn-outline-primary usa una variabile
+   sua (--bs-btn-hover-bg) e questa regola non lo tocca. Deve stare
+   dopo .btn-outline-primary: stessa specificita', vince l'ultima. */
+.btn-crea-appello { --bs-btn-bg: #fff; }
+/* Campi di testo, date e orari quando prendono il fuoco */
+.form-control:focus, .form-select:focus {
+    border-color: var(--brand-chiaro);
+    box-shadow: 0 0 0 .25rem rgba(var(--brand-rgb), .25);
+}
+/* Scelte del video: pallini dei radio e caselle di spunta */
+.form-check-input:checked {
+    background-color: var(--brand);
+    border-color: var(--brand);
+}
+.form-check-input:focus {
+    border-color: var(--brand-chiaro);
+    box-shadow: 0 0 0 .25rem rgba(var(--brand-rgb), .25);
+}
+/* Barra di avanzamento del caricamento della tesi */
+.progress, .progress-stacked { --bs-progress-bar-bg: var(--brand); }
+/* Tendine di ricerca (commissione e tutor) */
+.list-group {
+    --bs-list-group-active-bg: var(--brand);
+    --bs-list-group-active-border-color: var(--brand);
+}
+body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+/* main occupa lo spazio disponibile e spinge il footer in fondo */
+main { flex: 1 0 auto; }
+.navbar-app {
+    background: var(--surface);
+    border-bottom: 1px solid #6c757d;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .05);
+}
+.brand-title { font-weight: 700; color: var(--ink); font-size: 1.05rem; }
+.section-title { font-weight: 700; }
+/* --bs-card-inner-border-radius allineato al raggio della card: senza,
+   testate e piedi restano al raggio predefinito di Bootstrap e i loro
+   angoli sporgono da quelli, piu' larghi, del riquadro. Si nota solo
+   quando la testata ha un fondo colorato (.testata-blu). */
+.card {
+    border: 1px solid var(--line); border-radius: .6rem;
+    --bs-card-inner-border-radius: calc(.6rem - 1px);
+}
+.card-header { background: #fff; border-bottom: 1px solid var(--line); font-weight: 600; }
+/* Testata di sezione in evidenza: bianco su blu, come il blocco data
+   delle card dell'area studente. Le pagine dei docenti sarebbero
+   altrimenti una fila di riquadri tutti bianchi, senza un appiglio da
+   cui cominciare a leggere. */
+.card-header.testata-blu {
+    background: var(--brand);
+    border-bottom-color: var(--brand);
+    color: #fff;
+    font-size: 1.15rem;
+    padding-top: .7rem; padding-bottom: .7rem;
+}
+.card-header.header-landing {
+    padding-left: 1rem;
+}
+.testata-blu a { color: #fff; }
+.testata-blu .conteggio { color: rgba(255, 255, 255, .75); font-weight: 400; }
+/* Spazio tra il bordo della card e la tabella contenuta */
+.card-body > .table-responsive { padding: .5rem 1rem; }
+.hero {
+    background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+}
+/* Bottone "soft primary": sfumato di default, primary pieno all'hover */
+.btn-soft-primary {
+    background: var(--bs-primary-bg-subtle);
+    border-color: var(--bs-primary-border-subtle);
+    color: var(--bs-primary-text-emphasis);
+}
+.btn-soft-primary:hover, .btn-soft-primary:focus {
+    background: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: #fff;
+}
+#footer { background-color: var(--surface); border-top: 1px solid #dcdcdc; }
+
+/* Nelle tabelle certi valori non devono mai spezzarsi a meta': una data,
+   un orario e un link "icona + testo" restano su una riga sola. Senza
+   questo, appena la colonna si stringe la scritta finisce sotto la
+   propria icona. */
+.table td .nowrap, .table td.nowrap { white-space: nowrap; }
+/* Il titolo della tesi puo' essere lunghissimo: va spezzato lui, non
+   la tabella. */
+.cell-titolo { overflow-wrap: anywhere; min-width: 12rem; }
+
+/* ---------- Card dell'area studente ----------
+   Sostituisce la tabella a sette colonne: una card per iscrizione, con
+   il blocco data a sinistra come in un calendario. */
+/* Griglia e non flex: su telefono le stesse parti cambiano posto
+   (il corso entra nella fascia blu, il pulsante va in fondo a tutta
+   larghezza) e con le aree basta ridisegnare lo schema. */
+.appello-card {
+    display: grid; overflow: hidden;
+    grid-template-columns: 112px minmax(0, 1fr) auto;
+    grid-template-areas:
+        "data corso  azione"
+        "data titolo titolo"
+        "data titolo titolo";
+}
+.appello-data {
+    grid-area: data; background: var(--brand); color: #fff;
+    padding: 1.1rem .75rem; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; line-height: 1.1;
+}
+/* Consegna incompleta: blocco grigio. Diventa blu solo quando lo
+   studente ha caricato tutto, cosi' il colore della card si legge da
+   lontano come stato di avanzamento. Dipende dai dati dello studente,
+   NON dall'orario dell'appello. */
+.appello-card.is-incompleto .appello-data { background: var(--surface); color: var(--ink); }
+.appello-data .giorno { font-size: 2.25rem; font-weight: 700; }
+.appello-data .dow { font-size: .69rem; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
+.appello-data .mese { font-size: .81rem; letter-spacing: .04em; }
+.appello-data .data-estesa { display: none; }   /* solo su telefono */
+.appello-data .ora {
+    margin-top: .5rem; font-size: .81rem; font-weight: 600;
+    background: rgba(255, 255, 255, .2); padding: .12rem .5rem; border-radius: 999px;
+}
+/* Sul blocco grigio l'alone bianco non si vedrebbe. */
+.appello-card.is-incompleto .appello-data .ora { background: rgba(0, 0, 0, .08); }
+.appello-corso {
+    grid-area: corso; padding: 1rem 1rem 0;
+    font-size: .81rem; font-weight: 600; color: var(--brand);
+    text-transform: uppercase; letter-spacing: .06em;
+}
+.appello-corpo { grid-area: titolo; padding: .25rem 1rem 1rem; min-width: 0; }
+.appello-azione { grid-area: azione; padding: 1rem 1rem 0; }
+.parola-iscrizione { display: none; }
+/* L'etichetta sopra il titolo serve sul telefono, dove il titolo non
+   ha piu' il corso sopra a fargli da appiglio. */
+.etichetta-titolo { display: none; }
+.appello-titolo {
+    font-size: 1.125rem; font-weight: 600; line-height: 1.35;
+    overflow-wrap: anywhere; text-wrap: pretty;
+}
+.appello-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.15rem;
+    padding-top: .4rem; border-top: 1px solid var(--line); font-size: .875rem;
+}
+/* display: contents fa sparire il contenitore dal disegno: le due voci
+   restano in fila con le altre. Su telefono torna una griglia vera e
+   le due diventano schede affiancate. */
+.voci-scheda { display: contents; }
+.voce { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; }
+.voce-etichetta { color: var(--muted); display: inline-flex; align-items: center; gap: .35rem; }
+.voce-valore { font-weight: 600; overflow-wrap: anywhere; }
+/* ---------- Sezione tutorati (area docente) ----------
+   Le pillole della valutazione usano il colore principale, non il
+   rosso: "da valutare" e' uno stato normale di avanzamento, non un
+   errore. Il rosso resta all'area studente, dove manca davvero
+   qualcosa. */
+.pill-da-valutare {
+    color: var(--brand); background: var(--brand-velo);
+    border: 1px solid var(--brand-tenue-bordo);
+    padding: .2rem .7rem; border-radius: 999px;
+    font-size: .875rem; white-space: nowrap;
+    /* Non e' un pulsante e non si puo' premere: il cursore "help"
+       annuncia che sotto c'e' una spiegazione, non un'azione. */
+    cursor: help;
+}
+/* I punti proposti si leggono come un voto ("2 /2 punti"): il numero
+   e' grande, la scala accanto resta un'annotazione. Cosi' uno studente
+   valutato 0 non puo' essere scambiato per uno non ancora valutato,
+   che al suo posto ha la pillola "Da valutare". */
+.punti-dati { white-space: nowrap; }
+.punti-valore { font-size: 1.15rem; font-weight: 700; color: var(--ink); }
+.punti-scala { color: var(--muted); font-size: .9rem; }
+/* Allegato mancante: l'icona resta al suo posto, spenta, cosi' le
+   righe restano incolonnate fra loro. */
+.allegato-assente { color: #c9ced6; }
+.nome-studente { font-weight: 600; font-size: 1.05rem; }
+.tutorato { border-left: 4px solid transparent; }
+.tutorato + .tutorato { border-top: 1px solid var(--line); }
+.tutorato.is-aperto {
+    border-left-color: var(--brand);
+    background: var(--brand-velo);
+}
+/* Col modulo aperto la riga compatta sparisce: l'intestazione del
+   modulo dice gia' le stesse cose, con piu' spazio. */
+.tutorato.is-aperto .riga-sintesi { display: none; }
+/* L'ultima riga tocca il bordo inferiore della card. Il suo sfondo
+   (azzurro quando il modulo e' aperto) e la striscia blu a sinistra
+   hanno spigoli vivi, che sporgono dagli angoli tondi del contenitore.
+   Il raggio e' quello interno della card - la stessa variabile che usa
+   .card - cosi' i due bordi restano concentrici. Vale sia per l'elenco
+   raggruppato sia per i risultati di ricerca, che sono l'ultima cosa
+   dentro la card tanto quanto l'altro. */
+#elenco-tutorati > div:last-child .tutorato:last-child,
+#risultati-tutorati .tutorato:last-child {
+    border-bottom-left-radius: var(--bs-card-inner-border-radius);
+    border-bottom-right-radius: var(--bs-card-inner-border-radius);
+}
+/* Il gruppo in fondo non ha niente sotto da cui separarsi: la sua
+   riga di chiusura correrebbe dritta sotto gli angoli appena stondati. */
+#elenco-tutorati > div:last-child { border-bottom: 0 !important; }
+
+/* Campo di ricerca con la lente dentro: un pulsante "Cerca" accanto
+   direbbe solo cio' che la lente dice gia', visto che l'elenco si
+   aggiorna mentre si scrive. La crocetta a destra compare solo a campo
+   pieno, ed e' il modo per tornare all'elenco completo. */
+.campo-ricerca { position: relative; width: min(22rem, 100%); }
+.campo-ricerca .bi-search {
+    position: absolute; left: .75rem; top: 50%; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none;
+}
+.campo-ricerca .form-control {
+    padding-left: 2.25rem; padding-right: 2.25rem; border-radius: .5rem;
+}
+/* La crocetta nativa di Chrome starebbe sotto la nostra: si toglie. */
+.campo-ricerca input[type="search"]::-webkit-search-cancel-button { display: none; }
+.azzera-ricerca {
+    position: absolute; right: .5rem; top: 50%; transform: translateY(-50%);
+    background: none; border: 0; padding: .15rem .3rem; line-height: 1;
+    color: var(--muted); border-radius: .3rem;
+}
+.azzera-ricerca:hover { color: var(--ink); background: var(--line); }
+
+/* Interruttore "appelli passati" nella testata blu (_spunta_passati.html).
+   Una .form-check normale qui non va: il quadratino bianco sparisce sul
+   bianco del testo e l'etichetta, della stessa misura del titolo accanto,
+   si legge come un secondo titolo. Si rende percio' come una pastiglia con
+   un bordo -- si vede che e' un comando e non una scritta -- cliccabile
+   tutta, perche' l'etichetta avvolge l'interruttore. */
+.spunta-passati {
+    display: inline-flex; align-items: center; gap: .5rem;
+    margin: 0; padding: .25rem .8rem .25rem .6rem;
+    border: 1px solid rgba(255, 255, 255, .55); border-radius: 999px;
+    color: #fff; font-size: .875rem; font-weight: 500; line-height: 1.6;
+    background: rgba(255, 255, 255, .14);
+    cursor: pointer; -webkit-user-select: none; user-select: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.spunta-passati:hover { background: rgba(255, 255, 255, .26); border-color: #fff; }
+/* Accesa: pastiglia piena. Lo stato si deve leggere da lontano, non solo
+   dalla posizione del cursorino. :has() lo mostra subito anche prima di
+   inviare il form; la classe copre i browser che non lo conoscono e il
+   caso in cui la pagina si ricarichi. */
+.spunta-passati.is-attiva,
+.spunta-passati:has(.form-check-input:checked) {
+    background: #fff; border-color: #fff; color: var(--brand-testo);
+}
+/* Bootstrap affianca l'interruttore all'etichetta con un padding sul
+   contenitore e un margine negativo sull'input: qui la disposizione la fa
+   il flex della pastiglia, e i due si annullano a vicenda. */
+.spunta-passati.form-switch { padding-left: .6rem; }
+.spunta-passati.form-switch .form-check-input {
+    margin: 0; flex: none; width: 2em; height: 1em;
+    background-color: rgba(255, 255, 255, .25);
+    border-color: rgba(255, 255, 255, .7);
+    /* Cursorino bianco anche da spento: quello scuro predefinito
+       scomparirebbe sul blu della testata. */
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='%23ffffff'/></svg>");
+}
+/* Accesa la pastiglia e' bianca: il binario torna blu, col cursorino
+   bianco che Bootstrap mette gia' da solo sullo stato :checked. */
+.spunta-passati .form-check-input:checked {
+    background-color: var(--brand); border-color: var(--brand);
+}
+.spunta-passati .form-check-input:focus {
+    border-color: #fff; box-shadow: 0 0 0 .2rem rgba(255, 255, 255, .4);
+}
+/* L'alone di messa a fuoco va sulla pastiglia: l'interruttore e' piccolo, e
+   da tastiera si deve vedere che il comando e' quello, tutto intero. */
+.spunta-passati:has(.form-check-input:focus-visible) {
+    outline: 2px solid #fff; outline-offset: 2px;
+}
+
+/* Intestazione di gruppo: e' un <button> per essere raggiungibile da
+   tastiera, ma non deve sembrare un pulsante. */
+.gruppo-testata {
+    background: #fafbfc; border: 0; width: 100%; text-align: left;
+}
+.gruppo-testata:hover { background: var(--brand-velo); }
+.gruppo-testata .freccia { transition: transform .15s ease; color: var(--muted); }
+.gruppo-testata[aria-expanded="true"] .freccia { transform: rotate(90deg); }
+.gruppo-data { font-weight: 700; font-size: 1.05rem; }
+/* Il corso e' cio' che distingue un gruppo dall'altro a parita' di
+   data: maiuscoletto spaziato perche' si legga come un'etichetta. */
+.gruppo-corso {
+    color: var(--brand); text-transform: uppercase;
+    letter-spacing: .06em; font-size: .875rem;
+}
+.gruppo-riepilogo { color: var(--muted); font-size: .9375rem; }
+.gruppo-riepilogo .da-valutare { color: var(--brand); font-weight: 600; }
+
+/* Etichette del modulo di valutazione: maiuscoletto spaziato, cosi' si
+   distinguono dal contenuto senza pesare come un titolo. */
+.etichetta-campo {
+    display: block; margin-bottom: .35rem;
+    text-transform: uppercase; letter-spacing: .05em;
+    font-size: .75rem; font-weight: 600; color: var(--muted);
+}
+.etichetta-nota { text-transform: none; letter-spacing: 0; font-weight: 400; }
+/* I tre pulsanti dei punti: quadrati e affiancati, con il prescelto
+   pieno. Larghezza fissa perche' non ballino da 0 a 2. */
+.segmento-punti .btn {
+    min-width: 3.5rem; padding: .5rem 0; font-size: 1.05rem; font-weight: 600;
+}
+
+/* Qui il rosso e' corretto: segnala cosa manca, non un'azione. */
+.badge-manca {
+    color: #8a1a12; background: #fef3f2; border: 1px solid #fbc5c0;
+    padding: .12rem .55rem; border-radius: 999px;
+}
+@media (max-width: 575.98px) {
+    /* Una colonna sola, nell'ordine in cui si legge: data, corso,
+       titolo e dati, pulsante. */
+    .appello-card {
+        grid-template-columns: 1fr;
+        grid-template-areas: "data" "corso" "titolo" "azione";
+    }
+    /* La data diventa una riga sola, con il mese per esteso: in
+       larghezza c'e' posto, e "14 ottobre 2026" si legge meglio della
+       colonnina del calendario. */
+    .appello-data {
+        flex-direction: row; align-items: baseline; gap: .5rem;
+        justify-content: flex-start; padding: .9rem 1rem .35rem;
+    }
+    .appello-data .dow,
+    .appello-data .giorno,
+    .appello-data .mese { display: none; }
+    .appello-data .data-estesa { display: inline; font-size: 1.5rem; font-weight: 700; }
+    .appello-data .ora { margin-top: 0; background: none; padding: .12rem .5rem; font-size: 1rem; }
+    /* Il corso continua la fascia blu: e' un blocco separato solo per
+       poterlo spostare, ma si deve leggere come una cosa sola. */
+    .appello-corso {
+        background: var(--brand); color: rgba(255, 255, 255, .85);
+        padding: 0 1rem .9rem; font-size: .95rem;
+        text-transform: none; letter-spacing: 0;
+    }
+    .appello-card.is-incompleto .appello-corso {
+        background: var(--surface); color: var(--muted);
+    }
+    .appello-corpo { padding: 1rem; }
+    .etichetta-titolo {
+        display: block; margin-bottom: .15rem;
+        text-transform: uppercase; letter-spacing: .05em;
+        font-size: .75rem; font-weight: 600; color: var(--muted);
+    }
+    .appello-titolo { font-size: 1.25rem; }
+    /* Il video resta una riga; tesi e tutor diventano due schede
+       affiancate, etichetta sopra e valore sotto. */
+    .appello-meta { flex-direction: column; align-items: stretch; gap: .75rem; }
+    .voci-scheda { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .voci-scheda .voce {
+        flex-direction: column; align-items: flex-start; gap: .2rem;
+        border: 1px solid var(--line); border-radius: .5rem;
+        padding: .5rem .65rem; background: #fbfbfc;
+    }
+    .appello-azione { padding: 0 1rem 1rem; }
+    .appello-azione .btn { width: 100%; }
+    .parola-iscrizione { display: inline; }
+}
+
+/* ---------- Tabelle "a schede" ----------
+   Ogni riga diventa un riquadro leggibile, senza scorrimento
+   orizzontale. Serve la classe .table-stack e un data-label su ogni
+   <td>. La soglia e' 992px (non 576px come il resto degli
+   adattamenti per telefoni) perche' le tabelle sono arrivate a sette
+   colonne: gia' sotto i 992px diventano illeggibili e sotto i 768px
+   le ultime colonne finiscono fuori dallo schermo. */
+@media (max-width: 991.98px) {
+    .table-stack thead { display: none; }
+    .table-stack, .table-stack tbody, .table-stack tr, .table-stack td {
+        display: block;
+        width: 100%;
+    }
+    .table-stack tr {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: .6rem;
+        margin: .75rem 0;   /* solo verticale: evita lo scroll orizzontale */
+        padding: .25rem .9rem;
+    }
+    .table-stack td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        text-align: right;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: .5rem 0;
+        overflow-wrap: anywhere;   /* i valori lunghi vanno a capo */
+    }
+    .table-stack tr td:last-child { border-bottom: 0; }
+    .table-stack td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--muted);
+        text-align: left;
+        white-space: nowrap;
+    }
+    /* Cella azioni: etichetta sopra, bottoni a piena larghezza sotto */
+    .table-stack td.cell-actions {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: left;
+    }
+    /* Nella cella azioni non serve l'etichetta: si mostrano solo i bottoni */
+    .table-stack td.cell-actions::before { display: none; }
+    .table-stack td.cell-actions form { width: 100%; }
+    .table-stack td.cell-actions .btn { width: 100%; }
+    /* In modalita' scheda la larghezza minima non serve piu' */
+    .table-stack .cell-titolo { min-width: 0; }
+}
+
+/* ---------- Adattamenti per schermi piccoli (telefoni) ---------- */
+@media (max-width: 575.98px) {
+    /* Navbar: oggetti distribuiti con spazio attorno, logo/titolo compatti */
+    .navbar-app .container { justify-content: space-around; }
+    .navbar-brand { margin-right: 0; }
+    .navbar-brand img { height: 32px; }
+    .brand-title { font-size: .95rem; }
+    main.container { padding-top: 1rem; }
+
+    /* Hero della landing: meno padding e titolo piu' piccolo */
+    .hero { padding: 1.75rem 1rem !important; }
+    .hero .display-6 { font-size: 1.5rem; }
+}
+
+/* ---------- Utilita' e ricerca dei docenti ----------
+   Regole usate da piu' pagine: .min-w-0 permette a un elemento flex o di
+   griglia di stringersi sotto il proprio contenuto (serve a text-truncate);
+   le altre disegnano i risultati della ricerca dei docenti e le schede dei
+   docenti scelti, identiche in creazione appello e consegna tesi. */
+.min-w-0 { min-width: 0; }
+.riga-docente-nome { font-weight: 600; }
+.riga-docente-mail { color: var(--muted); font-size: .875rem; }
+.membro-icona { color: var(--muted); flex-shrink: 0; }
+.membro-testo { min-width: 0; flex: 1; }
+.membro-rimuovi { flex-shrink: 0; }

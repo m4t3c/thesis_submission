@@ -1,4 +1,5 @@
 {% extends "appelli/base.html" %}
+{% load static %}
 
 {% comment %}
     Dettaglio di un appello, riservato ai docenti della sua commissione: e' la
@@ -13,6 +14,10 @@
 {% endcomment %}
 
 {% block title %}{{ appello.corso_di_laurea }} — {{ appello.data|date:"d/m/Y" }}{% if appello.ora %} {{ appello.ora|time:"H:i" }}{% endif %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/appello_detail.css' %}">
+{% endblock %}
 
 {% block content %}
 <a class="btn btn-outline-secondary btn-sm mb-3" href="{% url url_ritorno %}">
@@ -36,7 +41,7 @@
                 <div class="col-md-6">
                     <div class="membro-commissione d-flex align-items-center gap-2">
                         <i class="bi bi-person-fill text-muted flex-shrink-0" aria-hidden="true"></i>
-                        <div style="min-width: 0;">
+                        <div class="min-w-0">
                             <div class="fw-semibold text-truncate">
                                 {{ docente.get_full_name|default:docente.get_username }}
                             </div>
@@ -54,83 +59,6 @@
         </div>
     </div>
 </div>
-
-<style>
-    .membro-commissione {
-        border: 1px solid var(--line);
-        border-radius: .5rem;
-        padding: .6rem .75rem;
-        background: #fbfbfc;
-        height: 100%;
-    }
-
-    /* Intestazioni di gruppo dentro la tabella: si leggono come etichette,
-       non come righe di dati, quindi maiuscoletto spaziato e corpo piccolo. */
-    .riga-gruppo td {
-        text-transform: uppercase; letter-spacing: .06em;
-        font-size: .8125rem; font-weight: 700; color: var(--muted);
-        background: #fafbfc; padding-top: .45rem; padding-bottom: .45rem;
-    }
-    .riga-gruppo .conteggio { font-weight: 400; opacity: .75; }
-    /* Il proprio gruppo e' l'unico colorato: il colore qui vuol dire
-       "riguarda te", ed e' cio' che si cerca aprendo la pagina. */
-    .riga-gruppo-mia td { color: var(--brand); background: var(--brand-velo); }
-
-    /* Striscia blu a sinistra, sulla testata e su ogni riga del gruppo.
-       box-shadow e non border-left: il bordo allargherebbe la cella e
-       disallineerebbe le colonne rispetto alle righe degli altri studenti.
-       Solo da desktop: in modalita' "schede" la striscia va sul riquadro
-       (vedi sotto), e la regola dell'hover, piu' specifica, la riporterebbe
-       sulla prima cella dopo un tocco. */
-    @media (min-width: 992px) {
-        .riga-gruppo-mia td:first-child,
-        .riga-mia td:first-child { box-shadow: inset 4px 0 0 var(--brand); }
-        /* table-hover riscrive lo sfondo della cella al passaggio del cursore:
-           senza questo la striscia resterebbe coperta. */
-        .table-hover > tbody > tr.riga-mia:hover > td:first-child {
-            box-shadow: inset 4px 0 0 var(--brand);
-        }
-    }
-
-    /* Riga del modulo di valutazione, sotto quella dello studente. A modulo
-       chiuso la cella resta alta zero, quindi fondo e striscia si vedono solo
-       quando il modulo e' aperto, e lo legano alla riga "mia" di sopra.
-       Il box-shadow sostituisce quello con cui Bootstrap colora le celle al
-       passaggio del cursore: il modulo non e' una riga da evidenziare. */
-    .riga-valuta td {
-        padding: 0;
-        background: var(--brand-velo);
-        box-shadow: inset 4px 0 0 var(--brand);
-    }
-
-    @media (max-width: 991.98px) {
-        /* In modalita' "schede" ogni riga e' un riquadro: l'intestazione di
-           gruppo non deve diventarlo, o sembrerebbe uno studente senza nome. */
-        .table-stack .riga-gruppo {
-            background: transparent; border: 0; border-radius: 0;
-            margin: 1rem 0 .25rem; padding: 0;
-        }
-        .table-stack .riga-gruppo td {
-            display: block; text-align: left; padding: 0;
-            background: transparent; box-shadow: none;
-        }
-        .table-stack .riga-gruppo td::before { display: none; }
-        /* Sulla scheda la striscia va su tutto il riquadro, non su una cella */
-        .table-stack .riga-mia { box-shadow: inset 4px 0 0 var(--brand); }
-
-        /* Neanche la riga del modulo e' una scheda: chiusa sarebbe un
-           riquadro vuoto fra uno studente e l'altro. Aperta, il riquadro lo
-           disegna la cella stessa. */
-        .table-stack .riga-valuta {
-            background: transparent; border: 0; border-radius: 0;
-            margin: 0; padding: 0;
-        }
-        .table-stack .riga-valuta td {
-            display: block; text-align: left; border-radius: .6rem;
-        }
-        .table-stack .riga-valuta td::before { display: none; }
-    }
-</style>
 
 {# ---------------- Studenti iscritti e loro allegati ---------------- #}
 <div class="card shadow-sm">
@@ -150,7 +78,7 @@
                     </thead>
                     <tbody>
                         {% comment %}
-                            Se non si e' relatore di nessuno, niente
+                            Se non si e' tutor di nessuno, niente
                             intestazioni: un solo gruppo che dice "altri
                             studenti" sarebbe un'etichetta senza contrasto.
                         {% endcomment %}

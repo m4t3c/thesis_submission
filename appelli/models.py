@@ -131,7 +131,7 @@ class AppelloDiLaurea(models.Model):
         return f"{self.etichetta_pubblica} (commissione {self.commissione})"
 
 
-# Punti che il relatore propone di aggiungere al voto di laurea. NON e' il
+# Punti che il tutor propone di aggiungere al voto di laurea. NON e' il
 # voto finale: e' un contributo, e lo zero e' un valore legittimo (proposta
 # di non aggiungere nulla), diverso da "non ancora valutato" che si
 # rappresenta con NULL.
@@ -253,9 +253,9 @@ class StudenteAppelloDiLaurea(models.Model):
         help_text="Indirizzo di un video gia' pubblicato online (facoltativo).",
     )
 
-    # --- Valutazione del relatore -------------------------------------
+    # --- Valutazione del tutor -------------------------------------
     # Materiale INTERNO ai docenti: non compare in nessuna pagina dell'area
-    # studente. Lo inserisce il solo relatore (vedi puo_valutare in views.py).
+    # studente. Lo inserisce il solo tutor (vedi puo_valutare in views.py).
     punteggio = models.SmallIntegerField(
         null=True,
         blank=True,
@@ -265,14 +265,14 @@ class StudenteAppelloDiLaurea(models.Model):
         ],
         verbose_name="Punti proposti",
         help_text=(
-            f"Punti che il relatore propone di aggiungere al voto di laurea "
+            f"Punti che il tutor propone di aggiungere al voto di laurea "
             f"(da {PUNTEGGIO_MIN} a {PUNTEGGIO_MAX}). Vuoto = non ancora valutato."
         ),
     )
     giudizio = models.TextField(
         blank=True,
         verbose_name="Giudizio",
-        help_text="Giudizio del relatore. Non visibile allo studente.",
+        help_text="Giudizio del tutor. Non visibile allo studente.",
     )
 
     class Meta:
@@ -304,7 +304,7 @@ class StudenteAppelloDiLaurea(models.Model):
 
     @property
     def valutata(self):
-        """True se il relatore ha gia' proposto un punteggio.
+        """True se il tutor ha gia' proposto un punteggio.
 
         Non basta "if iscrizione.punteggio": zero e' un punteggio valido, e
         confonderlo con l'assenza di valutazione e' proprio l'errore che

@@ -1,0 +1,267 @@
+/* Creazione di un appello (crea_appello.html). */
+
+.testo-breve { display: none; }
+
+/* ---------- Card ---------- */
+.nuovo-appello {
+    background: #fff;
+    border-radius: .6rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+    /* niente overflow:hidden: impedirebbe alla barra azioni di restare
+       ancorata in basso su telefono */
+}
+.na-testata {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: 22px 28px;
+    border-bottom: 1px solid var(--line);
+}
+.na-testata-icona { color: var(--brand); font-size: 1.6rem; line-height: 1; margin-top: .3rem; }
+.na-titolo { font-size: calc(1.325rem + .9vw); font-weight: 700; margin: 0; color: var(--ink); }
+@media (min-width: 1200px) { .na-titolo { font-size: 2rem; } }
+
+.na-corpo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38%;
+}
+@media (min-width: 992px) {
+    .na-corpo { grid-template-columns: minmax(0, 1fr) 42%; }
+}
+.na-col { padding: 24px 28px; }
+.na-col-lato { background: #fbfcfd; border-left: 1px solid var(--line); }
+.na-campo + .na-campo,
+.na-campo + .campi-appello { margin-top: 1.5rem; }
+.na-campo .form-label { color: var(--ink); }
+
+.na-azioni {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .75rem 1rem;
+    padding: 18px 28px;
+    border-top: 1px solid var(--line);
+    background: #fbfcfd;
+    border-radius: 0 0 .6rem .6rem;
+}
+.na-pulsanti { display: flex; gap: .6rem; }
+.na-stato { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
+
+/* ---------- Zona del file ---------- */
+.zona-drop {
+    position: relative;
+    border: 1px dashed #b9c2cf;
+    border-radius: .5rem;
+    background: #fbfcfd;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+.zona-drop:focus-visible { outline: 0; box-shadow: 0 0 0 .25rem rgba(var(--brand-alone-rgb), .25); }
+.zona-vuota { padding: 2.25rem 1.25rem; text-align: center; }
+.zona-icona { display: block; font-size: 2rem; color: var(--muted); margin-bottom: .5rem; }
+.zona-invito { color: var(--ink); font-size: 1.05rem; }
+.zona-sfoglia { color: var(--brand); font-weight: 500; }
+.zona-nota { color: var(--muted); font-size: .875rem; margin-top: .2rem; }
+.zona-caricata { display: none; align-items: center; gap: .9rem; padding: .85rem 1.1rem; }
+.zona-caricata-icona { font-size: 1.6rem; color: var(--brand); }
+.zona-nome-file { font-weight: 600; color: var(--ink); }
+.zona-conteggio { font-size: .875rem; color: var(--ink); }
+.zona-sostituisci { color: var(--brand); flex-shrink: 0; }
+.zona-drop:hover { border-color: var(--brand-chiaro); }
+.zona-drop.con-file {
+    border: 1px solid var(--brand-tenue-bordo);
+    background: var(--brand-velo);
+}
+.zona-drop.con-file .zona-vuota { display: none; }
+.zona-drop.con-file .zona-caricata { display: flex; }
+.zona-drop.sopra { border-color: var(--brand); background: var(--brand-velo); }
+.zona-drop.in-lettura { opacity: .6; pointer-events: none; }
+/* Trascinamento di qualcosa che non e' un .xlsx: il riquadro diventa rosso
+   prima ancora del rilascio, cosi' l'utente sa che non verra' accettato. */
+.zona-drop.rifiuta {
+    border-color: var(--bs-danger);
+    background: var(--bs-danger-bg-subtle);
+    cursor: not-allowed;
+}
+
+/* ---------- Campi ---------- */
+/* Un fieldset porta con se' bordo e margini propri: qui deve solo
+   raggruppare, non farsi vedere. */
+.campi-appello { border: 0; padding: 0; margin: 1.5rem 0 0; min-width: 0; }
+.campi-appello > .na-campo + .na-campo { margin-top: 1.5rem; }
+.na-data-ora { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+/* I campi data e ora hanno una larghezza minima propria del browser */
+.na-data-ora .form-control { min-width: 0; }
+.form-control::placeholder { color: #9aa3ad; }
+.campi-appello[disabled] .blocco-dati { opacity: .55; }
+.campi-appello[disabled] .form-control { background: #f1f3f5; }
+/* Nello stato vuoto la nota sul corso non ha ancora niente da dire, e la
+   commissione si compone solo dopo aver letto l'elenco. */
+.stato-vuoto .nota-corso,
+.stato-vuoto .blocco-membri { display: none; }
+
+.ricerca-icona {
+    position: absolute; left: .85rem; top: 50%; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none;
+}
+.ricerca-docenti { padding-left: 2.4rem; }
+/* La tendina dei risultati si sovrappone al contenuto sottostante */
+#risultati-docenti {
+    position: absolute;
+    z-index: 1000;
+    width: 100%;
+    max-height: 22rem;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: .4rem;
+}
+#risultati-docenti .list-group-item { cursor: pointer; }
+#risultati-docenti .list-group-item.attivo { background: var(--bs-primary-bg-subtle); }
+
+/* Riquadro dei membri scelti: il bordo tratteggiato comunica "qui dentro
+   finisce quello che selezioni", anche quando e' ancora vuoto. */
+.box-membri {
+    border: 2px dashed var(--line);
+    border-radius: .6rem;
+    padding: .75rem;
+    background: #fbfcfd;
+}
+.box-membri.pieno { border: 1px solid var(--line); }
+.membro {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: .5rem;
+    padding: 10px 12px;
+}
+.membro + .membro { margin-top: .5rem; }
+.membro .riga-docente-nome { text-transform: uppercase; }
+
+/* ---------- Colonna destra ---------- */
+.na-occhiello {
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #4b5563;
+    margin-bottom: .75rem;
+}
+.na-riga-occhiello { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.na-conteggio { color: var(--muted); font-size: .875rem; white-space: nowrap; }
+
+.pannello-studenti { display: none; }
+.nuovo-appello:not(.stato-vuoto) .pannello-passi { display: none; }
+.nuovo-appello:not(.stato-vuoto) .pannello-studenti { display: block; }
+
+.passi-appello { list-style: none; margin: 0; padding: 0; }
+.passi-appello li { display: flex; gap: .75rem; align-items: flex-start; }
+.passi-appello li + li { margin-top: 1rem; }
+.passo-pallino {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--brand-velo);
+    border: 1px solid var(--brand-tenue-bordo);
+    color: var(--brand-testo);
+    font-size: .8rem; font-weight: 700;
+}
+.passo-titolo { font-weight: 500; color: var(--ink); }
+.passo-testo { color: var(--muted); font-size: .9rem; }
+
+.nota-studenti { color: var(--muted); font-size: .875rem; margin: .15rem 0 .5rem; }
+.riga-studente {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    padding: .5rem 0;
+    border-bottom: 1px solid #eef0f3;
+    margin: 0;
+    cursor: pointer;
+}
+.riga-studente .form-check-input { margin: 0; flex-shrink: 0; }
+/* Nome ed email sulla stessa riga finche' ci stanno: sotto una certa
+   larghezza l'email va a capo invece di schiacciare il nome. */
+.riga-studente-testo {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .1rem .7rem;
+}
+.riga-studente-nome {
+    flex: 1 1 9rem;
+    min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.riga-studente-email {
+    color: var(--muted); font-size: .875rem;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+/* Elenco chiuso: solo le prime 8 righe */
+.elenco-studenti:not(.aperto) .riga-studente:nth-child(n+9) { display: none; }
+.vuoto-studenti { color: var(--muted); padding: .75rem 0; margin: 0; }
+.vedi-tutti { margin-top: .6rem; text-decoration: none; }
+
+/* ---------- Sotto i 768px: una colonna ---------- */
+@media (max-width: 767.98px) {
+    /* minmax(0, ...) e non 1fr: una colonna 1fr non scende sotto il suo
+       contenuto, e il nome del file (che non va a capo) o i campi data e
+       ora la allargherebbero oltre lo schermo. */
+    .na-corpo { grid-template-columns: minmax(0, 1fr); }
+    .na-col-lato { background: transparent; border-left: 0; padding-top: 0; }
+    /* Nello stato vuoto i campi spenti restano fuori: dopo il file viene
+       subito il pannello dei passi. */
+    .stato-vuoto .campi-appello { display: none; }
+    .stato-vuoto .na-col-modulo { padding-bottom: 1rem; }
+    .pannello-passi {
+        background: var(--brand-velo);
+        border: 1px solid var(--brand-tenue-bordo);
+        border-radius: .6rem;
+        padding: 1.1rem 1.25rem;
+    }
+    .pannello-passi .na-occhiello { color: var(--brand-testo); }
+    .pannello-passi .passo-pallino { background: #fff; }
+    .pannello-studenti .na-occhiello {
+        font-size: 1.15rem; letter-spacing: 0; text-transform: none; color: var(--ink);
+    }
+
+    /* Barra azioni ancorata in basso, sopra il fondo pagina fisso */
+    .na-azioni {
+        position: sticky;
+        bottom: var(--altezza-fondo, 0px);
+        z-index: 5;
+        background: #fff;
+        flex-direction: column;
+        align-items: stretch;
+        gap: .5rem;
+    }
+    .na-pulsanti .btn-primary { flex: 1; }
+    .na-stato { margin: 0; text-align: center; }
+}
+
+/* ---------- Telefoni ---------- */
+@media (max-width: 575.98px) {
+    .testo-lungo { display: none; }
+    .testo-breve { display: inline; }
+    .nuovo-appello { box-shadow: none; }
+    .na-testata { border-bottom: 0; padding: 14px 14px 0; }
+    .na-testata-icona { font-size: 1.5rem; margin-top: .25rem; }
+    .na-titolo { font-size: 1.6rem; }
+    .na-col { padding: 16px 14px 0; }
+    .na-col-modulo, .stato-vuoto .na-col-modulo { padding-bottom: 0; }
+    .na-col-lato { padding-bottom: 16px; }
+    .na-campo + .na-campo, .campi-appello { margin-top: 16px; }
+    .campi-appello > .na-campo + .na-campo { margin-top: 16px; }
+    .na-data-ora { gap: .75rem; }
+    .nuovo-appello:not(.stato-vuoto) .na-estensione,
+    .nota-corso { display: none; }
+    .zona-vuota { padding: 1.75rem 1rem; }
+    /* Qui l'elenco chiuso mostra le prime 4 righe */
+    .elenco-studenti:not(.aperto) .riga-studente:nth-child(n+5) { display: none; }
+    .na-azioni { padding: 14px; }
+}
