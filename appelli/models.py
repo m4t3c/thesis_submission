@@ -205,9 +205,9 @@ class StudenteAppelloDiLaurea(models.Model):
     tutor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        # Le iscrizioni di cui il docente e' tutor: docente.tutorati.all().
+        # Le iscrizioni di cui il docente e' tutor: docente.laureandi.all().
         # "iscrizioni" e' gia' preso dal lato studente.
-        related_name="tutorati",
+        related_name="laureandi",
         limit_choices_to={"groups__name": "docente"},
         null=True,
         blank=True,
@@ -229,7 +229,7 @@ class StudenteAppelloDiLaurea(models.Model):
         help_text="File della tesi di laurea, in formato PDF.",
     )
     # blank=True perche' le iscrizioni gia' esistenti non hanno un titolo e
-    # perche' l'import automatico dall'Excel creera' righe senza. Nel form
+    # perche' l'import dall'elenco xlsx crea righe senza. Nel form
     # dello studente e' invece obbligatorio: cosi' si puo' sempre cambiare ma
     # mai svuotare.
     titolo = models.CharField(

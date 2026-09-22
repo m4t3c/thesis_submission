@@ -18,7 +18,7 @@ dopo il login (`/dashboard/`). Un utente può appartenere a entrambi i gruppi pe
   endpoint di iscrizione manuale per gli studenti.
   Nel momento in cui uno studente viene iscritto dal presidente, riceve un'email.
 - **Area docente** (`/docente/`) — la
-  sezione "I miei tutorati", dove si valutano i propri studenti (titolo,
+  sezione "I miei laureandi", dove si valutano i propri studenti (titolo,
   punteggio, giudizio), gli appelli delle proprie commissioni (con accesso al dettaglio, agli iscritti e al download delle tesi) e gli altri appelli disponibili. Per tutte le tabelle sono nascosti i dati relativi agli appelli passati ma per le ultime due è presente un interruttore
   indipendente per mostrarli di nuovo.
   Nel momento in cui un docente viene inserito nella commissione di un appello creato dal presidente, riceve un'email.
@@ -66,9 +66,9 @@ accedere servono utenti creati a mano. Il comando
 docker compose exec web python manage.py crea_dati_demo
 ```
 
-crea due studenti, due docenti, una commissione e un appello di esempio
-(password `password123` per tutti), utile per esplorare rapidamente le
-diverse aree.
+crea due studenti, due docenti, un presidente, una commissione e un appello
+di esempio (password `password123` per tutti), utile per esplorare
+rapidamente le diverse aree.
 
 ## Avvio in locale senza Docker
 
@@ -99,7 +99,7 @@ python manage.py test appelli
 ```
 
 La suite copre permessi e confini fra le aree, il flusso di caricamento
-tesi/video, la valutazione dei tutorati, la lettura degli xlsx e le regole di
+tesi/video, la valutazione dei laureandi, la lettura degli xlsx e le regole di
 visibilità degli appelli passati. Richiede un database configurato (anche
 solo per la durata dei test, che lavorano su un database di test separato
 creato e distrutto automaticamente).
@@ -115,15 +115,15 @@ appelli/                   App Django principale
 ├── admin.py                Configurazione dell'admin Django
 ├── xlsx.py                 Lettura dell'elenco laureandi da file xlsx
 ├── notifiche.py            Invio delle email (iscrizione, nomina in commissione/tutor)
-├── storage.py               Storage personalizzato per i file caricati
-├── templatetags/            Filtri per i template (es. resa "Cognome Nome")
-├── management/commands/     crea_dati_demo, pulisci_tesi_orfane
-├── migrations/               Migrazioni, incluse quelle che creano gruppi e dati demo
-└── templates/appelli/        Template HTML, con partial riusati fra le pagine (prefisso "_")
+├── storage.py              Storage personalizzato per i file caricati
+├── templatetags/           Filtri per i template (es. resa "Cognome Nome")
+├── management/commands/    crea_dati_demo, pulisci_tesi_orfane
+├── migrations/             Migrazioni, incluse quelle che creano gruppi e dati demo
+└── templates/appelli/      Template HTML, con partial riusati fra le pagine (prefisso "_")
 
 thesis_submission/          Configurazione del progetto Django
-├── settings.py              Impostazioni, guidate da variabili d'ambiente
-└── static/{css,js}/         Stili e script propri dell'app, per pagina + comuni (common.*)
+├── settings.py             Impostazioni, guidate da variabili d'ambiente
+└── static/{css,js}/        Stili e script propri dell'app, per pagina + comuni (common.*)
 ```
 
 ## Note per il deploy in produzione

@@ -55,6 +55,9 @@ SCOPE_ATTESO = "unimore.it"
 # NB: contro un header FALSIFICATO questo controllo non difende comunque (chi
 # puo' scrivere l'header scrive anche "@unimore.it"): li' la difesa e' il
 # reverse proxy che ripulisce gli X-Shib-* in arrivo dall'esterno.
+
+# Separatori con cui un attributo multivalore puo' arrivare dentro un solo
+# header. Il primo e' quello a cui gli altri vengono ricondotti.
 SEPARATORI = ";,"
 
 # L'insieme dei ruoli deve corrispondere ESATTAMENTE a una di queste due

@@ -1,8 +1,8 @@
 /*
- * Modulo di valutazione dei tutorati: chiusura esclusiva dei pannelli,
+ * Modulo di valutazione dei laureandi: chiusura esclusiva dei pannelli,
  * controllo punteggio+giudizio, uscita con modifiche non salvate, fumetti.
  *
- * Condiviso dall'area docente (sezione "I miei tutorati") e dal dettaglio di
+ * Condiviso dall'area docente (sezione "I miei laureandi") e dal dettaglio di
  * un appello: lo collega _modale_valutazione.html, che porta anche la modale
  * a cui questo script si appoggia. Si aspetta i moduli di
  * _modulo_valutazione.html.
@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.js-modifica.show').forEach(function (altro) {
             if (altro !== modulo) bootstrap.Collapse.getOrCreateInstance(altro).hide();
         });
-        var riga = modulo.closest('.tutorato');
+        var riga = modulo.closest('.laureando');
         if (riga) riga.classList.add('is-aperto');
         // Fotografia dei valori all'apertura: e' il metro con cui si decide
         // se all'uscita c'e' qualcosa da salvare.
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('hide.bs.collapse', function (e) {
         var modulo = e.target;
         if (!modulo.classList.contains('js-modifica')) return;
-        var riga = modulo.closest('.tutorato');
+        var riga = modulo.closest('.laureando');
         if (riga) riga.classList.remove('is-aperto');
     });
 
@@ -55,11 +55,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // aperto: va portato davanti agli occhi, altrimenti si atterra in cima
     // alla pagina e sembra non sia successo niente. Il pannello aperto lo
     // mette il server solo in quel caso. Nell'area docente si centra l'intera
-    // riga del tutorato; nella tabella del dettaglio il modulo sta in una riga
+    // riga del laureando; nella tabella del dettaglio il modulo sta in una riga
     // a se', e si centra quello.
     var daCorreggere = document.querySelector('.js-modifica.show');
     if (daCorreggere) {
-        (daCorreggere.closest('.tutorato') || daCorreggere).scrollIntoView({block: 'center'});
+        (daCorreggere.closest('.laureando') || daCorreggere).scrollIntoView({block: 'center'});
     }
 
     // --- Punteggio e giudizio vanno insieme -------------------------------
@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /**
-     * Chiude il pannello di un tutorato, scartando se richiesto le modifiche.
+     * Chiude il pannello di un laureando, scartando se richiesto le modifiche.
      *
      * reset() riporta i campi ai valori resi dal server, cioe' a quelli
      * salvati nel database: e' esattamente "esci senza salvare".

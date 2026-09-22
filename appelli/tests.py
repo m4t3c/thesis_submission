@@ -61,6 +61,27 @@ def tearDownModule():
     shutil.rmtree(_MEDIA_DI_PROVA, ignore_errors=True)
 
 
+def _svuota_media():
+    """Riporta la cartella dei file caricati a com'era all'inizio del test.
+
+    La cartella usa e getta basta a non sporcare la MEDIA_ROOT vera, ma e'
+    una sola per tutta l'esecuzione, e i resti si accumulano anche fra un
+    test e l'altro: django-cleanup cancella i file sostituiti solo a
+    transazione confermata, e TestCase non conferma mai. Siccome il rollback
+    non consuma gli id, ogni test riparte da "appello_1/studente_1" e
+    troverebbe li' dentro i file del test precedente (vedi
+    percorso_file_tesi): i controlli sul contenuto della cartella
+    passerebbero o fallirebbero a seconda dell'ordine di esecuzione.
+    """
+    radice = settings.MEDIA_ROOT
+    for voce in os.listdir(radice):
+        percorso = os.path.join(radice, voce)
+        if os.path.isdir(percorso):
+            shutil.rmtree(percorso, ignore_errors=True)
+        else:
+            os.remove(percorso)
+
+
 class BaseSetup(TestCase):
     """Scenario minimo comune: uno studente, un docente e un appello.
 
@@ -69,6 +90,8 @@ class BaseSetup(TestCase):
     """
 
     def setUp(self):
+        _svuota_media()
+
         self.g_studente = Group.objects.get(name="studente")
         self.g_docente = Group.objects.get(name="docente")
 
@@ -113,6 +136,45 @@ class RuoliTest(BaseSetup):
         self.client.force_login(self.docente)
         resp = self.client.get(reverse("appelli:studente_dashboard"))
         self.assertEqual(resp.status_code, 403)
+
+
+class ShibbolethTestPageTest(BaseSetup):
+    """Chi puo' vedere il dump degli attributi (/shibboleth/test/).
+
+    Serve a controllare gli attributi di un'identita' vera, quindi la pagina
+    e' aperta a tutti gli utenti autenticati, a qualunque ruolo appartengano;
+    resta chiusa a chi non ha fatto il login.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("appelli:shibboleth_test")
+
+    def test_anonimo_viene_mandato_al_login(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertNotIn("REMOTE_ADDR", resp.get("Location", ""))
+
+    def test_studente_vede_il_dump(self):
+        self.client.force_login(self.studente)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "REMOTE_ADDR")
+
+    def test_docente_vede_il_dump(self):
+        self.client.force_login(self.docente)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_utente_senza_gruppo_vede_il_dump(self):
+        """Nemmeno l'assenza di un ruolo noto chiude la pagina.
+
+        E' il caso in cui la pagina serve di piu': un'affiliation che non
+        corrisponde a nessun gruppo si diagnostica proprio leggendo gli
+        attributi che il SP ha passato.
+        """
+        senza_ruolo = User.objects.create_user("altro_test", password="pw")
+        self.client.force_login(senza_ruolo)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
 
 
 class IscrizioneManualeRimossaTest(BaseSetup):
@@ -1932,13 +1994,13 @@ class AvvisoTutorTest(BaseSetup):
 
     def test_tutor_fuori_commissione_riceve_il_link_all_area_docente(self):
         """appello_detail gli risponderebbe 403: il link deve portarlo dove
-        quel tutorato lo vede davvero, cioe' sulla sua riga in area docente."""
+        quel laureando lo vede davvero, cioe' sulla sua riga in area docente."""
         self._salva()
         corpo = self._avviso().body
         self.assertIn(
             "http://testserver"
             + reverse("appelli:docente_dashboard")
-            + f"#tutorato-{self.iscrizione.pk}",
+            + f"#laureando-{self.iscrizione.pk}",
             corpo,
         )
         self.assertNotIn(
@@ -2003,8 +2065,8 @@ class AvvisoTutorTest(BaseSetup):
         self.assertEqual(mail.outbox, [])
 
 
-class TutoratiEValutazioneTest(BaseSetup):
-    """Sezione tutorati dell'area docente e valutazione del tutor.
+class LaureandiEValutazioneTest(BaseSetup):
+    """Sezione laureandi dell'area docente e valutazione del tutor.
 
     Lo scenario tiene separati i due ruoli: "tutor" segue gli studenti ma
     NON siede in commissione, "docente_test" (da BaseSetup) e' in commissione
@@ -2041,7 +2103,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         )
 
     def _sezione(self, query=""):
-        """Solo la card dei tutorati, con gli spazi normalizzati.
+        """Solo la card dei laureandi, con gli spazi normalizzati.
 
         Ritagliarla e' necessario: lo stesso corso di laurea compare anche
         nella tabella "Altri appelli", quindi cercare nell'intera pagina darebbe
@@ -2051,7 +2113,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         html = self.client.get(
             reverse("appelli:docente_dashboard") + query
         ).content.decode()
-        inizio = html.index("I miei tutorati")
+        inizio = html.index("I miei laureandi")
         fine = html.index("I miei appelli")
         return re.sub(r"\s+", " ", html[inizio:fine])
 
@@ -2158,7 +2220,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         self.assertTrue(self.i_futura.valutata)
         self.assertFalse(self.i_passata.valutata)
 
-        # Un secondo tutorato nello stesso appello, non valutato: e' il
+        # Un secondo laureando nello stesso appello, non valutato: e' il
         # confronto che conta, "0 punti" accanto a "Da valutare".
         terzo = User.objects.create_user("studente_zero", password="pw")
         terzo.groups.add(self.g_studente)
@@ -2202,10 +2264,10 @@ class TutoratiEValutazioneTest(BaseSetup):
         self.client.force_login(utente)
         intestazioni = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"} if ajax else {}
         return self.client.get(
-            reverse("appelli:cerca_tutorati"), {"q": termine}, **intestazioni
+            reverse("appelli:cerca_laureandi"), {"q": termine}, **intestazioni
         )
 
-    def test_endpoint_restituisce_le_righe_dei_propri_tutorati(self):
+    def test_endpoint_restituisce_le_righe_dei_propri_laureandi(self):
         resp = self._cerca(self.tutor, "futura")
         self.assertEqual(resp.status_code, 200)
         dati = resp.json()
@@ -2215,7 +2277,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         # per cui l'endpoint risponde HTML invece che JSON.
         self.assertIn("csrfmiddlewaretoken", dati["html"])
 
-    def test_endpoint_mostra_solo_i_propri_tutorati(self):
+    def test_endpoint_mostra_solo_i_propri_laureandi(self):
         """Il docente in commissione non e' tutor: per lui non c'e' nulla."""
         dati = self._cerca(self.docente, "futura").json()
         self.assertEqual(dati["numero"], 0)
@@ -2243,7 +2305,7 @@ class TutoratiEValutazioneTest(BaseSetup):
         self.assertIn("2 studenti", sezione)
         self.assertIn("1 da valutare", sezione)
 
-    def test_le_query_non_crescono_con_i_tutorati(self):
+    def test_le_query_non_crescono_con_i_laureandi(self):
         """Il template non deve interrogare il database una volta per riga."""
         self.client.force_login(self.tutor)
         url = reverse("appelli:docente_dashboard")
@@ -2402,7 +2464,7 @@ class ValutazioneObbligatoriaTest(BaseSetup):
             "titolo": "Una tesi", "giudizio": "Solo il giudizio.",
             "ritorno": "q=" + self.studente.username,
         })
-        self.assertEqual(resp.context["ricerca_tutorati"], self.studente.username)
+        self.assertEqual(resp.context["ricerca_laureandi"], self.studente.username)
 
     def test_un_filtro_inventato_viene_scartato(self):
         """Del "ritorno" si tiene solo cio' che e' un filtro noto."""
@@ -2410,7 +2472,7 @@ class ValutazioneObbligatoriaTest(BaseSetup):
             "titolo": "Una tesi", "giudizio": "Solo il giudizio.",
             "ritorno": "q=ciao&next=https://esempio.invalido/rubato",
         })
-        self.assertEqual(resp.context["ricerca_tutorati"], "ciao")
+        self.assertEqual(resp.context["ricerca_laureandi"], "ciao")
         self.assertNotContains(resp, "esempio.invalido")
 
     def test_il_motivo_dice_quale_meta_manca(self):
@@ -2617,7 +2679,7 @@ class ValutazioneDalDettaglioTest(BaseSetup):
     def test_salvato_si_torna_al_dettaglio_sulla_riga(self):
         resp = self._post(punteggio="2", giudizio="Ottimo.")
         self.assertRedirects(
-            resp, f"{self.url}#tutorato-{self.mia.id}", fetch_redirect_response=False
+            resp, f"{self.url}#laureando-{self.mia.id}", fetch_redirect_response=False
         )
         self.mia.refresh_from_db()
         self.assertEqual(self.mia.punteggio, 2)
@@ -2775,7 +2837,7 @@ class AppelliPassatiTest(BaseSetup):
         )
         self.assertEqual(html.count('<input type="hidden" name="q" value="rossi">'), 2)
 
-    def test_gli_interruttori_non_riguardano_i_tutorati(self):
+    def test_gli_interruttori_non_riguardano_i_laureandi(self):
         """Una tesi gia' discussa non si valuta piu': resta fuori comunque."""
         studente = User.objects.create_user("stud_passato", password="pw")
         studente.groups.add(self.g_studente)
@@ -2788,7 +2850,7 @@ class AppelliPassatiTest(BaseSetup):
             "appelli:docente_dashboard",
             "?passati_miei=1&passati_altri=1",
         )
-        self.assertEqual(resp.context["tutorati_totali"], 0)
+        self.assertEqual(resp.context["laureandi_totali"], 0)
 
     # --- Area studente -----------------------------------------------------
 

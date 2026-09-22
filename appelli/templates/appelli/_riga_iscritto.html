@@ -8,10 +8,10 @@
     subito sotto, una seconda riga con il modulo per modificarla: e allora
     l'iscrizione deve avere .form agganciato dalla view (vedi appello_detail).
 
-    L'id "tutorato-N" e' l'ancora a cui torna la view dopo il salvataggio.
+    L'id "laureando-N" e' l'ancora a cui torna la view dopo il salvataggio.
 {% endcomment %}
 {% load anagrafica %}
-<tr {% if mia %}class="riga-mia" id="tutorato-{{ iscrizione.id }}"{% endif %}>
+<tr {% if mia %}class="riga-mia" id="laureando-{{ iscrizione.id }}"{% endif %}>
     {# "Cognome Nome": e' il cognome a dare l'ordine dell'elenco. #}
     <td class="fw-semibold" data-label="Studente">
         {{ iscrizione.studente|cognome_nome }}
@@ -51,7 +51,7 @@
         {% if mia %}
             <span class="d-inline-flex align-items-center gap-3">
                 {% comment %}
-                    Stessa resa della sezione tutorati (_riga_tutorato.html):
+                    Stessa resa della sezione laureandi (_riga_laureando.html):
                     il punteggio si legge come un voto, e uno zero non si
                     confonde con chi aspetta ancora la valutazione.
                 {% endcomment %}
@@ -83,7 +83,7 @@
     {% comment %}
         Il modulo sta in una riga a se', a tutta larghezza: dentro una cella
         sarebbe costretto nella colonna. "ritorno" e' l'URL di questa pagina,
-        che la view riconosce e ricostruisce (vedi _url_ritorno_tutorati).
+        che la view riconosce e ricostruisce (vedi _url_ritorno_laureandi).
     {% endcomment %}
     {% url 'appelli:appello_detail' iscrizione.appello_id as url_appello %}
     <tr class="riga-valuta">

@@ -1,10 +1,10 @@
 {% comment %}
-    Risultati della ricerca fra i propri tutorati: elenco piatto, senza il
+    Risultati della ricerca fra i propri laureandi: elenco piatto, senza il
     raggruppamento per appello (chi cerca una persona non sa a quale appello
     sia iscritta).
 
     Lo stesso frammento serve due strade: la pagina lo include quando l'URL
-    porta gia' un "q", e l'endpoint appelli:cerca_tutorati lo restituisce a
+    porta gia' un "q", e l'endpoint appelli:cerca_laureandi lo restituisce a
     ogni tasto premuto. Scriverlo una volta sola e' cio' che garantisce che i
     risultati siano identici con e senza JavaScript.
 
@@ -14,16 +14,16 @@
 {% endcomment %}
 <div class="px-3 pt-3 small text-muted d-flex flex-wrap gap-2 justify-content-between">
     <span>
-        {{ tutorati_trovati|length }}
-        risultat{{ tutorati_trovati|length|pluralize:"o,i" }}
-        per «{{ ricerca_tutorati }}», fra i tuoi {{ tutorati_totali }} tutorati.
+        {{ laureandi_trovati|length }}
+        risultat{{ laureandi_trovati|length|pluralize:"o,i" }}
+        per «{{ ricerca_laureandi }}», fra i tuoi {{ laureandi_totali }} laureandi.
     </span>
     <a href="{% url 'appelli:docente_dashboard' %}" class="js-annulla-ricerca">
         <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Annulla la ricerca
     </a>
 </div>
-{% for iscrizione in tutorati_trovati %}
-    {% include "appelli/_riga_tutorato.html" %}
+{% for iscrizione in laureandi_trovati %}
+    {% include "appelli/_riga_laureando.html" %}
 {% empty %}
-    <p class="text-muted mb-0 p-3">Nessun tutorato corrisponde alla ricerca.</p>
+    <p class="text-muted mb-0 p-3">Nessun laureando corrisponde alla ricerca.</p>
 {% endfor %}

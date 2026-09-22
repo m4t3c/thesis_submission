@@ -13,7 +13,8 @@ urlpatterns = [
     path("", views.home, name="home"),
     # Smistamento per ruolo dopo il login (percorso protetto da Shibboleth)
     path("dashboard/", views.dashboard, name="dashboard"),
-    # Pagina di test Shibboleth (da rimuovere/proteggere in produzione)
+    # Dump degli attributi Shibboleth: aperta a ogni utente autenticato,
+    # cosi' si diagnostica l'identita' vera di chi segnala un problema
     path("shibboleth/test/", views.shibboleth_test, name="shibboleth_test"),
     # Area studente
     path("studente/", views.studente_dashboard, name="studente_dashboard"),
@@ -29,11 +30,11 @@ urlpatterns = [
     path("api/elenco-xlsx/", views.analizza_xlsx, name="analizza_xlsx"),
     # Area docente
     path("docente/", views.docente_dashboard, name="docente_dashboard"),
-    # Ricerca fra i propri tutorati: risponde con le righe gia' impaginate
-    path("api/tutorati/", views.cerca_tutorati, name="cerca_tutorati"),
-    # Valutazione di un proprio tutorato (solo il tutor)
+    # Ricerca fra i propri laureandi: risponde con le righe gia' impaginate
+    path("api/laureandi/", views.cerca_laureandi, name="cerca_laureandi"),
+    # Valutazione di un proprio laureando (solo il tutor)
     path(
-        "tutorati/<int:iscrizione_id>/valutazione/",
+        "laureandi/<int:iscrizione_id>/valutazione/",
         views.salva_valutazione,
         name="salva_valutazione",
     ),

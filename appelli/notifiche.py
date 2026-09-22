@@ -171,16 +171,16 @@ def _url_per_il_tutor(request, iscrizione):
     risponde "Non fai parte della commissione di questo appello".
 
     Quindi: a chi e' in commissione si da' la pagina dell'appello, che e' la
-    piu' completa; a tutti gli altri l'area docente aperta sulla riga del
-    tutorato appena nato (stessa ancora usata dopo una valutazione, vedi
-    _url_ritorno_tutorati in views.py). In entrambi i casi il link porta
+    piu' completa; a tutti gli altri l'area docente aperta sulla riga dello
+    studente appena affidatogli (stessa ancora usata dopo una valutazione,
+    vedi _url_ritorno_laureandi in views.py). In entrambi i casi il link porta
     all'appello di cui parla l'email, e in entrambi i casi funziona.
     """
     appello = iscrizione.appello
     if appello.commissione.docenti.filter(pk=iscrizione.tutor_id).exists():
         return _url(request, "appelli:appello_detail", appello.pk)
     return (
-        _url(request, "appelli:docente_dashboard") + f"#tutorato-{iscrizione.pk}"
+        _url(request, "appelli:docente_dashboard") + f"#laureando-{iscrizione.pk}"
     )
 
 

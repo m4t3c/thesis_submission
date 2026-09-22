@@ -8,11 +8,11 @@
  * data-url-ricerca del campo: un file statico non puo' usare {% url %}.
  */
 document.addEventListener('DOMContentLoaded', function () {
-    var input = document.getElementById('ricerca-tutorati');
+    var input = document.getElementById('ricerca-laureandi');
     var URL_RICERCA = input ? input.dataset.urlRicerca : '';
     var azzera = document.getElementById('azzera-ricerca');
-    var risultati = document.getElementById('risultati-tutorati');
-    var elenco = document.getElementById('elenco-tutorati');
+    var risultati = document.getElementById('risultati-laureandi');
+    var elenco = document.getElementById('elenco-laureandi');
     var attesa = null;     // timer del debounce
     var richiesta = null;  // ricerca in corso, da annullare se ne parte un'altra
 

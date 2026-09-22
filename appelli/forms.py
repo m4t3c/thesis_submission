@@ -380,9 +380,10 @@ class AppelloForm(forms.ModelForm):
     l'appello ragiona in termini di persone, che e' come funziona davvero, e
     non deve prima censire delle commissioni.
 
-    NOTA: "corso_di_laurea" e' per ora inserito a mano. Quando arrivera'
-    l'importazione da xlsx sara' quel file a fornirlo, e il campo potra'
-    sparire da questo form senza toccare il resto.
+    NOTA: "corso_di_laurea" lo fornisce il file xlsx (vedi analizza_xlsx in
+    views.py), che lo scrive nel campo insieme all'elenco degli studenti. Il
+    campo resta pero' modificabile: l'elenco puo' riportare una dicitura
+    diversa da quella con cui l'appello va pubblicato.
     """
 
     docenti = DocentiField(

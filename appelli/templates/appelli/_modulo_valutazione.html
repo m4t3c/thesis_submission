@@ -1,12 +1,12 @@
 {% comment %}
-    Modulo di valutazione di un tutorato (titolo, punti, giudizio), chiuso in
-    un collapse. Lo usano la sezione "I miei tutorati" dell'area docente e il
+    Modulo di valutazione di un laureando (titolo, punti, giudizio), chiuso in
+    un collapse. Lo usano la sezione "I miei laureandi" dell'area docente e il
     dettaglio di un appello: un modulo solo, cosi' le due pagine non divergono.
 
     Si aspetta nel contesto:
       - "iscrizione", con l'attributo .form gia' agganciato dalla view;
       - "ritorno", il valore del campo omonimo: dice alla view dove tornare
-        dopo il salvataggio (vedi _url_ritorno_tutorati in views.py);
+        dopo il salvataggio (vedi _url_ritorno_laureandi in views.py);
       - "valutazione_aperta", l'id dell'iscrizione il cui salvataggio e' stato
         rifiutato: quel pannello si riapre gia' compilato, con gli errori.
 

@@ -34,7 +34,7 @@
 </div>
 
 {% comment %}
-    I miei tutorati: gli studenti di cui il docente e' tutor, degli appelli
+    I miei laureandi: gli studenti di cui il docente e' tutor, degli appelli
     non ancora passati. Sta in cima perche' e' l'unica sezione su cui deve
     AGIRE; le altre due si consultano.
 
@@ -51,8 +51,8 @@
 <div class="card shadow-sm mb-4">
     <div class="card-header testata-blu d-flex flex-wrap justify-content-between align-items-center gap-3">
         <span>
-            I miei tutorati
-            {% if tutorati_totali %}<span class="conteggio">· {{ tutorati_totali }}</span>{% endif %}
+            I miei laureandi
+            {% if laureandi_totali %}<span class="conteggio">· {{ laureandi_totali }}</span>{% endif %}
         </span>
 
         {% comment %}
@@ -60,19 +60,19 @@
             pagina risponde con gli stessi risultati. Lo script (docente_dashboard.js) ci si
             innesta sopra, non lo sostituisce.
         {% endcomment %}
-        <form method="get" class="d-flex align-items-center" id="form-ricerca-tutorati">
+        <form method="get" class="d-flex align-items-center" id="form-ricerca-laureandi">
             {# Senza, cercare spegnerebbe i due interruttori (vedi _campi_nascosti) #}
             {% for campo in filtri_ricerca %}
                 <input type="hidden" name="{{ campo.nome }}" value="{{ campo.valore }}">
             {% endfor %}
             <div class="campo-ricerca">
                 <i class="bi bi-search" aria-hidden="true"></i>
-                <input type="search" name="q" value="{{ ricerca_tutorati }}"
-                       id="ricerca-tutorati" class="form-control"
-                       data-url-ricerca="{% url 'appelli:cerca_tutorati' %}"
+                <input type="search" name="q" value="{{ ricerca_laureandi }}"
+                       id="ricerca-laureandi" class="form-control"
+                       data-url-ricerca="{% url 'appelli:cerca_laureandi' %}"
                        autocomplete="off"
-                       aria-label="Cerca fra i tuoi tutorati"
-                       aria-controls="risultati-tutorati"
+                       aria-label="Cerca fra i tuoi laureandi"
+                       aria-controls="risultati-laureandi"
                        placeholder="Cerca studente o titolo...">
                 {# Mostrato dallo script: senza JS il campo si svuota a mano #}
                 <button type="button" class="azzera-ricerca" id="azzera-ricerca"
@@ -91,14 +91,14 @@
             cerca, i gruppi altrimenti. Lo script scambia l'uno con l'altro
             senza ricaricare la pagina.
         {% endcomment %}
-        <div id="risultati-tutorati" {% if not ricerca_tutorati %}hidden{% endif %}>
-            {% if ricerca_tutorati %}
-                {% include "appelli/_risultati_tutorati.html" %}
+        <div id="risultati-laureandi" {% if not ricerca_laureandi %}hidden{% endif %}>
+            {% if ricerca_laureandi %}
+                {% include "appelli/_risultati_laureandi.html" %}
             {% endif %}
         </div>
 
-        <div id="elenco-tutorati" {% if ricerca_tutorati %}hidden{% endif %}>
-            {% for gruppo in tutorati_gruppi %}
+        <div id="elenco-laureandi" {% if ricerca_laureandi %}hidden{% endif %}>
+            {% for gruppo in laureandi_gruppi %}
                 <div class="border-bottom">
                     <button class="gruppo-testata d-flex flex-wrap justify-content-between align-items-center gap-2 p-3"
                             type="button" data-bs-toggle="collapse"
@@ -128,7 +128,7 @@
                     <div class="collapse {% if forloop.first or gruppo.contiene_errore %}show{% endif %}"
                          id="gruppo-{{ gruppo.appello.id }}">
                         {% for iscrizione in gruppo.iscrizioni %}
-                            {% include "appelli/_riga_tutorato.html" %}
+                            {% include "appelli/_riga_laureando.html" %}
                         {% endfor %}
                     </div>
                 </div>

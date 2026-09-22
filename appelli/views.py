@@ -66,7 +66,7 @@ def docente_in_commissione(user, appello):
 
 
 def is_tutor(utente, iscrizione):
-    """True se l'utente e' il tutor (tutor) di quella iscrizione."""
+    """True se l'utente e' il tutor di quella iscrizione."""
     return iscrizione.tutor_id == utente.pk
 
 
@@ -87,13 +87,11 @@ def shibboleth_test(request):
 
     Serve a verificare i nomi reali degli attributi Shibboleth (uid, ou, sn,
     givenName, ...) sul dominio di produzione, prima di configurare
-    shibboleth.py. Espone dati sensibili (cookie di sessione, header): per
-    questo è riservata ai superuser, l'unico ruolo pensato per la
-    manutenzione tecnica del sito.
+    shibboleth.py. E' aperta a QUALUNQUE utente autenticato, cosi' si possono
+    controllare gli attributi di un'identita' vera (studente o docente) e non
+    solo quelli di un amministratore: ognuno vede il dump della propria
+    richiesta, quindi i propri attributi e i propri cookie.
     """
-    if not request.user.is_superuser:
-        raise PermissionDenied("Pagina riservata agli amministratori.")
-
     righe = [
         f"{chiave}: {valore!r}, type: {type(valore)}"
         for chiave, valore in sorted(request.META.items())
@@ -142,11 +140,13 @@ def dashboard(request):
 
 @login_required
 def studente_dashboard(request):
-    """Pagina dello studente: le sue iscrizioni e gli appelli a cui puo' iscriversi.
+    """Pagina dello studente: le sue iscrizioni e gli altri appelli in programma.
 
-    I due elenchi sono complementari: un appello a cui lo studente e' gia'
-    iscritto non deve ricomparire fra quelli disponibili, altrimenti il
-    pulsante "Iscriviti" prometterebbe un'azione che non ha piu' effetto.
+    All'iscrizione provvede il presidente caricando l'elenco (vedi
+    analizza_xlsx): il secondo elenco non e' quindi un invito a iscriversi ma
+    un calendario, e i due sono complementari. Un appello a cui lo studente e'
+    gia' iscritto non deve ricomparire fra gli "altri", dove sembrerebbe una
+    scadenza ancora da affrontare invece che la propria.
 
     Gli appelli gia' passati restano fuori da entrambi, e qui senza spunta che
     li riporti: la pagina serve a completare una consegna, e una scadenza
@@ -164,7 +164,7 @@ def studente_dashboard(request):
     )
     # Gli id da escludere si prendono da TUTTE le iscrizioni, comprese quelle
     # passate: un appello a cui si e' gia' iscritti non deve ricomparire fra i
-    # disponibili, dove il posto sembrerebbe ancora da prendere.
+    # disponibili, dove sarebbe un appello altrui come tutti gli altri.
     appelli_iscritti = list(iscrizioni.values_list("appello_id", flat=True))
 
     return render(
@@ -277,9 +277,10 @@ def carica_tesi(request, iscrizione_id):
 def _contesto_appelli(request, puo_creare, titolo, filtri=None):
     """Contesto della pagina appelli, condiviso da docenti e presidente.
 
-    Le due pagine mostrano le stesse due tabelle ("i miei appelli" e gli
-    altri): al presidente si aggiunge soltanto il pulsante di creazione. Un
-    unico contesto evita che le due viste divergano col tempo.
+    Le due pagine mostrano le stesse cose: la sezione dei propri laureandi e
+    le due tabelle degli appelli ("i miei" e gli altri). Al presidente si
+    aggiunge soltanto il pulsante di creazione. Un unico contesto evita che le
+    due viste divergano col tempo.
 
     Args:
         request: richiesta corrente; da qui si leggono utente e querystring.
@@ -324,7 +325,7 @@ def _contesto_appelli(request, puo_creare, titolo, filtri=None):
         # stesso bisogno: riportare cio' che non gestisce lui.
         "filtri_ricerca": _campi_nascosti(valori, "q"),
     }
-    contesto.update(_tutorati_del_docente(request, utente, filtri))
+    contesto.update(_laureandi_del_docente(request, utente, filtri))
     return contesto
 
 
@@ -339,7 +340,7 @@ def _filtri_pagina(request, filtri=None):
     if filtri is None:
         voci = request.GET
     else:
-        voci = dict((c, v) for c, v in filtri if c in PARAMETRI_TUTORATI)
+        voci = dict((c, v) for c, v in filtri if c in PARAMETRI_LAUREANDI)
     return {
         "q": (voci.get("q") or "").strip(),
         # Solo "1" accende un interruttore: un valore storto vale come spento,
@@ -378,10 +379,10 @@ def _spunta(valori, nome):
 PASSATI_MIEI = "passati_miei"
 PASSATI_ALTRI = "passati_altri"
 
-# Filtri della pagina degli appelli: la ricerca fra i tutorati e i due
+# Filtri della pagina degli appelli: la ricerca fra i laureandi e i due
 # interruttori. Sono anche gli unici parametri che vengono riportati nell'URL
 # dopo un salvataggio: tutto il resto viene scartato.
-PARAMETRI_TUTORATI = ("q", PASSATI_MIEI, PASSATI_ALTRI)
+PARAMETRI_LAUREANDI = ("q", PASSATI_MIEI, PASSATI_ALTRI)
 
 
 def _corrisponde(iscrizione, parole):
@@ -417,14 +418,14 @@ def _chiave_alfabetica(iscrizione):
     )
 
 
-def _tutorati_correnti(utente):
+def _laureandi_correnti(utente):
     """Iscrizioni di cui l'utente e' tutor, con il modulo gia' agganciato.
 
     Solo appelli non ancora passati: una tesi discussa non si valuta piu', e
     tenere in pagina anni di archivio renderebbe la sezione inservibile proprio
     per cio' a cui serve, cioe' vedere su chi si deve ancora intervenire.
 
-    Costa UNA query, qualunque sia il numero di tutorati: studente e appello
+    Costa UNA query, qualunque sia il numero di laureandi: studente e appello
     arrivano gia' dentro, quindi il template non ne fa una per riga.
     """
     righe = list(
@@ -446,7 +447,7 @@ def _tutorati_correnti(utente):
     )
     # Il modulo di modifica e' precompilato con i dati gia' salvati. auto_id
     # porta l'id dell'iscrizione dentro gli id dei campi: nella pagina i moduli
-    # sono tanti quanti i tutorati, e con gli id predefiniti ("id_titolo",
+    # sono tanti quanti i laureandi, e con gli id predefiniti ("id_titolo",
     # "id_punteggio_0", ...) ogni <label> punterebbe al campo del PRIMO modulo.
     for iscrizione in righe:
         iscrizione.form = ValutazioneForm(
@@ -455,8 +456,8 @@ def _tutorati_correnti(utente):
     return righe
 
 
-def _tutorati_del_docente(request, utente, filtri=None):
-    """Sezione tutorati pronta per il template: gruppi ed eventuali risultati.
+def _laureandi_del_docente(request, utente, filtri=None):
+    """Sezione laureandi pronta per il template: gruppi ed eventuali risultati.
 
     Non ha relazione con gli appelli delle proprie commissioni: si puo' essere
     tutor di uno studente senza sedere nella commissione che lo esamina,
@@ -466,11 +467,11 @@ def _tutorati_del_docente(request, utente, filtri=None):
     e' immediato, perche' l'elenco completo e' gia' nella pagina e non va
     richiesto di nuovo al server.
     """
-    # La sezione tutorati guarda solo il termine di ricerca: la spunta sugli
-    # appelli passati non la riguarda, perche' un tutorato gia' discusso non si
-    # valuta piu' e resta fuori comunque (vedi _tutorati_correnti).
+    # La sezione laureandi guarda solo il termine di ricerca: la spunta sugli
+    # appelli passati non la riguarda, perche' una tesi gia' discussa non si
+    # valuta piu' e resta fuori comunque (vedi _laureandi_correnti).
     termine = _filtri_pagina(request, filtri)["q"]
-    correnti = _tutorati_correnti(utente)
+    correnti = _laureandi_correnti(utente)
 
     commissioni_mie = set(
         AppelloDiLaurea.objects.filter(commissione__docenti=utente).values_list(
@@ -504,17 +505,22 @@ def _tutorati_del_docente(request, utente, filtri=None):
         trovati.sort(key=_chiave_alfabetica)
 
     return {
-        "tutorati_trovati": trovati,
-        "tutorati_gruppi": gruppi,
-        "tutorati_totali": len(correnti),
-        "ricerca_tutorati": termine,
+        "laureandi_trovati": trovati,
+        "laureandi_gruppi": gruppi,
+        "laureandi_totali": len(correnti),
+        "ricerca_laureandi": termine,
         "punteggio_massimo": PUNTEGGIO_MAX,
     }
 
 
 @login_required
 def docente_dashboard(request):
-    """Elenco degli appelli visto dal docente, senza il pulsante di creazione."""
+    """Area del docente: i propri laureandi e gli appelli, senza creazione.
+
+    Le due tabelle degli appelli e la sezione dei laureandi arrivano tutte da
+    _contesto_appelli; rispetto al presidente manca il solo pulsante che crea
+    un appello.
+    """
     if not is_docente(request.user):
         raise PermissionDenied("Solo i docenti possono accedere a questa pagina.")
 
@@ -570,7 +576,7 @@ def _contesto_dettaglio(request, appello):
     altri = [i for i in iscrizioni if i.tutor_id != request.user.pk]
 
     # Solo i propri laureandi hanno il modulo: la valutazione e' del tutor
-    # (vedi puo_valutare). auto_id come in _tutorati_correnti, e per la stessa
+    # (vedi puo_valutare). auto_id come in _laureandi_correnti, e per la stessa
     # ragione: un modulo per riga, e le <label> devono puntare al proprio.
     for iscrizione in miei:
         iscrizione.form = ValutazioneForm(
@@ -612,7 +618,7 @@ def _ritorno_al_dettaglio(request, iscrizione):
     )
 
 
-def _url_ritorno_tutorati(request, iscrizione):
+def _url_ritorno_laureandi(request, iscrizione):
     """Dove tornare dopo un salvataggio: stessa pagina, stessi filtri, stessa riga.
 
     Due pagine hanno il modulo: il dettaglio dell'appello (riconosciuto da
@@ -622,7 +628,7 @@ def _url_ritorno_tutorati(request, iscrizione):
     trasformare il salvataggio in un rimando verso un sito esterno.
     """
     # L'ancora riporta alla riga appena salvata invece che in cima all'elenco.
-    ancora = f"#tutorato-{iscrizione.pk}"
+    ancora = f"#laureando-{iscrizione.pk}"
     if _ritorno_al_dettaglio(request, iscrizione):
         return (
             reverse("appelli:appello_detail", args=[iscrizione.appello_id]) + ancora
@@ -636,7 +642,7 @@ def _url_ritorno_tutorati(request, iscrizione):
     coppie = [
         (chiave, valore)
         for chiave, valore in parse_qsl(request.POST.get("ritorno", ""))
-        if chiave in PARAMETRI_TUTORATI
+        if chiave in PARAMETRI_LAUREANDI
     ]
     url = reverse(nome)
     if coppie:
@@ -646,7 +652,7 @@ def _url_ritorno_tutorati(request, iscrizione):
 
 @login_required
 def salva_valutazione(request, iscrizione_id):
-    """Titolo, punti e giudizio di un proprio tutorato, salvati dal tutor."""
+    """Titolo, punti e giudizio di un proprio laureando, salvati dal tutor."""
     iscrizione = get_object_or_404(
         StudenteAppelloDiLaurea.objects.select_related("studente", "appello"),
         pk=iscrizione_id,
@@ -656,7 +662,7 @@ def salva_valutazione(request, iscrizione_id):
     if not puo_valutare(request.user, iscrizione):
         raise PermissionDenied("Solo il tutor può valutare questo studente.")
     if request.method != "POST":
-        return redirect(_url_ritorno_tutorati(request, iscrizione))
+        return redirect(_url_ritorno_laureandi(request, iscrizione))
 
     # auto_id come quello dei moduli della pagina: se il modulo torna a video
     # con gli errori, gli id dei campi devono restare quelli, o le <label>
@@ -671,7 +677,7 @@ def salva_valutazione(request, iscrizione_id):
             messages.success(request, f"Valutazione di {nome} salvata.")
         else:
             messages.info(request, "Nessuna modifica da salvare.")
-        return redirect(_url_ritorno_tutorati(request, iscrizione))
+        return redirect(_url_ritorno_laureandi(request, iscrizione))
 
     # Errore: si RIDISEGNA la pagina con dentro questo modulo, invece di
     # rimandare alla dashboard. Con il rimando il pannello si sarebbe richiuso
@@ -703,7 +709,7 @@ def _pagina_con_valutazione_da_correggere(request, iscrizione, form):
     # Le righe dei gruppi e quelle dei risultati di ricerca sono gli STESSI
     # oggetti: basta sostituire il modulo qui perche' valga in entrambi gli
     # elenchi.
-    for gruppo in contesto["tutorati_gruppi"]:
+    for gruppo in contesto["laureandi_gruppi"]:
         for riga in gruppo["iscrizioni"]:
             if riga.pk == iscrizione.pk:
                 riga.form = form
@@ -841,8 +847,8 @@ def cerca_docenti(request):
 
 
 @login_required
-def cerca_tutorati(request):
-    """Cerca fra i propri tutorati e risponde con le righe gia' impaginate.
+def cerca_laureandi(request):
+    """Cerca fra i propri laureandi e risponde con le righe gia' impaginate.
 
     Risponde HTML e non JSON perche' ogni riga porta con se' il modulo di
     valutazione, con il token CSRF e i valori gia' salvati: ricostruirlo in
@@ -850,34 +856,34 @@ def cerca_tutorati(request):
     allineate a mano due copie della stessa cosa.
 
     Il criterio di ricerca e' lo stesso della pagina: si riusano
-    _tutorati_correnti e _corrisponde, gli stessi pezzi su cui si regge
-    _tutorati_del_docente, cosi' con e senza JavaScript i risultati
-    coincidono. Non si chiama direttamente _tutorati_del_docente perche'
+    _laureandi_correnti e _corrisponde, gli stessi pezzi su cui si regge
+    _laureandi_del_docente, cosi' con e senza JavaScript i risultati
+    coincidono. Non si chiama direttamente _laureandi_del_docente perche'
     calcolerebbe anche i gruppi per appello, che questa risposta non usa.
     """
     if not is_docente(request.user):
-        raise PermissionDenied("Solo i docenti hanno dei tutorati.")
+        raise PermissionDenied("Solo i docenti hanno dei laureandi.")
     if not _richiesta_interna(request):
         raise PermissionDenied("Questo endpoint è riservato all'applicazione.")
 
     termine = (request.GET.get("q") or "").strip()
-    correnti = _tutorati_correnti(request.user)
+    correnti = _laureandi_correnti(request.user)
     if termine:
         parole = termine.lower().split()
         trovati = [t for t in correnti if _corrisponde(t, parole)]
         # Stesso ordine dei risultati calcolati dalla pagina (vedi
-        # _tutorati_del_docente): con e senza JavaScript si deve vedere
+        # _laureandi_del_docente): con e senza JavaScript si deve vedere
         # la stessa cosa, ordine compreso.
         trovati.sort(key=_chiave_alfabetica)
     else:
         trovati = []
 
     html = render_to_string(
-        "appelli/_risultati_tutorati.html",
+        "appelli/_risultati_laureandi.html",
         {
-            "tutorati_trovati": trovati,
-            "tutorati_totali": len(correnti),
-            "ricerca_tutorati": termine,
+            "laureandi_trovati": trovati,
+            "laureandi_totali": len(correnti),
+            "ricerca_laureandi": termine,
             "punteggio_massimo": PUNTEGGIO_MAX,
         },
         request=request,

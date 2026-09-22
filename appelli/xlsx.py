@@ -62,8 +62,9 @@ def leggi_elenco(file_caricato):
     Restituisce (corso, [email, ...]). Solleva ErroreXlsx se il file non e'
     leggibile o se mancano le colonne necessarie.
     """
-    # Import locale: openpyxl serve solo qui, e tenerlo fuori dall'avvio
-    # dell'applicazione evita di pagarne il caricamento a ogni richiesta.
+    # Import locale: openpyxl serve solo a questa funzione, chiamata di rado.
+    # Cosi' non viene caricato all'avvio insieme al resto dell'applicazione,
+    # ma solo la prima volta che si legge davvero un elenco.
     try:
         from openpyxl import load_workbook
     except ImportError as exc:  # pragma: no cover - dipendenza mancante

@@ -109,7 +109,10 @@ body {
     display: flex;
     flex-direction: column;
 }
-/* main occupa lo spazio disponibile e spinge il footer in fondo */
+/* Barra in alto e fondo pagina sono fissi, quindi fuori dal flusso: a
+   tenere alta la pagina resta il solo main, che si allunga fino a riempire
+   la finestra. Lo spazio per non finirgli sotto lo riserva common.js, che
+   ne misura l'altezza reale. */
 main { flex: 1 0 auto; }
 .navbar-app {
     background: var(--surface);
@@ -232,7 +235,7 @@ main { flex: 1 0 auto; }
 .voce { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; }
 .voce-etichetta { color: var(--muted); display: inline-flex; align-items: center; gap: .35rem; }
 .voce-valore { font-weight: 600; overflow-wrap: anywhere; }
-/* ---------- Sezione tutorati (area docente) ----------
+/* ---------- Sezione laureandi (area docente) ----------
    Le pillole della valutazione usano il colore principale, non il
    rosso: "da valutare" e' uno stato normale di avanzamento, non un
    errore. Il rosso resta all'area studente, dove manca davvero
@@ -257,15 +260,15 @@ main { flex: 1 0 auto; }
    righe restano incolonnate fra loro. */
 .allegato-assente { color: #c9ced6; }
 .nome-studente { font-weight: 600; font-size: 1.05rem; }
-.tutorato { border-left: 4px solid transparent; }
-.tutorato + .tutorato { border-top: 1px solid var(--line); }
-.tutorato.is-aperto {
+.laureando { border-left: 4px solid transparent; }
+.laureando + .laureando { border-top: 1px solid var(--line); }
+.laureando.is-aperto {
     border-left-color: var(--brand);
     background: var(--brand-velo);
 }
 /* Col modulo aperto la riga compatta sparisce: l'intestazione del
    modulo dice gia' le stesse cose, con piu' spazio. */
-.tutorato.is-aperto .riga-sintesi { display: none; }
+.laureando.is-aperto .riga-sintesi { display: none; }
 /* L'ultima riga tocca il bordo inferiore della card. Il suo sfondo
    (azzurro quando il modulo e' aperto) e la striscia blu a sinistra
    hanno spigoli vivi, che sporgono dagli angoli tondi del contenitore.
@@ -273,14 +276,14 @@ main { flex: 1 0 auto; }
    .card - cosi' i due bordi restano concentrici. Vale sia per l'elenco
    raggruppato sia per i risultati di ricerca, che sono l'ultima cosa
    dentro la card tanto quanto l'altro. */
-#elenco-tutorati > div:last-child .tutorato:last-child,
-#risultati-tutorati .tutorato:last-child {
+#elenco-laureandi > div:last-child .laureando:last-child,
+#risultati-laureandi .laureando:last-child {
     border-bottom-left-radius: var(--bs-card-inner-border-radius);
     border-bottom-right-radius: var(--bs-card-inner-border-radius);
 }
 /* Il gruppo in fondo non ha niente sotto da cui separarsi: la sua
    riga di chiusura correrebbe dritta sotto gli angoli appena stondati. */
-#elenco-tutorati > div:last-child { border-bottom: 0 !important; }
+#elenco-laureandi > div:last-child { border-bottom: 0 !important; }
 
 /* Campo di ricerca con la lente dentro: un pulsante "Cerca" accanto
    direbbe solo cio' che la lente dice gia', visto che l'elenco si
@@ -496,7 +499,7 @@ main { flex: 1 0 auto; }
 /* ---------- Adattamenti per schermi piccoli (telefoni) ---------- */
 @media (max-width: 575.98px) {
     /* Navbar: oggetti distribuiti con spazio attorno, logo/titolo compatti */
-    .navbar-app .container { justify-content: space-around; }
+    .navbar-app .container-fluid { justify-content: space-around; }
     .navbar-brand { margin-right: 0; }
     .navbar-brand img { height: 32px; }
     .brand-title { font-size: .95rem; }

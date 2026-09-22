@@ -1,5 +1,5 @@
 {% comment %}
-    Una riga della sezione tutorati, con il modulo di modifica che si apre
+    Una riga della sezione laureandi, con il modulo di modifica che si apre
     dentro l'elenco. Incluso sia dai gruppi per appello sia dai risultati di
     ricerca: la riga e' una sola, cosi' i due elenchi non divergono.
 
@@ -15,8 +15,8 @@
     "aperta" e' vero quando il salvataggio e' stato rifiutato PROPRIO per
     questa riga: il pannello si riapre gia' compilato, con gli errori dentro.
 {% endcomment %}
-<div class="tutorato {% if valutazione_aperta == iscrizione.id %}is-aperto{% endif %}"
-     id="tutorato-{{ iscrizione.id }}">
+<div class="laureando {% if valutazione_aperta == iscrizione.id %}is-aperto{% endif %}"
+     id="laureando-{{ iscrizione.id }}">
     <div class="riga-sintesi row g-2 align-items-center p-3">
 
         {# 1. Chi #}

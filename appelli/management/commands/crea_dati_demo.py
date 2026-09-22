@@ -5,6 +5,7 @@ Uso:  python manage.py crea_dati_demo
 Crea (se non esistono):
   - studente1 / studente2   (gruppo "studente")
   - docente1  / docente2    (gruppo "docente")
+  - presidente1             (gruppi "docente" e "presidente")
   - una Commissione con i due docenti
   - un AppelloDiLaurea associato a quella commissione
 Tutte le password sono "password123".
