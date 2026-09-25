@@ -12,14 +12,11 @@ colonne si riconoscono da un frammento del nome. Serve che il frammento sia
 abbastanza specifico da non colpire altre colonne: "ate" compare solo nelle
 due colonne dell'email di ateneo, mai in "matricola", "email" o "cellulare".
 """
-import re
 
 # Frammenti cercati nel nome della colonna (confronto in minuscolo).
 # L'ordine conta: si usa la prima colonna che corrisponde.
 FRAMMENTI_CORSO = ("corso", "cds_des")
 FRAMMENTI_EMAIL = ("ate",)
-FRAMMENTI_COGNOME = ("cognome",)
-FRAMMENTI_NOME = ("nome",)
 
 # Un elenco laureandi e' un file piccolo: oltre questa soglia non e' quello
 # che ci si aspetta, e conviene fermarsi prima di leggerlo tutto in memoria.
@@ -30,7 +27,7 @@ class ErroreXlsx(Exception):
     """Il file non e' leggibile o non ha la struttura attesa."""
 
 
-def _indice_colonna(intestazioni, frammenti, escludi=()):
+def _indice_colonna(intestazioni, frammenti):
     """Posizione della prima colonna il cui nome contiene uno dei frammenti.
 
     Si scorrono prima i frammenti e poi le colonne, non il contrario: cosi'
@@ -40,17 +37,12 @@ def _indice_colonna(intestazioni, frammenti, escludi=()):
     Args:
         intestazioni: nomi delle colonne, nell'ordine del foglio.
         frammenti: testi cercati (in minuscolo), dal piu' al meno preferito.
-        escludi: indici di colonne gia' assegnate. Serve per frammenti che
-            sono contenuti in altri: "nome" corrisponde anche a "cognome", e
-            senza escludere quella colonna la si prenderebbe due volte.
 
     Returns:
         L'indice della colonna, oppure None se nessuna corrisponde.
     """
     for frammento in frammenti:
         for i, nome in enumerate(intestazioni):
-            if i in escludi:
-                continue
             if frammento in (nome or "").strip().lower():
                 return i
     return None
